@@ -1,0 +1,15 @@
+libdir=win64-64/lib
+libprefix=
+libnamesuffix=
+libsuffix=
+includedir=win64-64/include
+openblas_config= USE_64BITINT=1 DYNAMIC_ARCH=1 DYNAMIC_OLDER=1 NO_CBLAS= NO_LAPACK= NO_LAPACKE= NO_AFFINITY=1 USE_OPENMP= GENERIC MAX_THREADS=64
+version=0.3.28
+extralib=-defaultlib:advapi32 -lgfortran -defaultlib:advapi32 -lgfortran
+Name: openblas
+Description: OpenBLAS is an optimized BLAS library based on GotoBLAS2 1.13 BSD version
+Version: ${version}
+URL: https://github.com/xianyi/OpenBLAS
+Libs: -L${libdir} -l${libprefix}openblas${libnamesuffix}
+Libs.private: ${extralib}
+Cflags: -I${includedir}
