@@ -14,7 +14,7 @@ namespace TinyTorch::nn {
 std::vector<Tensor *> Module::parameters() {
   std::vector<Tensor *> ret;
   for (auto &module : subModules_) {
-    for (auto p : module->parameters()) {
+    for (auto p : module.get().parameters()) {
       ret.push_back(p);
     }
   }
@@ -23,13 +23,13 @@ std::vector<Tensor *> Module::parameters() {
 
 void Module::resetParameters() {
   for (auto &module : subModules_) {
-    module->resetParameters();
+    module.get().resetParameters();
   }
 }
 
 void Module::zeroGrad() {
   for (auto &module : subModules_) {
-    module->zeroGrad();
+    module.get().zeroGrad();
   }
 }
 

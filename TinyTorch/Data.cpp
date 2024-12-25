@@ -34,7 +34,7 @@ constexpr auto MNIST_TEST_LABELS = "t10k-labels-idx1-ubyte";
 
 DatasetMNIST::DatasetMNIST(
     const std::string& dir, MnistDataType type,
-    const std::optional<data::transforms::Transform>& transform)
+    const std::shared_ptr<transforms::Transform>& transform)
     : transform_(transform) {
   auto imagePath =
       dir + (type == TRAIN ? MNIST_TRAIN_IMAGES : MNIST_TEST_IMAGES);
@@ -50,8 +50,8 @@ std::vector<Tensor> DatasetMNIST::getItem(size_t idx) {
   img.data().reshape({1, height_, width_});
 
   auto label = Tensor::scalar(labels_[idx]);
-  if (transform_.has_value()) {
-    img = transform_.value().process(img);
+  if (transform_) {
+    img = transform_->process(img);
   }
   return {img, label};
 }

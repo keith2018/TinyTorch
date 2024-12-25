@@ -11,7 +11,7 @@ using namespace TinyTorch;
 // https://github.com/pytorch/examples/blob/main/mnist/main.py
 class Net : public nn::Module {
  public:
-  Net() { registerModules({&conv1, &conv2, &dropout1, &dropout2, &fc1, &fc2}); }
+  Net() { registerModules({conv1, conv2, dropout1, dropout2, fc1, fc2}); }
 
   Tensor forward(Tensor &x) override {
     x = conv1(x);
@@ -89,8 +89,8 @@ void demo_mnist() {
   auto epochs = 2;
   auto batchSize = 64;
 
-  auto transform = data::transforms::Transform::Compose(
-      std::make_shared<data::transforms::Normalize>(0.1307f, 0.3081f));
+  auto transform = std::make_shared<data::transforms::Compose>(
+      data::transforms::Normalize(0.1307f, 0.3081f));
 
   auto dataDir = "./data/";
   auto trainDataset = std::make_shared<data::DatasetMNIST>(
@@ -98,13 +98,8 @@ void demo_mnist() {
   auto testDataset = std::make_shared<data::DatasetMNIST>(
       dataDir, data::DatasetMNIST::TEST, transform);
 
-  if (trainDataset->size() == 0) {
-    LOGE("Train Dataset is empty.");
-    return;
-  }
-
-  if (testDataset->size() == 0) {
-    LOGE("Test Dataset is empty.");
+  if (trainDataset->size() == 0 || testDataset->size() == 0) {
+    LOGE("Dataset invalid.");
     return;
   }
 

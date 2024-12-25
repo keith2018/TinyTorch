@@ -24,8 +24,16 @@ class Module {
   virtual Tensor operator()(Tensor &x) { return forward(x); }
   virtual Tensor operator()(Tensor &x1, Tensor &x2) { return forward(x1, x2); }
 
-  void registerModules(const std::vector<Module *> &modules) {
-    subModules_ = modules;
+  void registerModules(
+      const std::vector<std::reference_wrapper<Module>> &modules) {
+    subModules_.reserve(modules.size());
+    for (auto module : modules) {
+      subModules_.emplace_back(module.get());
+    }
+  }
+
+  void registerModule(const std::reference_wrapper<Module> &module) {
+    subModules_.push_back(module);
   }
 
   void eval() { train(false); }
@@ -36,7 +44,7 @@ class Module {
   virtual void setTraining(bool mode) { training_ = mode; }
 
   bool training_ = true;
-  std::vector<Module *> subModules_;
+  std::vector<std::reference_wrapper<Module>> subModules_;
 };
 
 class Sequential : public Module {

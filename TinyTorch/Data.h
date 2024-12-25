@@ -19,16 +19,35 @@ namespace transforms {
 class Transform {
  public:
   virtual ~Transform() = default;
+  virtual Tensor process(Tensor& input) const { return input; }
+};
 
-  template <typename... Args>
-  explicit Transform(Args... args) : transforms_{args...} {}
-
-  template <typename... Args>
-  static Transform Compose(Args... args) {
-    return Transform(args...);
+class Compose : public Transform {
+ public:
+  template <typename... Transforms>
+  explicit Compose(Transforms&&... transforms) {
+    transforms_.reserve(sizeof...(Transforms));
+    pushBack(std::forward<Transforms>(transforms)...);
   }
 
-  virtual Tensor process(Tensor& input) const {
+  Compose(std::initializer_list<std::shared_ptr<Transform>> transforms) {
+    transforms_.reserve(transforms.size());
+    for (const auto& transform : transforms) {
+      transforms_.emplace_back(transform);
+    }
+  }
+
+  template <typename TransformType>
+  void pushBack(TransformType&& transform) {
+    transforms_.push_back(std::make_shared<TransformType>(
+        std::forward<TransformType>(transform)));
+  }
+
+  void pushBack(const std::shared_ptr<Transform>& transform) {
+    transforms_.emplace_back(transform);
+  }
+
+  Tensor process(Tensor& input) const override {
     Tensor ret = input;
     for (auto& trans : transforms_) {
       ret = trans->process(ret);
@@ -37,6 +56,14 @@ class Transform {
   }
 
  private:
+  template <typename First, typename Second, typename... Rest>
+  void pushBack(First&& first, Second&& second, Rest&&... rest) {
+    pushBack(std::forward<First>(first));
+    pushBack(std::forward<Second>(second), std::forward<Rest>(rest)...);
+  }
+
+  void pushBack() {}
+
   std::vector<std::shared_ptr<Transform>> transforms_;
 };
 
@@ -67,7 +94,7 @@ class DatasetMNIST : public Dataset {
     TEST,
   };
   DatasetMNIST(const std::string& dir, MnistDataType type,
-               const std::optional<transforms::Transform>& transform);
+               const std::shared_ptr<transforms::Transform>& transform);
 
   size_t size() const override { return size_; }
 
@@ -78,14 +105,13 @@ class DatasetMNIST : public Dataset {
   void loadImages(const std::string& path);
   void loadLabels(const std::string& path);
 
- private:
   std::vector<std::vector<float>> images_;
   std::vector<float> labels_;
   int32_t height_ = 0;
   int32_t width_ = 0;
   size_t size_ = 0;
 
-  std::optional<transforms::Transform> transform_;
+  std::shared_ptr<transforms::Transform> transform_;
 };
 
 class DataLoader {
