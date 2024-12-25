@@ -14,27 +14,15 @@ class Module {
  public:
   virtual ~Module() = default;
 
-  virtual Tensor forward(const Tensor &x) const { return {}; }
-  virtual Tensor forward(const Tensor &x1, const Tensor &x2) const {
-    return {};
-  }
+  virtual Tensor forward(Tensor &x) { return {}; }
+  virtual Tensor forward(Tensor &x1, Tensor &x2) { return {}; }
 
   virtual std::vector<Tensor *> parameters();
   virtual void resetParameters();
   virtual void zeroGrad();
 
-  virtual Tensor operator()(const Tensor &x) const {
-    if (!training_) {
-      withNoGrad { return forward(x); }
-    }
-    return forward(x);
-  }
-  virtual Tensor operator()(const Tensor &x1, const Tensor &x2) const {
-    if (!training_) {
-      withNoGrad { return forward(x1, x2); }
-    }
-    return forward(x1, x2);
-  }
+  virtual Tensor operator()(Tensor &x) { return forward(x); }
+  virtual Tensor operator()(Tensor &x1, Tensor &x2) { return forward(x1, x2); }
 
   void registerModules(const std::vector<Module *> &modules) {
     subModules_ = modules;
@@ -76,7 +64,7 @@ class Sequential : public Module {
     modules_.emplace_back(module);
   }
 
-  Tensor forward(const Tensor &input) const override;
+  Tensor forward(Tensor &input) override;
   std::vector<Tensor *> parameters() override;
   void resetParameters() override;
   void zeroGrad() override;
@@ -101,7 +89,7 @@ class Linear : public Module {
  public:
   Linear(int32_t inFeatures, int32_t outFeatures, bool bias = true);
 
-  Tensor forward(const Tensor &input) const override;
+  Tensor forward(Tensor &input) override;
   std::vector<Tensor *> parameters() override;
   void resetParameters() override;
   void zeroGrad() override;
@@ -122,7 +110,7 @@ class Flatten : public Module {
   explicit Flatten(int32_t startDim = 0, int32_t endDim = -1)
       : startDim_(startDim), endDim_(endDim) {}
 
-  Tensor forward(const Tensor &input) const override;
+  Tensor forward(Tensor &input) override;
 
  private:
   int32_t startDim_;
@@ -131,14 +119,14 @@ class Flatten : public Module {
 
 class Relu : public Module {
  public:
-  Tensor forward(const Tensor &input) const override;
+  Tensor forward(Tensor &input) override;
 };
 
 class Dropout : public Module {
  public:
   explicit Dropout(float p = 0.5f) : p_(p) {}
 
-  Tensor forward(const Tensor &x) const override;
+  Tensor forward(Tensor &x) override;
 
  private:
   float p_;
@@ -148,7 +136,7 @@ class Softmax : public Module {
  public:
   explicit Softmax(int32_t dim) : dim_(dim) {}
 
-  Tensor forward(const Tensor &x) const override;
+  Tensor forward(Tensor &x) override;
 
  private:
   int32_t dim_;
@@ -158,7 +146,7 @@ class LogSoftmax : public Module {
  public:
   explicit LogSoftmax(int32_t dim) : dim_(dim) {}
 
-  Tensor forward(const Tensor &x) const override;
+  Tensor forward(Tensor &x) override;
 
  private:
   int32_t dim_;
@@ -173,7 +161,7 @@ class MaxPool2D : public Module {
         stride_(stride.has_value() ? stride.value() : kernelSize),
         padding_(padding) {}
 
-  Tensor forward(const Tensor &x) const override;
+  Tensor forward(Tensor &x) override;
 
  private:
   Size2D kernelSize_;
@@ -186,7 +174,7 @@ class Conv2D : public Module {
   Conv2D(int32_t inFeatures, int32_t outFeatures, Size2D kernelSize,
          Size2D stride = 1, Size2D padding = 0, bool bias = true);
 
-  Tensor forward(const Tensor &input) const override;
+  Tensor forward(Tensor &input) override;
   std::vector<Tensor *> parameters() override;
   void resetParameters() override;
   void zeroGrad() override;

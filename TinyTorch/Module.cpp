@@ -33,7 +33,7 @@ void Module::zeroGrad() {
   }
 }
 
-Tensor Sequential::forward(const Tensor &input) const {
+Tensor Sequential::forward(Tensor &input) {
   Tensor ret = {input};
   for (auto &module : modules_) {
     ret = (*module)(ret);
@@ -80,7 +80,7 @@ Linear::Linear(int32_t inFeatures, int32_t outFeatures, bool bias)
   Linear::resetParameters();
 }
 
-Tensor Linear::forward(const Tensor &input) const {
+Tensor Linear::forward(Tensor &input) {
   return Function::linear(input, weights_, bias_);
 }
 
@@ -107,27 +107,25 @@ void Linear::zeroGrad() {
   }
 }
 
-Tensor Flatten::forward(const Tensor &input) const {
+Tensor Flatten::forward(Tensor &input) {
   return Function::flatten(input, startDim_, endDim_);
 }
 
-Tensor Relu::forward(const Tensor &input) const {
-  return Function::relu(input);
-}
+Tensor Relu::forward(Tensor &input) { return Function::relu(input); }
 
-Tensor Dropout::forward(const Tensor &input) const {
+Tensor Dropout::forward(Tensor &input) {
   return Function::dropout(input, p_, training_);
 }
 
-Tensor Softmax::forward(const Tensor &input) const {
+Tensor Softmax::forward(Tensor &input) {
   return Function::softmax(input, dim_);
 }
 
-Tensor LogSoftmax::forward(const Tensor &input) const {
+Tensor LogSoftmax::forward(Tensor &input) {
   return Function::logSoftmax(input, dim_);
 }
 
-Tensor MaxPool2D::forward(const Tensor &input) const {
+Tensor MaxPool2D::forward(Tensor &input) {
   return Function::maxPool2d(input, kernelSize_, stride_, padding_);
 }
 
@@ -147,7 +145,7 @@ Conv2D::Conv2D(int32_t inFeatures, int32_t outFeatures, Size2D kernelSize,
   Conv2D::resetParameters();
 }
 
-Tensor Conv2D::forward(const Tensor &input) const {
+Tensor Conv2D::forward(Tensor &input) {
   return Function::conv2d(input, weights_, bias_, stride_, padding_);
 }
 

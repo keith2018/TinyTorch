@@ -35,13 +35,13 @@ class Loss : public Module {
 class MSELoss : public Loss {
  public:
   explicit MSELoss(const LossReduction reduction = MEAN) : Loss(reduction) {}
-  Tensor forward(const Tensor &input, const Tensor &target) const override;
+  Tensor forward(Tensor &input, Tensor &target) override;
 };
 
 class NLLLoss : public Loss {
  public:
   explicit NLLLoss(const LossReduction reduction = MEAN) : Loss(reduction) {}
-  Tensor forward(const Tensor &input, const Tensor &target) const override;
+  Tensor forward(Tensor &input, Tensor &target) override;
 };
 
 }  // namespace nn

@@ -13,8 +13,8 @@ class Net : public nn::Module {
  public:
   Net() { registerModules({&conv1, &conv2, &dropout1, &dropout2, &fc1, &fc2}); }
 
-  Tensor forward(const Tensor &input) const override {
-    auto x = conv1(input);
+  Tensor forward(Tensor &x) override {
+    x = conv1(x);
     x = Function::relu(x);
     x = conv2(x);
     x = Function::relu(x);
@@ -41,7 +41,7 @@ class Net : public nn::Module {
 void train(nn::Module &model, data::DataLoader &dataLoader,
            optim::Optimizer &optimizer, int32_t epoch) {
   model.train();
-  for (const auto &[batchIdx, batch] : dataLoader) {
+  for (auto [batchIdx, batch] : dataLoader) {
     auto &data = batch[0];
     auto &target = batch[1];
     optimizer.zeroGrad();
@@ -62,7 +62,7 @@ void test(nn::Module &model, data::DataLoader &dataLoader) {
   auto total = 0;
   auto correct = 0;
   withNoGrad {
-    for (const auto &[batchIdx, batch] : dataLoader) {
+    for (auto [batchIdx, batch] : dataLoader) {
       auto &data = batch[0];
       auto &target = batch[1];
       auto output = model(data);

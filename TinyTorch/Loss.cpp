@@ -10,11 +10,11 @@
 
 namespace TinyTorch::nn {
 
-Tensor MSELoss::forward(const Tensor& input, const Tensor& target) const {
+Tensor MSELoss::forward(Tensor& input, Tensor& target) {
   return Function::mseLoss(input, target, reduction_);
 }
 
-Tensor NLLLoss::forward(const Tensor& input, const Tensor& target) const {
+Tensor NLLLoss::forward(Tensor& input, Tensor& target) {
   return Function::nllloss(input, target, reduction_);
 }
 
