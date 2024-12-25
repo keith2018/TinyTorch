@@ -9,6 +9,8 @@
 #include <fstream>
 #include <memory>
 
+#include "Logger.h"
+
 namespace TinyTorch::data::transforms {
 
 Tensor Normalize::process(Tensor& input) const {
@@ -61,6 +63,10 @@ int32_t DatasetMNIST::toInt32(const char* p) {
 
 void DatasetMNIST::loadImages(const std::string& path) {
   std::ifstream ifs(path.c_str(), std::ios::in | std::ios::binary);
+  if (!ifs.is_open()) {
+    LOGE("failed to load images from %s", path.c_str());
+    return;
+  }
   char p[4];
 
   ifs.read(p, 4);
@@ -93,6 +99,10 @@ void DatasetMNIST::loadImages(const std::string& path) {
 
 void DatasetMNIST::loadLabels(const std::string& path) {
   std::ifstream ifs(path.c_str(), std::ios::in | std::ios::binary);
+  if (!ifs.is_open()) {
+    LOGE("failed to load labels from %s", path.c_str());
+    return;
+  }
   char p[4];
 
   ifs.read(p, 4);

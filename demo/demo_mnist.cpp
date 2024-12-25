@@ -98,6 +98,16 @@ void demo_mnist() {
   auto testDataset = std::make_shared<data::DatasetMNIST>(
       dataDir, data::DatasetMNIST::TEST, transform);
 
+  if (trainDataset->size() == 0) {
+    LOGE("Train Dataset is empty.");
+    return;
+  }
+
+  if (testDataset->size() == 0) {
+    LOGE("Test Dataset is empty.");
+    return;
+  }
+
   LOGD("train size: %d", trainDataset->size());
   LOGD("test size: %d", testDataset->size());
 
