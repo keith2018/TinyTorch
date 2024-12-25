@@ -2,6 +2,11 @@
 
 Tiny deep learning training framework implemented from scratch in C++ that follows PyTorch's API.
 
+[![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
+[![CMake Linux](https://github.com/keith2018/TinyTorch/actions/workflows/cmake_linux.yml/badge.svg)](https://github.com/keith2018/TinyTorch/actions/workflows/cmake_linux.yml)
+[![CMake MacOS](https://github.com/keith2018/TinyTorch/actions/workflows/cmake_macos.yml/badge.svg)](https://github.com/keith2018/TinyTorch/actions/workflows/cmake_macos.yml)
+[![CMake Windows](https://github.com/keith2018/TinyTorch/actions/workflows/cmake_windows.yml/badge.svg)](https://github.com/keith2018/TinyTorch/actions/workflows/cmake_windows.yml)
+
 - Module
   - Linear
   - Conv2D
@@ -138,6 +143,30 @@ void demo_mnist() {
   timer.stop();
   LOGD("Time cost: %lld ms", timer.elapseMillis());
 }
+```
+
+## Clone
+```bash
+git clone --recurse-submodules https://github.com/keith2018/TinyTorch.git
+```
+
+## Build
+```bash
+mkdir build
+cmake -B ./build -DCMAKE_BUILD_TYPE=Release
+cmake --build ./build --config Release
+```
+
+## Demo
+```bash
+cd demo/bin
+./TinyTorch_demo
+```
+
+## Test
+```bash
+cd build
+ctest
 ```
 
 ## Dependencies
