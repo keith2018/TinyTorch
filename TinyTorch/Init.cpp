@@ -22,8 +22,8 @@ void Init::uniform(Tensor &tensor, float min, float max) {
 void Init::kaimingUniform(Tensor &tensor, float a, FanMode mode) {
   auto fan = calculateFan(tensor, mode);
   auto gain = calculateGain(a);
-  auto std = gain / std::sqrtf((float)fan);
-  auto bound = std::sqrtf(3.f) * std;
+  auto std = gain / std::sqrt((float)fan);
+  auto bound = std::sqrt(3.f) * std;
   uniform(tensor, -bound, bound);
 }
 
@@ -59,7 +59,7 @@ int32_t Init::calculateFan(const Tensor &tensor, FanMode mode) {
 }
 
 float Init::calculateGain(float param) {
-  return std::sqrtf(2.0f / (1.f + param * param));
+  return std::sqrt(2.0f / (1.f + param * param));
 }
 
 }  // namespace TinyTorch::nn

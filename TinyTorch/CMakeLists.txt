@@ -30,9 +30,12 @@ if (MSVC)
     target_link_libraries(${PROJECT_NAME}
             "${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/OpenBLAS/win64-64/lib/libopenblas.dll.a"
     )
-endif ()
-
-if (APPLE)
+elseif (APPLE)
     find_library(ACCELERATE_LIBRARY Accelerate)
     target_link_libraries(${PROJECT_NAME} ${ACCELERATE_LIBRARY})
+else ()
+    target_include_directories(${PROJECT_NAME} PRIVATE
+            "/usr/include/openblas"
+    )
+    target_link_libraries(${PROJECT_NAME} openblas)
 endif ()

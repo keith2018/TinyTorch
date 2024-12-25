@@ -7,6 +7,7 @@
 
 #include <cassert>
 #include <fstream>
+#include <memory>
 
 namespace TinyTorch::data::transforms {
 

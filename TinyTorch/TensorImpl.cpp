@@ -7,8 +7,7 @@
 #include "TensorImpl.h"
 
 #include <cassert>
-#include <cstring>
-#include <random>
+#include <functional>
 
 #include "Blas.h"
 #include "Logger.h"
