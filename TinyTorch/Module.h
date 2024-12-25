@@ -47,15 +47,34 @@ class Module {
  protected:
   virtual void setTraining(bool mode) { training_ = mode; }
 
- protected:
   bool training_ = true;
   std::vector<Module *> subModules_;
 };
 
 class Sequential : public Module {
  public:
-  template <typename... Args>
-  explicit Sequential(Args... args) : modules_{args...} {}
+  template <typename... Modules>
+  explicit Sequential(Modules &&...modules) {
+    modules_.reserve(sizeof...(Modules));
+    pushBack(std::forward<Modules>(modules)...);
+  }
+
+  Sequential(std::initializer_list<std::shared_ptr<Module>> modules) {
+    modules_.reserve(modules.size());
+    for (const auto &module : modules) {
+      modules_.emplace_back(module);
+    }
+  }
+
+  template <typename ModuleType>
+  void pushBack(ModuleType &&module) {
+    modules_.push_back(
+        std::make_shared<ModuleType>(std::forward<ModuleType>(module)));
+  }
+
+  void pushBack(const std::shared_ptr<Module> &module) {
+    modules_.emplace_back(module);
+  }
 
   Tensor forward(const Tensor &input) const override;
   std::vector<Tensor *> parameters() override;
@@ -64,10 +83,17 @@ class Sequential : public Module {
 
   Module &operator[](const int index) { return *modules_[index]; }
 
- protected:
+ private:
   void setTraining(bool mode) override;
 
- private:
+  template <typename First, typename Second, typename... Rest>
+  void pushBack(First &&first, Second &&second, Rest &&...rest) {
+    pushBack(std::forward<First>(first));
+    pushBack(std::forward<Second>(second), std::forward<Rest>(rest)...);
+  }
+
+  void pushBack() {}
+
   std::vector<std::shared_ptr<Module>> modules_;
 };
 

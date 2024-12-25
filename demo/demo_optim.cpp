@@ -20,8 +20,7 @@ void demo_optim() {
   auto p = Tensor({1, 2, 3});
   auto xx = x.unsqueeze(-1).pow(p);
 
-  auto model = nn::Sequential(std::make_shared<nn::Linear>(3, 1),
-                              std::make_shared<nn::Flatten>(0, 1));
+  auto model = nn::Sequential(nn::Linear(3, 1), nn::Flatten(0, 1));
 
   auto loss_fn = nn::MSELoss(SUM);
 
