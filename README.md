@@ -1,6 +1,24 @@
 # TinyTorch
 
-Tiny deep learning training framework implemented from scratch in C++ that mimics PyTorch's API.
+Tiny deep learning training framework implemented from scratch in C++ that follows PyTorch's API.
+
+- Module
+  - Linear
+  - Conv2D
+  - MaxPool2D
+  - Dropout
+  - Softmax
+  - LogSoftmax
+  - Relu
+  - Sequential
+- Loss
+  - MSELoss
+  - NLLLoss
+- Optimizer
+  - SGD
+  - RMSprop
+  - Adadelta
+
 
 MNIST training demo:
 ```c++
