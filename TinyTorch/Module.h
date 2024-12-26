@@ -13,16 +13,17 @@ namespace TinyTorch::nn {
 class Module {
  public:
   virtual ~Module() = default;
-
-  virtual Tensor forward(Tensor &x) { return {}; }
-  virtual Tensor forward(Tensor &x1, Tensor &x2) { return {}; }
-
   virtual std::vector<Tensor *> parameters();
   virtual void resetParameters();
   virtual void zeroGrad();
 
-  virtual Tensor operator()(Tensor &x) { return forward(x); }
-  virtual Tensor operator()(Tensor &x1, Tensor &x2) { return forward(x1, x2); }
+  virtual Tensor forward(Tensor &x) { return {}; }
+  virtual Tensor forward(Tensor &x1, Tensor &x2) { return {}; }
+
+  template <typename... Args>
+  Tensor operator()(Args &&...args) {
+    return forward(std::forward<Args>(args)...);
+  }
 
   void registerModules(
       const std::vector<std::reference_wrapper<Module>> &modules) {
