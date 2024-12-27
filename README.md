@@ -2,14 +2,9 @@
 
 Tiny deep learning training framework implemented from scratch in C++ that follows PyTorch's API.
 
-[![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 [![CMake Linux](https://github.com/keith2018/TinyTorch/actions/workflows/cmake_linux.yml/badge.svg)](https://github.com/keith2018/TinyTorch/actions/workflows/cmake_linux.yml)
 [![CMake MacOS](https://github.com/keith2018/TinyTorch/actions/workflows/cmake_macos.yml/badge.svg)](https://github.com/keith2018/TinyTorch/actions/workflows/cmake_macos.yml)
 [![CMake Windows](https://github.com/keith2018/TinyTorch/actions/workflows/cmake_windows.yml/badge.svg)](https://github.com/keith2018/TinyTorch/actions/workflows/cmake_windows.yml)
-
-Automatic differentiation Diagram
-
-![](doc/AD.png)
 
 ## Components
 
@@ -27,9 +22,19 @@ Automatic differentiation Diagram
   - NLLLoss
 - Optimizer
   - SGD
+  - Adagrad
   - RMSprop
-  - Adadelta
+  - AdaDelta
+  - Adam
+  - AdamW
+- Data
+  - Dataset
+  - DataLoader
+  - Transform
 
+## Automatic differentiation
+
+![](doc/AD.png)
 
 ## MNIST training demo:
 ```c++
