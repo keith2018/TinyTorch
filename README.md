@@ -7,6 +7,12 @@ Tiny deep learning training framework implemented from scratch in C++ that follo
 [![CMake MacOS](https://github.com/keith2018/TinyTorch/actions/workflows/cmake_macos.yml/badge.svg)](https://github.com/keith2018/TinyTorch/actions/workflows/cmake_macos.yml)
 [![CMake Windows](https://github.com/keith2018/TinyTorch/actions/workflows/cmake_windows.yml/badge.svg)](https://github.com/keith2018/TinyTorch/actions/workflows/cmake_windows.yml)
 
+Automatic differentiation Diagram
+
+![](doc/AD.png)
+
+## Components
+
 - Module
   - Linear
   - Conv2D
@@ -25,7 +31,7 @@ Tiny deep learning training framework implemented from scratch in C++ that follo
   - Adadelta
 
 
-MNIST training demo:
+## MNIST training demo:
 ```c++
 #include "Torch.h"
 
@@ -145,11 +151,6 @@ void demo_mnist() {
 }
 ```
 
-## Clone
-```bash
-git clone --recurse-submodules https://github.com/keith2018/TinyTorch.git
-```
-
 ## Build
 ```bash
 mkdir build
@@ -170,7 +171,7 @@ ctest
 ```
 
 ## Dependencies
-- `OpenBLAS` [https://github.com/OpenMathLib/OpenBLAS](https://github.com/OpenMathLib/OpenBLAS)
+- `OpenBLAS` (for `gemm`) [https://github.com/OpenMathLib/OpenBLAS](https://github.com/OpenMathLib/OpenBLAS)
 
 ## License
 This code is licensed under the MIT License (see [LICENSE](LICENSE)).
