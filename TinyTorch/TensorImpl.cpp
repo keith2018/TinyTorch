@@ -48,17 +48,17 @@ std::default_random_engine RandomGenerator::randomEngine_;
   }                                                                            \
   return ret
 
-#define TENSOR_CHECK_SHAPE_EQUAL_RET(ret)                                      \
+#define TENSOR_CHECK_SHAPE_EQUAL_RET(a, b, ret)                                \
   do {                                                                         \
-    if (!shape_.empty() && !other.shape_.empty() && shape_ != other.shape_) {  \
+    if (!(a).empty() && !(b).empty() && (a) != (b)) {                          \
       error(__FUNCTION__, TensorError_ShapeNotAligned);                        \
       return ret;                                                              \
     }                                                                          \
   } while (0)
 
-#define TENSOR_CHECK_SHAPE_EQUAL                                               \
+#define TENSOR_CHECK_SHAPE_EQUAL(a, b)                                         \
   do {                                                                         \
-    if (!shape_.empty() && !other.shape_.empty() && shape_ != other.shape_) {  \
+    if (!(a).empty() && !(b).empty() && (a) != (b)) {                          \
       error(__FUNCTION__, TensorError_ShapeNotAligned);                        \
       return;                                                                  \
     }                                                                          \
@@ -1078,25 +1078,25 @@ TensorImpl TensorImpl::dstack(
 }
 
 TensorImpl TensorImpl::operator<(const TensorImpl &other) const {
-  TENSOR_CHECK_SHAPE_EQUAL_RET({});
+  TENSOR_CHECK_SHAPE_EQUAL_RET(shape_, other.shape_, {});
   TENSOR_MATH_FAST_LOOP_PAIR(shape(shape()), =,
                              (*this)[idx] < other[idx] ? 1.f : 0.f);
 }
 
 TensorImpl TensorImpl::operator>(const TensorImpl &other) const {
-  TENSOR_CHECK_SHAPE_EQUAL_RET({});
+  TENSOR_CHECK_SHAPE_EQUAL_RET(shape_, other.shape_, {});
   TENSOR_MATH_FAST_LOOP_PAIR(shape(shape()), =,
                              (*this)[idx] > other[idx] ? 1.f : 0.f);
 }
 
 TensorImpl TensorImpl::operator==(const TensorImpl &other) const {
-  TENSOR_CHECK_SHAPE_EQUAL_RET({});
+  TENSOR_CHECK_SHAPE_EQUAL_RET(shape_, other.shape_, {});
   TENSOR_MATH_FAST_LOOP_PAIR(shape(shape()), =,
                              (*this)[idx] == other[idx] ? 1.f : 0.f);
 }
 
 TensorImpl TensorImpl::operator!=(const TensorImpl &other) const {
-  TENSOR_CHECK_SHAPE_EQUAL_RET({});
+  TENSOR_CHECK_SHAPE_EQUAL_RET(shape_, other.shape_, {});
   TENSOR_MATH_FAST_LOOP_PAIR(shape(shape()), =,
                              (*this)[idx] != other[idx] ? 1.f : 0.f);
 }
@@ -1121,6 +1121,16 @@ TensorImpl TensorImpl::operator!=(const float &other) const {
                              (*this)[idx] != other ? 1.f : 0.f);
 }
 
+TensorImpl TensorImpl::maximum(const TensorImpl &a, const TensorImpl &b) {
+  TENSOR_CHECK_SHAPE_EQUAL_RET(a.shape_, b.shape_, {});
+  TENSOR_MATH_FAST_LOOP_PAIR(shape(a.shape()), =, std::max(a[idx], b[idx]));
+}
+
+TensorImpl TensorImpl::minimum(const TensorImpl &a, const TensorImpl &b) {
+  TENSOR_CHECK_SHAPE_EQUAL_RET(a.shape_, b.shape_, {});
+  TENSOR_MATH_FAST_LOOP_PAIR(shape(a.shape()), =, std::min(a[idx], b[idx]));
+}
+
 TensorImpl TensorImpl::operator+(const TensorImpl &other) const {
   TENSOR_CHECK_EMPTY_PAIR(*this, other, {});
   TENSOR_MATH_BROADCAST_PAIR(+);
@@ -1143,25 +1153,25 @@ TensorImpl TensorImpl::operator/(const TensorImpl &other) const {
 
 void TensorImpl::operator+=(const TensorImpl &other) {
   TENSOR_CHECK_EMPTY_PAIR(*this, other, );
-  TENSOR_CHECK_SHAPE_EQUAL;
+  TENSOR_CHECK_SHAPE_EQUAL(shape_, other.shape_);
   TENSOR_MATH_FAST_LOOP_SELF(+=, other[idx]);
 }
 
 void TensorImpl::operator-=(const TensorImpl &other) {
   TENSOR_CHECK_EMPTY_PAIR(*this, other, );
-  TENSOR_CHECK_SHAPE_EQUAL;
+  TENSOR_CHECK_SHAPE_EQUAL(shape_, other.shape_);
   TENSOR_MATH_FAST_LOOP_SELF(-=, other[idx]);
 }
 
 void TensorImpl::operator*=(const TensorImpl &other) {
   TENSOR_CHECK_EMPTY_PAIR(*this, other, );
-  TENSOR_CHECK_SHAPE_EQUAL;
+  TENSOR_CHECK_SHAPE_EQUAL(shape_, other.shape_);
   TENSOR_MATH_FAST_LOOP_SELF(*=, other[idx]);
 }
 
 void TensorImpl::operator/=(const TensorImpl &other) {
   TENSOR_CHECK_EMPTY_PAIR(*this, other, );
-  TENSOR_CHECK_SHAPE_EQUAL;
+  TENSOR_CHECK_SHAPE_EQUAL(shape_, other.shape_);
   TENSOR_MATH_FAST_LOOP_SELF(/=, other[idx]);
 }
 

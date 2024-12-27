@@ -474,6 +474,9 @@ class TensorImpl {
   TensorImpl operator==(const float &other) const;
   TensorImpl operator!=(const float &other) const;
 
+  static TensorImpl maximum(const TensorImpl &a, const TensorImpl &b);
+  static TensorImpl minimum(const TensorImpl &a, const TensorImpl &b);
+
   // math
   TensorImpl operator+(const TensorImpl &other) const;
   TensorImpl operator-(const TensorImpl &other) const;

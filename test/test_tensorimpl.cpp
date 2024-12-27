@@ -441,6 +441,14 @@ TEST(TEST_TensorImpl, math_compare) {
   y = x != TensorImpl({{1, 1, 3}, {1, 4, 5}});
   EXPECT_THAT(y.shape(), ElementsAre(2, 3));
   EXPECT_THAT(y.toArray(), ElementsAre(0, 1, 0, 1, 0, 0));
+
+  y = TensorImpl::maximum(x, x2);
+  EXPECT_THAT(y.shape(), ElementsAre(2, 3));
+  EXPECT_THAT(y.toArray(), ElementsAre(3, 4, 5, 3, 4, 5));
+
+  y = TensorImpl::minimum(x, x2);
+  EXPECT_THAT(y.shape(), ElementsAre(2, 3));
+  EXPECT_THAT(y.toArray(), ElementsAre(1, 2, 3, 1, 2, 3));
 }
 
 TEST(TEST_TensorImpl, math_scalar) {
