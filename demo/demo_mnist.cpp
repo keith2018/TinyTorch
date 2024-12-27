@@ -110,7 +110,7 @@ void demo_mnist() {
   auto testDataloader = data::DataLoader(testDataset, batchSize, true);
 
   auto model = Net();
-  auto optimizer = optim::Adadelta(model.parameters(), lr);
+  auto optimizer = optim::AdaDelta(model.parameters(), lr);
   auto scheduler = optim::lr_scheduler::StepLR(optimizer, 1, 0.7f);
 
   for (auto epoch = 0; epoch < epochs; epoch++) {
