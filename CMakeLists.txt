@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.10)
 project(TinyTorch)
 
+option(USE_BLAS "Use BLAS library for matrix multiplication (gemm)" ON)
+message(STATUS "USE_BLAS ${USE_BLAS}")
+
 add_subdirectory(TinyTorch)
 add_subdirectory(demo)
 

@@ -28,13 +28,15 @@ target_link_libraries(${PROJECT_NAME} TinyTorch)
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_CURRENT_SOURCE_DIR}/bin)
 SET(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/../bin)
 
-# copy libopenblas.dll
-if (MSVC)
-    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy
-            ${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/OpenBLAS/win64-64/bin/libopenblas.dll
-            $<TARGET_FILE_DIR:${PROJECT_NAME}>/libopenblas.dll
-    )
+if (${USE_BLAS})
+    # copy libopenblas.dll
+    if (MSVC)
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy
+                ${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/OpenBLAS/win64-64/bin/libopenblas.dll
+                $<TARGET_FILE_DIR:${PROJECT_NAME}>/libopenblas.dll
+        )
+    endif ()
 endif ()
 
 # copy assets

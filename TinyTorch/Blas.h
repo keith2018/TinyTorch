@@ -21,6 +21,10 @@ class Blas {
    */
   static void gemmTrans(float *c, const float *a, const float *b, int m, int k,
                         int n);
+
+ private:
+  static void gemmCPU(float *c, const float *a, const float *b, int m, int k,
+                      int n, bool trans);
 };
 
 }  // namespace TinyTorch

@@ -5,6 +5,10 @@ if (CMAKE_BUILD_TYPE STREQUAL Debug)
     add_definitions(-DDEBUG)
 endif ()
 
+if (${USE_BLAS})
+    add_definitions(-DUSE_BLAS)
+endif ()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -23,19 +27,21 @@ endif ()
 
 add_library(${PROJECT_NAME} ${TinyTorch_src})
 
-if (MSVC)
-    target_include_directories(${PROJECT_NAME} PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/OpenBLAS/win64-64/include
-    )
-    target_link_libraries(${PROJECT_NAME}
-            "${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/OpenBLAS/win64-64/lib/libopenblas.dll.a"
-    )
-elseif (APPLE)
-    find_library(ACCELERATE_LIBRARY Accelerate)
-    target_link_libraries(${PROJECT_NAME} ${ACCELERATE_LIBRARY})
-else ()
-    target_include_directories(${PROJECT_NAME} PRIVATE
-            "/usr/include/openblas"
-    )
-    target_link_libraries(${PROJECT_NAME} openblas)
+if (${USE_BLAS})
+    if (MSVC)
+        target_include_directories(${PROJECT_NAME} PRIVATE
+                ${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/OpenBLAS/win64-64/include
+        )
+        target_link_libraries(${PROJECT_NAME}
+                "${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/OpenBLAS/win64-64/lib/libopenblas.dll.a"
+        )
+    elseif (APPLE)
+        find_library(ACCELERATE_LIBRARY Accelerate)
+        target_link_libraries(${PROJECT_NAME} ${ACCELERATE_LIBRARY})
+    else ()
+        target_include_directories(${PROJECT_NAME} PRIVATE
+                "/usr/include/openblas"
+        )
+        target_link_libraries(${PROJECT_NAME} openblas)
+    endif ()
 endif ()

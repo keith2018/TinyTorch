@@ -176,7 +176,7 @@ ctest
 ```
 
 ## Dependencies
-- `OpenBLAS` (for `gemm`) [https://github.com/OpenMathLib/OpenBLAS](https://github.com/OpenMathLib/OpenBLAS)
+- `OpenBLAS` (optional for `gemm`) [https://github.com/OpenMathLib/OpenBLAS](https://github.com/OpenMathLib/OpenBLAS)
 
 ## License
 This code is licensed under the MIT License (see [LICENSE](LICENSE)).
