@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <random>
 #include <sstream>
@@ -18,6 +19,9 @@
 namespace TinyTorch {
 
 #define TENSOR_MAX_DIMS 8
+
+class UFuncSingle;
+class UFuncMulti;
 
 typedef enum TensorError_ {
   TensorError_None = 0,
@@ -80,127 +84,6 @@ class Axis {
 
  private:
   int32_t axis_ = 0;
-};
-
-class UFunc {
- public:
-  virtual ~UFunc() = default;
-  virtual void op(const float &val) { idx_++; };
-
-  virtual float result() { return tmp; };
-
-  virtual void reset() {
-    idx_ = 0;
-    tmp = 0.f;
-  }
-
- protected:
-  int32_t idx_ = 0;
-  float tmp = 0.f;
-};
-
-class UFuncSum : public UFunc {
- public:
-  void op(const float &val) override { tmp += val; }
-};
-
-class UFuncMean : public UFunc {
- public:
-  void op(const float &val) override {
-    idx_++;
-    tmp += val;
-  }
-
-  float result() override { return tmp / (float)idx_; }
-};
-
-class UFuncVar : public UFunc {
- public:
-  void op(const float &val) override {
-    idx_++;
-    tmp += val;
-    squareSum_ += val * val;
-  }
-
-  float result() override {
-    float mean = tmp / (float)idx_;
-    return squareSum_ / (float)idx_ - mean * mean;
-  }
-
-  void reset() override {
-    idx_ = 0;
-    tmp = 0;
-    squareSum_ = 0;
-  }
-
- private:
-  float squareSum_ = 0;
-};
-
-class UFuncMin : public UFunc {
- public:
-  void op(const float &val) override {
-    if (val < tmp) {
-      tmp = val;
-    }
-  }
-
-  void reset() override { tmp = std::numeric_limits<float>::max(); }
-};
-
-class UFuncMax : public UFunc {
- public:
-  void op(const float &val) override {
-    if (val > tmp) {
-      tmp = val;
-    }
-  }
-
-  void reset() override { tmp = -std::numeric_limits<float>::max(); }
-};
-
-class UFuncArgMin : public UFunc {
- public:
-  void op(const float &val) override {
-    if (val < tmp) {
-      tmp = val;
-      minIdx_ = idx_;
-    }
-    idx_++;
-  }
-
-  float result() override { return (float)minIdx_; }
-
-  void reset() override {
-    tmp = std::numeric_limits<float>::max();
-    idx_ = 0;
-    minIdx_ = 0;
-  }
-
- private:
-  int32_t minIdx_ = 0;
-};
-
-class UFuncArgMax : public UFunc {
- public:
-  void op(const float &val) override {
-    if (val > tmp) {
-      tmp = val;
-      maxIdx_ = idx_;
-    }
-    idx_++;
-  }
-
-  float result() override { return (float)maxIdx_; }
-
-  void reset() override {
-    tmp = -std::numeric_limits<float>::max();
-    idx_ = 0;
-    maxIdx_ = 0;
-  }
-
- private:
-  int32_t maxIdx_ = 0;
 };
 
 // float type elements only
@@ -371,11 +254,11 @@ class TensorImpl {
                     Size2D padding = 0) const;
 
   // transpose
-  TensorImpl transpose(const std::vector<int32_t> &axis = {}) const;
+  TensorImpl transpose(const std::vector<int32_t> &axes = {}) const;
 
   static TensorImpl transpose(const TensorImpl &t,
-                              const std::vector<int32_t> &axis = {}) {
-    return t.transpose(axis);
+                              const std::vector<int32_t> &axes = {}) {
+    return t.transpose(axes);
   }
 
   // split
@@ -541,7 +424,7 @@ class TensorImpl {
   static float max(const TensorImpl &t);
   static float mean(const TensorImpl &t);
   static float sum(const TensorImpl &t);
-  static float var(const TensorImpl &t);
+  static float var(const TensorImpl &t, bool unbiased = true);
   static float argmin(const TensorImpl &t);
   static float argmax(const TensorImpl &t);
 
@@ -549,7 +432,9 @@ class TensorImpl {
   float max() const { return TensorImpl::max(*this); };
   float mean() const { return TensorImpl::mean(*this); };
   float sum() const { return TensorImpl::sum(*this); };
-  float var() const { return TensorImpl::var(*this); };
+  float var(bool unbiased = true) const {
+    return TensorImpl::var(*this, unbiased);
+  };
   float argmin() const { return TensorImpl::argmin(*this); };
   float argmax() const { return TensorImpl::argmax(*this); };
 
@@ -562,11 +447,18 @@ class TensorImpl {
   static TensorImpl sum(const TensorImpl &t, const Axis &axis,
                         bool keepDims = false);
   static TensorImpl var(const TensorImpl &t, const Axis &axis,
-                        bool keepDims = false);
+                        bool unbiased = true, bool keepDims = false);
   static TensorImpl argmin(const TensorImpl &t, const Axis &axis,
                            bool keepDims = false);
   static TensorImpl argmax(const TensorImpl &t, const Axis &axis,
                            bool keepDims = false);
+
+  static TensorImpl mean(const TensorImpl &t, const std::vector<int32_t> &axes,
+                         bool keepDims = false);
+  static TensorImpl sum(const TensorImpl &t, const std::vector<int32_t> &axes,
+                        bool keepDims = false);
+  static TensorImpl var(const TensorImpl &t, const std::vector<int32_t> &axes,
+                        bool unbiased = true, bool keepDims = false);
 
   TensorImpl min(const Axis &axis, bool keepDims = false) const {
     return TensorImpl::min(*this, axis, keepDims);
@@ -584,8 +476,8 @@ class TensorImpl {
     return TensorImpl::sum(*this, axis, keepDims);
   }
 
-  TensorImpl var(const Axis &axis, bool keepDims = false) const {
-    return TensorImpl::var(*this, axis, keepDims);
+  TensorImpl var(const Axis &axis, bool unbiased, bool keepDims = false) const {
+    return TensorImpl::var(*this, axis, unbiased, keepDims);
   }
 
   TensorImpl argmin(const Axis &axis, bool keepDims = false) const {
@@ -594,6 +486,21 @@ class TensorImpl {
 
   TensorImpl argmax(const Axis &axis, bool keepDims = false) const {
     return TensorImpl::argmax(*this, axis, keepDims);
+  }
+
+  TensorImpl mean(const std::vector<int32_t> &axes,
+                  bool keepDims = false) const {
+    return TensorImpl::mean(*this, axes, keepDims);
+  }
+
+  TensorImpl sum(const std::vector<int32_t> &axes,
+                 bool keepDims = false) const {
+    return TensorImpl::sum(*this, axes, keepDims);
+  }
+
+  TensorImpl var(const std::vector<int32_t> &axes, bool unbiased = true,
+                 bool keepDims = false) const {
+    return TensorImpl::var(*this, axes, unbiased, keepDims);
   }
 
  public:
@@ -621,8 +528,14 @@ class TensorImpl {
   void initMeta();
   void initData(const float *from = nullptr);
 
-  void traverse(UFunc &func, int32_t start, int32_t stride, int32_t cnt) const;
-  TensorImpl reduce(UFunc &func, int32_t axis, bool keepDims = false) const;
+  void traverse(const std::shared_ptr<UFuncSingle> &func, int32_t start,
+                int32_t stride, int32_t cnt) const;
+  TensorImpl reduceSingle(const std::shared_ptr<UFuncSingle> &func,
+                          int32_t axis, bool keepDims = false) const;
+  TensorImpl reduceMulti(const std::shared_ptr<UFuncMulti> &func,
+                         const std::vector<int32_t> &axes,
+                         bool keepDims = false) const;
+  float reduceAll(const std::shared_ptr<UFuncSingle> &func) const;
   void splitAxis(std::vector<TensorImpl> &retTensors,
                  std::vector<int32_t> &splitIndices, int32_t axis) const;
 
@@ -685,7 +598,7 @@ class TensorIter {
   void broadcast(const Shape &shape);
 
   // transpose
-  void transpose(const std::vector<int32_t> &axis);
+  void transpose(const std::vector<int32_t> &axes);
 
  protected:
   // reorder array
@@ -709,6 +622,287 @@ class TensorIter {
   int32_t coordinates_[TENSOR_MAX_DIMS]{};
   int32_t index_ = 0;
   int32_t itCnt_ = 0;
+};
+
+class ReduceHelper {
+ public:
+  explicit ReduceHelper(const TensorImpl &tensor)
+      : srcTensor_(tensor), allReduce_(false), reduceSize_(1) {}
+
+  void initAxisReduce(const std::vector<int32_t> &axes, bool keepDims) {
+    allReduce_ = false;
+    reduceAxes_ = axes;
+    Shape retShape;
+    retShape.reserve(srcTensor_.dim());
+    reduceShape_.reserve(srcTensor_.dim());
+    std::vector<bool> isAxis(srcTensor_.dim(), false);
+    for (int32_t axis : axes) {
+      axis = Axis(axis).get(srcTensor_.dim());
+      isAxis[axis] = true;
+      reduceSize_ *= srcTensor_.shape()[axis];
+    }
+
+    // init retShape and reduceShape_
+    for (int32_t dim = 0; dim < srcTensor_.dim(); dim++) {
+      if (isAxis[dim]) {
+        if (keepDims) {
+          retShape.emplace_back(1);
+        }
+        reduceShape_.emplace_back(1);
+      } else {
+        retShape.emplace_back(srcTensor_.shape()[dim]);
+        reduceShape_.emplace_back(srcTensor_.shape()[dim]);
+      }
+    }
+
+    // calculate reduceStrides_
+    auto dimCount = (int32_t)reduceShape_.size();
+    auto elemCount = 1;
+    reduceStrides_.resize(dimCount);
+    for (auto dim = int32_t(dimCount - 1); dim >= 0; dim--) {
+      reduceStrides_[dim] = elemCount;
+      elemCount *= reduceShape_[dim];
+    }
+
+    dstTensor_ = TensorImpl::zeros(retShape);
+  }
+
+  void initAllReduce() {
+    allReduce_ = true;
+    reduceSize_ = srcTensor_.size();
+    dstTensor_ = TensorImpl::scalar(0.f);
+  }
+
+  const TensorImpl &getOriginTensor() { return srcTensor_; }
+  TensorImpl &getReducedTensor() { return dstTensor_; }
+  int32_t getReduceSize() const { return reduceSize_; }
+
+  // src index -> dst index
+  int32_t indexMapping(int32_t idx) {
+    if (allReduce_) {
+      return 0;
+    }
+
+    int32_t ret = 0;
+    for (int i = 0; i < srcTensor_.dim(); i++) {
+      if (reduceShape_[i] != 1) {
+        ret += (idx / srcTensor_.strides()[i]) * reduceStrides_[i];
+      }
+      idx %= srcTensor_.strides()[i];
+    }
+    return ret;
+  }
+
+ private:
+  const TensorImpl &srcTensor_;
+  std::vector<int32_t> reduceAxes_;
+  bool allReduce_;
+  int32_t reduceSize_;
+  Shape reduceShape_;
+  Shape reduceStrides_;
+  TensorImpl dstTensor_;
+};
+
+class UFuncSingle {
+ public:
+  virtual ~UFuncSingle() = default;
+  virtual void op(const float &val) { idx_++; };
+
+  virtual float result() { return tmp; };
+
+  virtual void reset() {
+    idx_ = 0;
+    tmp = 0.f;
+  }
+
+ protected:
+  int32_t idx_ = 0;
+  float tmp = 0.f;
+};
+
+class UFuncSingleSum : public UFuncSingle {
+ public:
+  void op(const float &val) override { tmp += val; }
+};
+
+class UFuncSingleMean : public UFuncSingle {
+ public:
+  void op(const float &val) override {
+    idx_++;
+    tmp += val;
+  }
+
+  float result() override { return tmp / (float)idx_; }
+};
+
+class UFuncSingleVar : public UFuncSingle {
+ public:
+  void op(const float &val) override {
+    idx_++;
+    tmp += val;
+    squareSum_ += val * val;
+  }
+
+  virtual float result() override {
+    float mean = tmp / (float)idx_;
+    return squareSum_ / (float)idx_ - mean * mean;
+  }
+
+  void reset() override {
+    idx_ = 0;
+    tmp = 0;
+    squareSum_ = 0;
+  }
+
+ protected:
+  float squareSum_ = 0;
+};
+
+class UFuncSingleVarUnbiased : public UFuncSingleVar {
+ public:
+  float result() override {
+    float mean = tmp / (float)idx_;
+    return (squareSum_ / (float)idx_ - mean * mean) *
+           ((float)idx_ / ((float)idx_ - 1.f));
+  }
+};
+
+class UFuncSingleMin : public UFuncSingle {
+ public:
+  void op(const float &val) override {
+    if (val < tmp) {
+      tmp = val;
+    }
+  }
+
+  void reset() override { tmp = std::numeric_limits<float>::max(); }
+};
+
+class UFuncSingleMax : public UFuncSingle {
+ public:
+  void op(const float &val) override {
+    if (val > tmp) {
+      tmp = val;
+    }
+  }
+
+  void reset() override { tmp = -std::numeric_limits<float>::max(); }
+};
+
+class UFuncSingleArgMin : public UFuncSingle {
+ public:
+  void op(const float &val) override {
+    if (val < tmp) {
+      tmp = val;
+      minIdx_ = idx_;
+    }
+    idx_++;
+  }
+
+  float result() override { return (float)minIdx_; }
+
+  void reset() override {
+    tmp = std::numeric_limits<float>::max();
+    idx_ = 0;
+    minIdx_ = 0;
+  }
+
+ private:
+  int32_t minIdx_ = 0;
+};
+
+class UFuncSingleArgMax : public UFuncSingle {
+ public:
+  void op(const float &val) override {
+    if (val > tmp) {
+      tmp = val;
+      maxIdx_ = idx_;
+    }
+    idx_++;
+  }
+
+  float result() override { return (float)maxIdx_; }
+
+  void reset() override {
+    tmp = -std::numeric_limits<float>::max();
+    idx_ = 0;
+    maxIdx_ = 0;
+  }
+
+ private:
+  int32_t maxIdx_ = 0;
+};
+
+class UFuncMulti {
+ public:
+  virtual ~UFuncMulti() = default;
+  virtual TensorImpl &&doReduce(ReduceHelper &reduceHelper) = 0;
+};
+
+class UFuncMultiSum : public UFuncMulti {
+ public:
+  TensorImpl &&doReduce(ReduceHelper &reduceHelper) override {
+    auto &src = reduceHelper.getOriginTensor();
+    auto &dst = reduceHelper.getReducedTensor();
+    for (int32_t i = 0; i < src.size(); i++) {
+      auto dstIdx = reduceHelper.indexMapping(i);
+      dst[dstIdx] += src[i];
+    }
+
+    return std::move(dst);
+  }
+};
+
+class UFuncMultiMean : public UFuncMulti {
+ public:
+  TensorImpl &&doReduce(ReduceHelper &reduceHelper) override {
+    auto &src = reduceHelper.getOriginTensor();
+    auto &dst = reduceHelper.getReducedTensor();
+    for (int32_t i = 0; i < src.size(); i++) {
+      auto dstIdx = reduceHelper.indexMapping(i);
+      dst[dstIdx] += src[i];
+    }
+    dst *= 1.f / (float)reduceHelper.getReduceSize();
+    return std::move(dst);
+  }
+};
+
+class UFuncMultiVar : public UFuncMulti {
+ public:
+  TensorImpl &&doReduce(ReduceHelper &reduceHelper) override {
+    auto &src = reduceHelper.getOriginTensor();
+    auto &dst = reduceHelper.getReducedTensor();
+
+    auto mean = TensorImpl::zeros(dst.shape());
+    for (int32_t i = 0; i < src.size(); i++) {
+      auto dstIdx = reduceHelper.indexMapping(i);
+      mean[dstIdx] += src[i];
+    }
+    // mean
+    auto scale = 1.f / (float)reduceHelper.getReduceSize();
+    mean *= scale;
+
+    // squared diff
+    for (int32_t i = 0; i < src.size(); i++) {
+      auto dstIdx = reduceHelper.indexMapping(i);
+      auto diff = mean[dstIdx] - src[i];
+      dst[dstIdx] += diff * diff;
+    }
+    varianceReduce(dst, reduceHelper);
+    return std::move(dst);
+  }
+
+ protected:
+  virtual void varianceReduce(TensorImpl &dst, ReduceHelper &reduceHelper) {
+    dst *= 1.f / (float)reduceHelper.getReduceSize();
+  }
+};
+
+class UFuncMultiVarUnbiased : public UFuncMultiVar {
+ protected:
+  void varianceReduce(TensorImpl &dst, ReduceHelper &reduceHelper) override {
+    dst *= 1.f / ((float)reduceHelper.getReduceSize() - 1.f);
+  }
 };
 
 }  // namespace TinyTorch

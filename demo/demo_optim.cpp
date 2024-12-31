@@ -14,6 +14,8 @@ void demo_optim() {
   Timer timer;
   timer.start();
 
+  manualSeed(0);
+
   auto x = Tensor::linspace(-PI, PI, 2000);
   auto y = x.sin();
 
@@ -39,8 +41,8 @@ void demo_optim() {
   }
 
   auto* linearLayer = dynamic_cast<nn::Linear*>(&model[0]);
-  auto& biasData = linearLayer->Bias().data();
-  auto& weightData = linearLayer->Weights().data();
+  auto& biasData = linearLayer->bias().data();
+  auto& weightData = linearLayer->weights().data();
   LOGD("Result: y = %f + %f x + %f x^2 + %f x^3", biasData[0], weightData[0],
        weightData[1], weightData[2]);
 

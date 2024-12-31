@@ -84,6 +84,8 @@ void demo_mnist() {
   Timer timer;
   timer.start();
 
+  manualSeed(0);
+
   // config
   auto lr = 1.f;
   auto epochs = 2;

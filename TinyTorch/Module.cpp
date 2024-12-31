@@ -6,6 +6,8 @@
 
 #include "Module.h"
 
+#include <cassert>
+
 #include "Function.h"
 #include "Init.h"
 
@@ -15,6 +17,16 @@ std::vector<Tensor *> Module::parameters() {
   std::vector<Tensor *> ret;
   for (auto &module : subModules_) {
     for (auto p : module.get().parameters()) {
+      ret.push_back(p);
+    }
+  }
+  return ret;
+}
+
+std::vector<Tensor *> Module::states() {
+  std::vector<Tensor *> ret;
+  for (auto &module : subModules_) {
+    for (auto p : module.get().states()) {
       ret.push_back(p);
     }
   }
@@ -46,6 +58,16 @@ std::vector<Tensor *> Sequential::parameters() {
   std::vector<Tensor *> ret;
   for (auto &module : modules_) {
     for (auto p : module->parameters()) {
+      ret.push_back(p);
+    }
+  }
+  return ret;
+}
+
+std::vector<Tensor *> Sequential::states() {
+  std::vector<Tensor *> ret;
+  for (auto &module : modules_) {
+    for (auto p : module->states()) {
       ret.push_back(p);
     }
   }
@@ -90,6 +112,8 @@ std::vector<Tensor *> Linear::parameters() {
   }
   return {&weights_};
 }
+
+std::vector<Tensor *> Linear::states() { return parameters(); }
 
 void Linear::resetParameters() {
   Init::kaimingUniform(weights_, std::sqrt(5.f));
@@ -156,6 +180,8 @@ std::vector<Tensor *> Conv2D::parameters() {
   return {&weights_};
 }
 
+std::vector<Tensor *> Conv2D::states() { return parameters(); }
+
 void Conv2D::resetParameters() {
   Init::kaimingUniform(weights_, std::sqrt(5.f));
   if (useBias_) {
@@ -170,6 +196,73 @@ void Conv2D::resetParameters() {
 void Conv2D::zeroGrad() {
   weights_.zeroGrad();
   if (useBias_) {
+    bias_.zeroGrad();
+  }
+}
+
+BatchNorm2D::BatchNorm2D(int32_t numFeatures, float eps, float momentum,
+                         bool affine, bool trackRunningStats)
+    : numFeatures_(numFeatures),
+      eps_(eps),
+      momentum_(momentum),
+      affine_(affine),
+      trackRunningStats_(trackRunningStats),
+      numBatchesTracked_(0) {
+  if (affine_) {
+    weights_ = Tensor::shape({numFeatures_}, true);
+    bias_ = Tensor::shape({numFeatures_}, true);
+  }
+  if (trackRunningStats_) {
+    runningMean_ = Tensor::shape({numFeatures_}, true);
+    runningVar_ = Tensor::shape({numFeatures_}, true);
+  }
+
+  BatchNorm2D::resetParameters();
+}
+
+Tensor BatchNorm2D::forward(Tensor &input) {
+  assert(input.dim() == 4);
+  if (training_ && trackRunningStats_) {
+    numBatchesTracked_++;
+  }
+
+  bool bnTrain = training_ || !trackRunningStats_;
+  return Function::batchNorm(input, runningMean_, runningVar_, weights_, bias_,
+                             bnTrain, momentum_, eps_);
+}
+
+std::vector<Tensor *> BatchNorm2D::parameters() {
+  if (affine_) {
+    return {&weights_, &bias_};
+  }
+  return {};
+}
+
+std::vector<Tensor *> BatchNorm2D::states() {
+  std::vector<Tensor *> ret({&runningMean_, &runningVar_});
+  if (affine_) {
+    ret.push_back(&weights_);
+    ret.push_back(&bias_);
+  }
+  return ret;
+}
+
+void BatchNorm2D::resetParameters() {
+  if (affine_) {
+    weights_.data().fill(1.f);
+    bias_.data().fill(0.f);
+  }
+
+  if (trackRunningStats_) {
+    runningMean_.data().fill(0.f);
+    runningVar_.data().fill(1.f);
+    numBatchesTracked_ = 0;
+  }
+}
+
+void BatchNorm2D::zeroGrad() {
+  if (affine_) {
+    weights_.zeroGrad();
     bias_.zeroGrad();
   }
 }

@@ -62,6 +62,11 @@ Tensor Tensor::randn(const Shape &shape, bool requiresGrad) {
   return Tensor(std::move(ret), requiresGrad);
 }
 
+Tensor Tensor::arange(float start, float stop, float step, bool requiresGrad) {
+  auto ret = TensorImpl::arange(start, stop, step);
+  return Tensor(std::move(ret), requiresGrad);
+}
+
 Tensor Tensor::linspace(float start, float end, int steps, bool requiresGrad) {
   auto ret = TensorImpl::linspace(start, end, steps);
   return Tensor(std::move(ret), requiresGrad);

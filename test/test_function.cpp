@@ -361,3 +361,30 @@ TEST(TEST_Function, func_conv2d_03) {
               ElementsAre(54, 63, 90, 99, 54, 63, 90, 99));
   EXPECT_THAT(bias.getGrad().data().toArray(), ElementsAre(9));
 }
+
+TEST(TEST_Function, func_batchNorm_2d) {
+  auto input = Tensor::arange(1.f, 24.5f, 1.f);
+  input = input.reshape({2, 3, 2, 2});
+  input.setRequiresGrad(true);
+  auto runningMean = Tensor::zeros({3});
+  auto runningVar = Tensor::ones({3});
+  auto weight = Tensor::ones({3}, true);
+  auto bias = Tensor::zeros({3}, true);
+  auto output = Function::batchNorm(input, runningMean, runningVar, weight,
+                                    bias, true, 0.2);
+  EXPECT_THAT(output.shape(), ElementsAre(2, 3, 2, 2));
+  EXPECT_FLOAT_VEC_NEAR(
+      output.data().toArray(),
+      {-1.2288, -1.0650, -0.9012, -0.7373, -1.2288, -1.0650, -0.9012, -0.7373,
+       -1.2288, -1.0650, -0.9012, -0.7373, 0.7373,  0.9012,  1.0650,  1.2288,
+       0.7373,  0.9012,  1.0650,  1.2288,  0.7373,  0.9012,  1.0650,  1.2288});
+
+  EXPECT_FLOAT_VEC_NEAR(runningMean.data().toArray(), {1.7000, 2.5000, 3.3000});
+  EXPECT_FLOAT_VEC_NEAR(runningVar.data().toArray(), {9.3143, 9.3143, 9.3143});
+
+  output.backward(Tensor::onesLike(output));
+  EXPECT_FLOAT_VEC_NEAR(input.getGrad().data().toArray(),
+                        TensorImpl::zeros({input.size()}).toArray());
+  EXPECT_FLOAT_VEC_NEAR(weight.getGrad().data().toArray(), {0., 0., 0.});
+  EXPECT_FLOAT_VEC_NEAR(bias.getGrad().data().toArray(), {8., 8., 8.});
+}
