@@ -38,6 +38,7 @@ std::unordered_map<FunctionType, std::string> Function::funcTypeToString_ = {
     FUNC_ENUM_TO_STRING(Function_LogSoftmax),
     FUNC_ENUM_TO_STRING(Function_MaxPool2D),
     FUNC_ENUM_TO_STRING(Function_Conv2D),
+    FUNC_ENUM_TO_STRING(Function_BatchNorm),
     FUNC_ENUM_TO_STRING(Function_MSELoss),
     FUNC_ENUM_TO_STRING(Function_NLLLoss),
 };
@@ -129,6 +130,15 @@ Tensor Function::maxPool2d(const Tensor& input, Size2D kernelSize,
 Tensor Function::conv2d(const Tensor& input, const Tensor& weight,
                         const Tensor& bias, Size2D stride, Size2D padding) {
   return std::make_shared<FuncConv2D>(stride, padding)
+      ->callForward({&input, &weight, &bias});
+}
+
+Tensor Function::batchNorm(const Tensor& input, Tensor& runningMean,
+                           Tensor& runningVar, const Tensor& weight,
+                           const Tensor& bias, bool training, float momentum,
+                           float eps) {
+  return std::make_shared<FuncBatchNorm>(runningMean, runningVar, momentum, eps,
+                                         training)
       ->callForward({&input, &weight, &bias});
 }
 
@@ -591,6 +601,103 @@ std::vector<TensorImpl> FuncConv2D::backward(const TensorImpl& grad) {
   if (!savedTensors[2].empty() && savedTensors[2].isRequiresGrad()) {
     auto db = TensorImpl::sum(gradW, 0);
     ret.push_back(db);
+  }
+  return ret;
+}
+
+TensorImpl FuncBatchNorm::forward(const std::vector<const Tensor*>& inputs) {
+  auto& input = inputs[0]->data();
+  auto& weight = inputs[1]->data();
+  auto& bias = inputs[2]->data();
+
+  auto& shape = input.shape();
+  assert(shape.size() == 3 || shape.size() == 4);
+
+  if (shape.size() == 3) {
+    dims_ = {0, 2};
+    viewShape_ = {1, shape[1], 1};
+  } else {
+    dims_ = {0, 2, 3};
+    viewShape_ = {1, shape[1], 1, 1};
+  }
+
+  Tensor mean;
+  Tensor var;
+  if (training_) {
+    mean.data() = input.mean(dims_, true);
+    var.data() = input.var(dims_, false, true);
+    auto varUnbiased = input.var(dims_, true, true);
+
+    if (!runningMean_.empty() && !runningVar_.empty()) {
+      runningMean_.data() *= 1.f - momentum_;
+      runningMean_.data() += TensorImpl::squeeze(mean.data()) * momentum_;
+      runningVar_.data() *= 1.f - momentum_;
+      runningVar_.data() += TensorImpl::squeeze(varUnbiased) * momentum_;
+    }
+  } else {
+    if (!runningMean_.empty() && !runningVar_.empty()) {
+      mean = runningMean_;
+      var = runningVar_;
+    } else {
+      mean.data() = input.mean(dims_, true);
+      var.data() = input.var(dims_, true, true);
+    }
+  }
+
+  auto inputCentered = Tensor(input - mean.data());
+  auto std = Tensor((var.data() + eps_).sqrt());
+  auto inputNorm = Tensor(inputCentered / std);
+
+  saveForBackward(inputs);
+  saveForBackward({&inputNorm, &inputCentered, &std});
+
+  if (!weight.empty()) {
+    inputNorm.data() = inputNorm.data() * weight.view(viewShape_);
+  }
+  if (!bias.empty()) {
+    inputNorm.data() = inputNorm.data() + bias.view(viewShape_);
+  }
+  return inputNorm.data();
+}
+
+std::vector<TensorImpl> FuncBatchNorm::backward(const TensorImpl& grad) {
+  const auto& savedTensors = getSavedTensors();
+  auto& input = savedTensors[0].data();
+  auto& weight = savedTensors[1].data();
+  // auto& bias = savedTensors[2].data();
+  auto& inputNorm = savedTensors[3].data();
+  auto& inputCentered = savedTensors[4].data();
+  auto& std = savedTensors[5].data();
+
+  std::vector<TensorImpl> ret;
+  // grad of input
+  if (savedTensors[0].isRequiresGrad()) {
+    auto dInputNorm = grad;
+    if (!weight.empty()) {
+      dInputNorm = dInputNorm * weight.view(viewShape_);
+    }
+    int32_t N = 1;
+    for (int dim : dims_) {
+      N *= input.shape()[dim];
+    }
+    auto dVar =
+        (dInputNorm * inputCentered * -0.5f * std.pow(-3.f)).sum(dims_, true);
+    auto dMean = (dInputNorm * -1.f / std).sum(dims_, true) +
+                 dVar * (inputCentered * -2.f / (float)N).sum(dims_, true);
+    auto dInput = dInputNorm / std + dVar * 2.f * inputCentered / (float)N +
+                  dMean / (float)N;
+    ret.push_back(dInput);
+  }
+  // grad of weight
+  if (savedTensors[1].isRequiresGrad()) {
+    auto dWeight = (grad * inputNorm).sum(dims_);
+    ret.push_back(dWeight);
+  }
+
+  // grad of bias
+  if (savedTensors[2].isRequiresGrad()) {
+    auto dBias = grad.sum(dims_);
+    ret.push_back(dBias);
   }
   return ret;
 }

@@ -14,6 +14,7 @@ class Module {
  public:
   virtual ~Module() = default;
   virtual std::vector<Tensor *> parameters();
+  virtual std::vector<Tensor *> states();
   virtual void resetParameters();
   virtual void zeroGrad();
 
@@ -75,6 +76,7 @@ class Sequential : public Module {
 
   Tensor forward(Tensor &input) override;
   std::vector<Tensor *> parameters() override;
+  std::vector<Tensor *> states() override;
   void resetParameters() override;
   void zeroGrad() override;
 
@@ -100,11 +102,12 @@ class Linear : public Module {
 
   Tensor forward(Tensor &input) override;
   std::vector<Tensor *> parameters() override;
+  std::vector<Tensor *> states() override;
   void resetParameters() override;
   void zeroGrad() override;
 
-  Tensor &Weights() { return weights_; }
-  Tensor &Bias() { return bias_; }
+  Tensor &weights() { return weights_; }
+  Tensor &bias() { return bias_; }
 
  private:
   int32_t inFeatures_;
@@ -185,11 +188,12 @@ class Conv2D : public Module {
 
   Tensor forward(Tensor &input) override;
   std::vector<Tensor *> parameters() override;
+  std::vector<Tensor *> states() override;
   void resetParameters() override;
   void zeroGrad() override;
 
-  Tensor &Weights() { return weights_; }
-  Tensor &Bias() { return bias_; }
+  Tensor &weights() { return weights_; }
+  Tensor &bias() { return bias_; }
 
  private:
   int32_t inFeatures_;
@@ -198,8 +202,42 @@ class Conv2D : public Module {
   Size2D stride_;
   Size2D padding_;
   bool useBias_;
+
   Tensor weights_;
   Tensor bias_;
+};
+
+class BatchNorm2D : public Module {
+ public:
+  explicit BatchNorm2D(int32_t numFeatures, float eps = 1e-5,
+                       float momentum = 0.1f, bool affine = true,
+                       bool trackRunningStats = true);
+
+  Tensor forward(Tensor &input) override;
+  std::vector<Tensor *> parameters() override;
+  std::vector<Tensor *> states() override;
+  void resetParameters() override;
+  void zeroGrad() override;
+
+  Tensor &weights() { return weights_; }
+  Tensor &bias() { return bias_; }
+
+  Tensor &runningMean() { return runningMean_; }
+  Tensor &runningVar() { return runningVar_; }
+
+ private:
+  int32_t numFeatures_;
+  float eps_;
+  float momentum_;
+  bool affine_;
+  bool trackRunningStats_;
+
+  Tensor weights_;
+  Tensor bias_;
+
+  Tensor runningMean_;
+  Tensor runningVar_;
+  int32_t numBatchesTracked_;
 };
 
 }  // namespace TinyTorch::nn

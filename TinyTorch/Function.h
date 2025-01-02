@@ -35,6 +35,7 @@ enum FunctionType {
   Function_LogSoftmax,
   Function_MaxPool2D,
   Function_Conv2D,
+  Function_BatchNorm,
   Function_MSELoss,
   Function_NLLLoss,
 };
@@ -70,7 +71,8 @@ class Function : public std::enable_shared_from_this<Function> {
   static Tensor linear(const Tensor& input, const Tensor& weight,
                        const Tensor& bias);
 
-  static Tensor dropout(const Tensor& input, float p, bool training = true);
+  static Tensor dropout(const Tensor& input, float p = 0.5f,
+                        bool training = true);
 
   static Tensor softmax(const Tensor& input, int32_t dim);
 
@@ -83,6 +85,11 @@ class Function : public std::enable_shared_from_this<Function> {
   static Tensor conv2d(const Tensor& input, const Tensor& weight,
                        const Tensor& bias = {}, Size2D stride = 1,
                        Size2D padding = 0);
+
+  static Tensor batchNorm(const Tensor& input, Tensor& runningMean,
+                          Tensor& runningVar, const Tensor& weight,
+                          const Tensor& bias, bool training = false,
+                          float momentum = 0.1f, float eps = 1e-5);
 
   static Tensor nllloss(const Tensor& input, const Tensor& target,
                         LossReduction reduction = MEAN);
@@ -110,14 +117,13 @@ class Function : public std::enable_shared_from_this<Function> {
     if (!NoGradScope::isGradEnabled()) {
       return;
     }
-    savedTensors_.reserve(tensors.size());
+    savedTensors_.reserve(savedTensors_.size() + tensors.size());
     for (const auto& t : tensors) {
       savedTensors_.push_back(*t);
     }
   }
   std::vector<Tensor>& getSavedTensors() { return savedTensors_; };
 
- protected:
   std::weak_ptr<AutogradMeta> owner_;
   std::vector<Tensor> savedTensors_;
   std::vector<std::shared_ptr<Function>> nextFuncs_;
@@ -284,6 +290,28 @@ class FuncConv2D : public Function {
   Size2D stride_;
   Size2D padding_;
   TensorImpl col_;
+};
+
+class FuncBatchNorm : public Function {
+ public:
+  explicit FuncBatchNorm(Tensor& runningMean, Tensor& runningVar,
+                         float momentum, float eps, bool training)
+      : runningMean_(runningMean),
+        runningVar_(runningVar),
+        momentum_(momentum),
+        eps_(eps),
+        training_(training) {}
+  DEFINE_FUNCTION_MEMBERS(Function_BatchNorm)
+
+ private:
+  Tensor& runningMean_;
+  Tensor& runningVar_;
+  std::vector<int32_t> dims_;
+  std::vector<int32_t> viewShape_;
+
+  float momentum_;
+  float eps_;
+  bool training_;
 };
 
 class FuncMSELoss : public Function {

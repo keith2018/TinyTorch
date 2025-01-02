@@ -33,6 +33,8 @@ class Tensor {
   static Tensor onesLike(const Tensor &t, bool requiresGrad = false);
   static Tensor zeros(const Shape &shape, bool requiresGrad = false);
   static Tensor randn(const Shape &shape, bool requiresGrad = false);
+  static Tensor arange(float start, float stop, float steps,
+                       bool requiresGrad = false);
   static Tensor linspace(float start, float end, int steps,
                          bool requiresGrad = false);
 

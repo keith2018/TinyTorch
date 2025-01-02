@@ -111,20 +111,26 @@ std::default_random_engine RandomGenerator::randomEngine_;
   }                                                                            \
   return ret
 
-#define TENSOR_UFUNC_FAST_LOOP(scalarRet, func)                                \
+#define TENSOR_UFUNC_REDUCE_ALL(scalarRet, func)                               \
   if (t.isScalar()) {                                                          \
     return scalarRet;                                                          \
   }                                                                            \
-  func functor;                                                                \
-  functor.reset();                                                             \
-  for (int32_t i = 0; i < t.elemCount_; i++) {                                 \
-    functor.op(t.data_[i]);                                                    \
-  }                                                                            \
-  return functor.result()
+  auto functor = std::make_shared<func>();                                     \
+  return t.reduceAll(functor)
 
-#define TENSOR_UFUNC_REDUCE(func)                                              \
-  func functor;                                                                \
-  return t.reduce(functor, axis.get(t.dimCount_), keepDims)
+#define TENSOR_UFUNC_REDUCE_SINGLE(scalarRet, func, axis)                      \
+  if (t.isScalar()) {                                                          \
+    return scalar(scalarRet);                                                  \
+  }                                                                            \
+  auto functor = std::make_shared<func>();                                     \
+  return t.reduceSingle(functor, axis, keepDims)
+
+#define TENSOR_UFUNC_REDUCE_MULTI(scalarRet, func, axes)                       \
+  if (t.isScalar()) {                                                          \
+    return scalar(scalarRet);                                                  \
+  }                                                                            \
+  auto functor = std::make_shared<func>();                                     \
+  return t.reduceMulti(functor, axes, keepDims)
 
 // clang-format on
 
@@ -716,14 +722,14 @@ TensorImpl TensorImpl::col2im(const Shape &inputShape, Size2D kernelSize,
   return retTensor;
 }
 
-TensorImpl TensorImpl::transpose(const std::vector<int32_t> &axis) const {
+TensorImpl TensorImpl::transpose(const std::vector<int32_t> &axes) const {
   TENSOR_CHECK_EMPTY(*this, {});
   if (dim() <= 1) {
     return *this;
   }
 
   TensorIter it(shape());
-  if (axis.empty()) {
+  if (axes.empty()) {
     // If not specified, defaults to range(a.ndim)[::-1], which reverses the
     // order of the axes.
     std::vector<int32_t> reverseTrans;
@@ -732,11 +738,11 @@ TensorImpl TensorImpl::transpose(const std::vector<int32_t> &axis) const {
       reverseTrans[i] = dim() - i - 1;
     }
     it.transpose(reverseTrans);
-  } else if (axis.size() != dim()) {
+  } else if (axes.size() != dim()) {
     error(__FUNCTION__, TensorError_InvalidAxis);
     return {};
   } else {
-    it.transpose(axis);
+    it.transpose(axes);
   }
 
   TensorImpl ret = shape(it.shape());
@@ -1448,96 +1454,121 @@ TensorImpl TensorImpl::matmulTrans(const TensorImpl &a, const TensorImpl &b) {
 
 float TensorImpl::min(const TensorImpl &t) {
   TENSOR_CHECK_EMPTY(t, 0);
-  TENSOR_UFUNC_FAST_LOOP(t[0], UFuncMin);
+  TENSOR_UFUNC_REDUCE_ALL(t[0], UFuncSingleMin);
 }
 
 float TensorImpl::max(const TensorImpl &t) {
   TENSOR_CHECK_EMPTY(t, 0);
-  TENSOR_UFUNC_FAST_LOOP(t[0], UFuncMax);
+  TENSOR_UFUNC_REDUCE_ALL(t[0], UFuncSingleMax);
 }
 
 float TensorImpl::mean(const TensorImpl &t) {
   TENSOR_CHECK_EMPTY(t, 0);
-  TENSOR_UFUNC_FAST_LOOP(t[0], UFuncMean);
+  TENSOR_UFUNC_REDUCE_ALL(t[0], UFuncSingleMean);
 }
 
 float TensorImpl::sum(const TensorImpl &t) {
   TENSOR_CHECK_EMPTY(t, 0);
-  TENSOR_UFUNC_FAST_LOOP(t[0], UFuncSum);
+  TENSOR_UFUNC_REDUCE_ALL(t[0], UFuncSingleSum);
 }
 
-float TensorImpl::var(const TensorImpl &t) {
+float TensorImpl::var(const TensorImpl &t, bool unbiased) {
   TENSOR_CHECK_EMPTY(t, 0);
-  TENSOR_UFUNC_FAST_LOOP(0, UFuncVar);
+  if (unbiased) {
+    TENSOR_UFUNC_REDUCE_ALL(0, UFuncSingleVarUnbiased);
+  }
+  TENSOR_UFUNC_REDUCE_ALL(0, UFuncSingleVar);
 }
 
 float TensorImpl::argmin(const TensorImpl &t) {
   TENSOR_CHECK_EMPTY(t, 0);
-  TENSOR_UFUNC_FAST_LOOP(0, UFuncArgMin);
+  TENSOR_UFUNC_REDUCE_ALL(0, UFuncSingleArgMin);
 }
 
 float TensorImpl::argmax(const TensorImpl &t) {
   TENSOR_CHECK_EMPTY(t, 0);
-  TENSOR_UFUNC_FAST_LOOP(0, UFuncArgMax);
+  TENSOR_UFUNC_REDUCE_ALL(0, UFuncSingleArgMax);
 }
 
 TensorImpl TensorImpl::min(const TensorImpl &t, const Axis &axis,
                            bool keepDims) {
   TENSOR_CHECK_EMPTY(t, {});
-  TENSOR_UFUNC_REDUCE(UFuncMin);
+  TENSOR_UFUNC_REDUCE_SINGLE(t[0], UFuncSingleMin, axis.get(t.dimCount_));
 }
 
 TensorImpl TensorImpl::max(const TensorImpl &t, const Axis &axis,
                            bool keepDims) {
   TENSOR_CHECK_EMPTY(t, {});
-  TENSOR_UFUNC_REDUCE(UFuncMax);
+  TENSOR_UFUNC_REDUCE_SINGLE(t[0], UFuncSingleMax, axis.get(t.dimCount_));
 }
 
 TensorImpl TensorImpl::mean(const TensorImpl &t, const Axis &axis,
                             bool keepDims) {
   TENSOR_CHECK_EMPTY(t, {});
-  TENSOR_UFUNC_REDUCE(UFuncMean);
+  TENSOR_UFUNC_REDUCE_SINGLE(t[0], UFuncSingleMean, axis.get(t.dimCount_));
 }
 
 TensorImpl TensorImpl::sum(const TensorImpl &t, const Axis &axis,
                            bool keepDims) {
   TENSOR_CHECK_EMPTY(t, {});
-  TENSOR_UFUNC_REDUCE(UFuncSum);
+  TENSOR_UFUNC_REDUCE_SINGLE(t[0], UFuncSingleSum, axis.get(t.dimCount_));
 }
 
-TensorImpl TensorImpl::var(const TensorImpl &t, const Axis &axis,
+TensorImpl TensorImpl::var(const TensorImpl &t, const Axis &axis, bool unbiased,
                            bool keepDims) {
   TENSOR_CHECK_EMPTY(t, {});
-  TENSOR_UFUNC_REDUCE(UFuncVar);
+  if (unbiased) {
+    TENSOR_UFUNC_REDUCE_SINGLE(0, UFuncSingleVarUnbiased,
+                               axis.get(t.dimCount_));
+  }
+  TENSOR_UFUNC_REDUCE_SINGLE(0, UFuncSingleVar, axis.get(t.dimCount_));
 }
 
 TensorImpl TensorImpl::argmin(const TensorImpl &t, const Axis &axis,
                               bool keepDims) {
   TENSOR_CHECK_EMPTY(t, {});
-  TENSOR_UFUNC_REDUCE(UFuncArgMin);
+  TENSOR_UFUNC_REDUCE_SINGLE(0, UFuncSingleArgMin, axis.get(t.dimCount_));
 }
 
 TensorImpl TensorImpl::argmax(const TensorImpl &t, const Axis &axis,
                               bool keepDims) {
   TENSOR_CHECK_EMPTY(t, {});
-  TENSOR_UFUNC_REDUCE(UFuncArgMax);
+  TENSOR_UFUNC_REDUCE_SINGLE(0, UFuncSingleArgMax, axis.get(t.dimCount_));
 }
 
-void TensorImpl::traverse(UFunc &func, int32_t start, int32_t stride,
-                          int32_t cnt) const {
+TensorImpl TensorImpl::mean(const TensorImpl &t,
+                            const std::vector<int32_t> &axes, bool keepDims) {
+  TENSOR_CHECK_EMPTY(t, {});
+  TENSOR_UFUNC_REDUCE_MULTI(t[0], UFuncMultiMean, axes);
+}
+
+TensorImpl TensorImpl::sum(const TensorImpl &t,
+                           const std::vector<int32_t> &axes, bool keepDims) {
+  TENSOR_CHECK_EMPTY(t, {});
+  TENSOR_UFUNC_REDUCE_MULTI(t[0], UFuncMultiSum, axes);
+}
+
+TensorImpl TensorImpl::var(const TensorImpl &t,
+                           const std::vector<int32_t> &axes, bool unbiased,
+                           bool keepDims) {
+  TENSOR_CHECK_EMPTY(t, {});
+  if (unbiased) {
+    TENSOR_UFUNC_REDUCE_MULTI(0, UFuncMultiVarUnbiased, axes);
+  }
+  TENSOR_UFUNC_REDUCE_MULTI(0, UFuncMultiVar, axes);
+}
+
+void TensorImpl::traverse(const std::shared_ptr<UFuncSingle> &func,
+                          int32_t start, int32_t stride, int32_t cnt) const {
   int32_t idx = start;
   for (int32_t n = 0; n < cnt; n++) {
-    func.op(data_[idx]);
+    func->op(data_[idx]);
     idx += stride;
   }
 }
 
-TensorImpl TensorImpl::reduce(UFunc &func, int32_t axis, bool keepDims) const {
-  // check scalar
-  if (isScalar()) {
-    return scalar(data_[0]);
-  }
-
+TensorImpl TensorImpl::reduceSingle(const std::shared_ptr<UFuncSingle> &func,
+                                    int32_t axis, bool keepDims) const {
   // check axis
   if (axis >= dimCount_) {
     error(__FUNCTION__, TensorError_InvalidAxis);
@@ -1571,14 +1602,30 @@ TensorImpl TensorImpl::reduce(UFunc &func, int32_t axis, bool keepDims) const {
   for (int32_t i = 0; i < groupCount; i++) {
     axisStart = i * groupStride;
     for (int32_t j = 0; j < axisStride; j++) {
-      func.reset();
+      func->reset();
       traverse(func, axisStart, axisStride, axisLength);
-      ret[retIdx++] = func.result();
+      ret[retIdx++] = func->result();
       axisStart++;
     }
   }
 
   return ret;
+}
+
+TensorImpl TensorImpl::reduceMulti(const std::shared_ptr<UFuncMulti> &func,
+                                   const std::vector<int32_t> &axes,
+                                   bool keepDims) const {
+  ReduceHelper helper(*this);
+  helper.initAxisReduce(axes, keepDims);
+  return func->doReduce(helper);
+}
+
+float TensorImpl::reduceAll(const std::shared_ptr<UFuncSingle> &func) const {
+  func->reset();
+  for (int32_t i = 0; i < elemCount_; i++) {
+    func->op(data_[i]);
+  }
+  return func->result();
 }
 
 void TensorImpl::splitAxis(std::vector<TensorImpl> &retTensors,
@@ -1804,14 +1851,14 @@ void TensorIter::broadcast(const Shape &shape) {
   reset();
 }
 
-void TensorIter::transpose(const std::vector<int32_t> &axis) {
+void TensorIter::transpose(const std::vector<int32_t> &axes) {
   // assume axis size equal to dimension count
-  assert(axis.size() == ndM1_ + 1);
+  assert(axes.size() == ndM1_ + 1);
 
   // reorder dimsM1_, strides_, backStrides_
-  reorder(dimsM1_, axis);
-  reorder(strides_, axis);
-  reorder(backStrides_, axis);
+  reorder(dimsM1_, axes);
+  reorder(strides_, axes);
+  reorder(backStrides_, axes);
 }
 
 }  // namespace TinyTorch

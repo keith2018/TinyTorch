@@ -25,7 +25,7 @@ constexpr float PI = 3.1415926535f;
 
 void manualSeed(unsigned int seed);
 
-void print(const Tensor& tensor);
+void print(const Tensor& tensor, bool full = false);
 
 void save(const Tensor& tensor, std::ofstream& ofs);
 

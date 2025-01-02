@@ -11,6 +11,7 @@ Tiny deep learning training framework implemented from scratch in C++ that follo
 - Module
   - Linear
   - Conv2D
+  - BatchNorm2D
   - MaxPool2D
   - Dropout
   - Softmax

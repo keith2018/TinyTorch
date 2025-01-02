@@ -13,10 +13,10 @@ namespace TinyTorch {
 void manualSeed(unsigned int seed) { RandomGenerator::setSeed(seed); }
 
 template <typename T>
-static std::string printArray(const T* vec, int32_t size, bool restrict) {
+static std::string printArray(const T* vec, int32_t size, bool full) {
   std::ostringstream oss;
   oss << "(";
-  if (!restrict || size <= 16) {
+  if (full || size <= 16) {
     for (size_t i = 0; i < size; ++i) {
       oss << vec[i];
       if (i != size - 1) {
@@ -42,7 +42,7 @@ static std::string printArray(const T* vec, int32_t size, bool restrict) {
   return oss.str();
 }
 
-void print(const Tensor& tensor) {
+void print(const Tensor& tensor, bool full) {
   std::ostringstream oss;
   oss << "Tensor { shape: "
       << printArray(&tensor.shape()[0], tensor.dim(), false);
@@ -50,7 +50,7 @@ void print(const Tensor& tensor) {
   if (tensor.isRequiresGrad()) {
     oss << ", gradFunc: " << tensor.getGradFunc()->typeString();
   }
-  oss << ", data: " << printArray(&tensor.data()[0], tensor.size(), true);
+  oss << ", data: " << printArray(&tensor.data()[0], tensor.size(), full);
   LOGD("%s", oss.str().c_str());
 }
 
@@ -65,11 +65,15 @@ void save(const Tensor& tensor, std::ofstream& ofs) {
   ofs.write((const char*)(&elemCount), sizeof(elemCount));
 
   // shape, strides, data
-  ofs.write((const char*)(t.shape().data()),
-            std::streamsize(dimCount * sizeof(int32_t)));
-  ofs.write((const char*)(t.strides().data()),
-            std::streamsize(dimCount * sizeof(int32_t)));
-  ofs.write((const char*)(&t[0]), std::streamsize(elemCount * sizeof(float)));
+  if (dimCount > 0) {
+    ofs.write((const char*)(t.shape().data()),
+              std::streamsize(dimCount * sizeof(int32_t)));
+    ofs.write((const char*)(t.strides().data()),
+              std::streamsize(dimCount * sizeof(int32_t)));
+  }
+  if (elemCount > 0) {
+    ofs.write((const char*)(&t[0]), std::streamsize(elemCount * sizeof(float)));
+  }
 }
 
 void load(Tensor& tensor, std::ifstream& ifs) {
@@ -93,11 +97,15 @@ void load(Tensor& tensor, std::ifstream& ifs) {
   }
 
   // shape, strides, data
-  ifs.read((char*)(t.shape().data()),
-           std::streamsize(dimCount * sizeof(int32_t)));
-  ifs.read((char*)(t.strides().data()),
-           std::streamsize(dimCount * sizeof(int32_t)));
-  ifs.read((char*)(&t[0]), std::streamsize(elemCount * sizeof(float)));
+  if (dimCount > 0) {
+    ifs.read((char*)(t.shape().data()),
+             std::streamsize(dimCount * sizeof(int32_t)));
+    ifs.read((char*)(t.strides().data()),
+             std::streamsize(dimCount * sizeof(int32_t)));
+  }
+  if (elemCount > 0) {
+    ifs.read((char*)(&t[0]), std::streamsize(elemCount * sizeof(float)));
+  }
 }
 
 void save(nn::Module& model, const char* path) {
@@ -107,7 +115,7 @@ void save(nn::Module& model, const char* path) {
     return;
   }
 
-  auto params = model.parameters();
+  auto params = model.states();
   for (auto& param : params) {
     save(*param, outFile);
   }
@@ -120,7 +128,7 @@ void load(nn::Module& model, const char* path) {
     return;
   }
 
-  auto params = model.parameters();
+  auto params = model.states();
   for (auto& param : params) {
     load(*param, inFile);
   }

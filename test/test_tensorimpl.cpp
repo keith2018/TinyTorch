@@ -565,6 +565,14 @@ TEST(TEST_TensorImpl, math_meam) {
   y = TensorImpl::mean(x, 1);
   EXPECT_THAT(y.shape(), ElementsAre(2));
   EXPECT_THAT(y.toArray(), ElementsAre(2, 5));
+
+  y = TensorImpl::mean(x, {0, 1}, true);
+  EXPECT_THAT(y.shape(), ElementsAre(1, 1));
+  EXPECT_THAT(y.toArray(), ElementsAre(3.5));
+
+  y = TensorImpl::mean(x, {0, 1}, false);
+  EXPECT_TRUE(y.isScalar());
+  EXPECT_THAT(y.toArray(), ElementsAre(3.5));
 }
 
 TEST(TEST_TensorImpl, math_sum) {
@@ -579,6 +587,10 @@ TEST(TEST_TensorImpl, math_sum) {
   y = TensorImpl::sum(x, 1);
   EXPECT_THAT(y.shape(), ElementsAre(2));
   EXPECT_THAT(y.toArray(), ElementsAre(6, 15));
+
+  y = TensorImpl::sum(x, {0, 1}, true);
+  EXPECT_THAT(y.shape(), ElementsAre(1, 1));
+  EXPECT_THAT(y.toArray(), ElementsAre(21));
 
   x = TensorImpl({{{4, 2, 3}, {1, 0, 3}}, {{4, 2, 3}, {1, 0, 3}}});
   EXPECT_TRUE(TensorImpl::sum(x) == 26);
@@ -596,22 +608,59 @@ TEST(TEST_TensorImpl, math_sum) {
   EXPECT_THAT(y.toArray(), ElementsAre(8, 4, 6, 2, 0, 6));
 }
 
-TEST(TEST_TensorImpl, math_var) {
+TEST(TEST_TensorImpl, math_var_01) {
   TensorImpl x({{1, 2, 3}, {4, 5, 6}});
 
-  EXPECT_FLOAT_NEAR(TensorImpl::var(x), 2.9166666);
+  EXPECT_FLOAT_NEAR(TensorImpl::var(x, false), 2.9166666);
+  EXPECT_FLOAT_NEAR(TensorImpl::var(x), 3.5);
 
-  auto y = TensorImpl::var(x, 0);
-  EXPECT_THAT(y.shape(), ElementsAre(3));
-  EXPECT_THAT(y.toArray(), ElementsAre(2.25, 2.25, 2.25));
+  auto y = TensorImpl::var(x, Axis(0), true, true);
+  EXPECT_THAT(y.shape(), ElementsAre(1, 3));
+  EXPECT_THAT(y.toArray(), ElementsAre(4.5, 4.5, 4.5));
 
-  y = TensorImpl::var(x, 1);
-  EXPECT_THAT(y.shape(), ElementsAre(2));
-  EXPECT_FLOAT_NEAR(y[0], 0.666667);
-  EXPECT_FLOAT_NEAR(y[1], 0.666667);
+  y = TensorImpl::var(x, Axis(1), true, true);
+  EXPECT_THAT(y.shape(), ElementsAre(2, 1));
+  EXPECT_FLOAT_NEAR(y[0], 1.0);
+  EXPECT_FLOAT_NEAR(y[1], 1.0);
+
+  y = TensorImpl::var(x, {0, 1}, true, true);
+  EXPECT_THAT(y.shape(), ElementsAre(1, 1));
+  EXPECT_EQ(y.item(), 3.5);
 }
 
-TEST(TEST_TensorImpl, math_argmin) {
+TEST(TEST_TensorImpl, math_var_02) {
+  TensorImpl x({3.14, 7.89, 1.23, 4.56, 9.01, 2.34, 5.67, 8.90,
+                0.12, 6.78, 3.45, 7.12, 1.56, 4.89, 9.34, 2.67,
+                5.89, 8.23, 0.45, 6.12, 3.78, 7.45, 1.89, 4.23,
+                9.56, 2.12, 5.34, 8.67, 0.78, 6.45, 3.12, 7.78});
+  x = x.reshape({2, 2, 2, 4});
+
+  auto y = TensorImpl::var(x, Axis(0), true, true);
+  EXPECT_THAT(y.shape(), ElementsAre(1, 2, 2, 4));
+  EXPECT_FLOAT_VEC_NEAR(
+      y.toArray(),
+      {3.7812, 0.0578, 0.3042, 1.2168, 13.6765, 13.0560, 7.1442, 10.9044,
+       44.5568, 10.8578, 1.7861, 1.2013, 0.3042, 1.2168, 19.3442, 13.0561});
+
+  y = TensorImpl::var(x, Axis(1), true, true);
+  EXPECT_THAT(y.shape(), ElementsAre(2, 1, 2, 4));
+  EXPECT_FLOAT_VEC_NEAR(
+      y.toArray(),
+      {4.5602, 0.6160, 2.4642, 3.2768, 27.7513, 3.2512, 6.7345, 19.4064, 6.7345,
+       18.6660, 11.9561, 3.2513, 4.5000, 0.5000, 0.7564, 6.3013});
+
+  y = TensorImpl::var(x, {0, 1}, true, true);
+  EXPECT_THAT(y.shape(), ElementsAre(1, 1, 2, 4));
+  EXPECT_FLOAT_VEC_NEAR(y.toArray(), {16.1479, 7.9826, 4.9094, 2.9820, 13.7604,
+                                      4.9578, 10.8303, 8.5854});
+
+  y = TensorImpl::var(x, {1, 2}, true, true);
+  EXPECT_THAT(y.shape(), ElementsAre(2, 1, 1, 4));
+  EXPECT_FLOAT_VEC_NEAR(y.toArray(), {15.2235, 5.9019, 11.9586, 7.5621, 13.6275,
+                                      7.4389, 4.2882, 3.8282});
+}
+
+TEST(TEST_TensorImpl, math_argmin_01) {
   TensorImpl x({{4, 2, 3}, {1, 0, 3}});
 
   EXPECT_TRUE(TensorImpl::argmin(x) == 4);
@@ -623,6 +672,18 @@ TEST(TEST_TensorImpl, math_argmin) {
   y = TensorImpl::argmin(x, -1, true);
   EXPECT_THAT(y.shape(), ElementsAre(2, 1));
   EXPECT_THAT(y.toArray(), ElementsAre(1, 1));
+}
+
+TEST(TEST_TensorImpl, math_argmin_02) {
+  TensorImpl x({3.14, 7.89, 1.23, 4.56, 9.01, 2.34, 5.67, 8.90,
+                0.12, 6.78, 3.45, 7.12, 1.56, 4.89, 9.34, 2.67,
+                5.89, 8.23, 0.45, 6.12, 3.78, 7.45, 1.89, 4.23,
+                9.56, 2.12, 5.34, 8.67, 0.78, 6.45, 3.12, 7.78});
+  x = x.reshape({2, 2, 2, 4});
+  auto y = TensorImpl::argmin(x, Axis(2), true);
+  EXPECT_THAT(y.shape(), ElementsAre(2, 2, 1, 4));
+  EXPECT_THAT(y.toArray(),
+              ElementsAre(0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1, 1, 0, 1, 1));
 }
 
 TEST(TEST_TensorImpl, math_argmax) {
