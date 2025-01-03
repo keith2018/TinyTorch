@@ -1,6 +1,6 @@
 # TinyTorch
 
-Tiny deep learning training framework implemented from scratch in C++ that follows PyTorch's API.
+Tiny deep learning training framework implemented from scratch in C++ that follows PyTorch's API. For more details, see [Write a nn training framework from scratch](https://robot9.me/write-nn-framework-from-scratch-tinytorch/)
 
 [![CMake Linux](https://github.com/keith2018/TinyTorch/actions/workflows/cmake_linux.yml/badge.svg)](https://github.com/keith2018/TinyTorch/actions/workflows/cmake_linux.yml)
 [![CMake MacOS](https://github.com/keith2018/TinyTorch/actions/workflows/cmake_macos.yml/badge.svg)](https://github.com/keith2018/TinyTorch/actions/workflows/cmake_macos.yml)
