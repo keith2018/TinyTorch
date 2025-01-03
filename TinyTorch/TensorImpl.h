@@ -415,8 +415,11 @@ class TensorImpl {
   static TensorImpl dot(const TensorImpl &a, const float &b);
   static TensorImpl dot(const float &a, const TensorImpl &b);
   static TensorImpl dot(const TensorImpl &a, const TensorImpl &b);
+  static TensorImpl dotTrans(const TensorImpl &a, const TensorImpl &b,
+                             bool transA, bool transB);
   static TensorImpl matmul(const TensorImpl &a, const TensorImpl &b);
-  static TensorImpl matmulTrans(const TensorImpl &a, const TensorImpl &b);
+  static TensorImpl matmulTrans(const TensorImpl &a, const TensorImpl &b,
+                                bool transA, bool transB);
 
   // aggregation
 

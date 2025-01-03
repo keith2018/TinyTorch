@@ -826,13 +826,13 @@ TEST(TEST_TensorImpl, math_matmul) {
 TEST(TEST_TensorImpl, math_matmulTrans) {
   Array2d d1 = {{1, 2}, {3, 4}};
   Array2d d2 = {{2, 3}, {4, 5}};
-  auto y = TensorImpl::matmulTrans(TensorImpl(d1), TensorImpl(d2));
+  auto y = TensorImpl::matmulTrans(TensorImpl(d1), TensorImpl(d2), false, true);
   EXPECT_THAT(y.shape(), ElementsAre(2, 2));
   EXPECT_THAT(y.toArray(), ElementsAre(8, 14, 18, 32));
 
   Array2d d3 = {{1, 2, 3}, {4, 5, 6}};
   Array2d d4 = {{2, 4, 6}, {3, 5, 7}};
-  y = TensorImpl::matmulTrans(TensorImpl(d3), TensorImpl(d4));
+  y = TensorImpl::matmulTrans(TensorImpl(d3), TensorImpl(d4), false, true);
   EXPECT_THAT(y.shape(), ElementsAre(2, 2));
   EXPECT_THAT(y.toArray(), ElementsAre(28, 34, 64, 79));
 }

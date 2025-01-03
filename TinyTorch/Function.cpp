@@ -412,7 +412,8 @@ std::vector<TensorImpl> FuncReshape::backward(const TensorImpl& grad) {
 
 TensorImpl FuncLinear::forward(const std::vector<const Tensor*>& inputs) {
   saveForBackward(inputs);
-  auto output = TensorImpl::matmulTrans(inputs[0]->data(), inputs[1]->data());
+  auto output = TensorImpl::matmulTrans(inputs[0]->data(), inputs[1]->data(),
+                                        false, true);
   if (!inputs[2]->empty()) {
     // output += bias.unsqueeze(0).expand_as(output)
     output = output + inputs[2]->data();
@@ -427,7 +428,8 @@ std::vector<TensorImpl> FuncLinear::backward(const TensorImpl& grad) {
     ret.push_back(TensorImpl::matmul(grad, savedTensors[1].data()));
   }
   if (savedTensors[1].isRequiresGrad()) {
-    ret.push_back(TensorImpl::matmul(grad.transpose(), savedTensors[0].data()));
+    ret.push_back(
+        TensorImpl::matmulTrans(grad, savedTensors[0].data(), true, false));
   }
   if (!savedTensors[2].empty() && savedTensors[2].isRequiresGrad()) {
     ret.push_back(TensorImpl::sum(grad, 0));
@@ -565,8 +567,8 @@ TensorImpl FuncConv2D::forward(const std::vector<const Tensor*>& inputs) {
   auto outW = (width - kernelSize.w + 2 * padding_.w) / stride_.w + 1;
 
   col_ = input.im2col(kernelSize, stride_, padding_);
-  auto colW = weight.reshape({outChannels, -1}).transpose();
-  auto ret = TensorImpl::dot(col_, colW);
+  auto colW = weight.reshape({outChannels, -1});
+  auto ret = TensorImpl::dotTrans(col_, colW, false, true);
   if (!bias.empty()) {
     assert(bias.dim() == 1);
     assert(bias.shape()[0] == outChannels);
@@ -594,7 +596,7 @@ std::vector<TensorImpl> FuncConv2D::backward(const TensorImpl& grad) {
     ret.push_back(dx);
   }
   if (savedTensors[1].isRequiresGrad()) {
-    auto gradColW = TensorImpl::dot(col_.transpose(), gradW);
+    auto gradColW = TensorImpl::dotTrans(col_, gradW, true, false);
     auto dw = gradColW.transpose().reshape(weight.shape());
     ret.push_back(dw);
   }

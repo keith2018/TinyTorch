@@ -646,35 +646,35 @@ TensorImpl TensorImpl::im2col(Size2D kernelSize, Size2D stride,
 
   int32_t colH = outH * outW;
   int32_t colW = channels * kernelSize.h * kernelSize.w;
-  auto retTensor =
-      shape({batch, channels, kernelSize.h, kernelSize.w, outH, outW});
+  auto retTensor = shape({batch * colH, colW});
 
   int32_t imStride = strides_[0];
-  int32_t colStride = colH * colW;
   for (int32_t n = 0; n < batch; n++) {
-    for (int32_t c = 0; c < colW; ++c) {
-      int32_t wOffset = c % kernelSize.w;
-      int32_t hOffset = (c / kernelSize.h) % kernelSize.h;
-      int32_t imC = c / (kernelSize.h * kernelSize.w);
-      for (int32_t h = 0; h < outH; ++h) {
-        for (int32_t w = 0; w < outW; ++w) {
-          int32_t imRow = hOffset + h * stride.h;
-          int32_t imCol = wOffset + w * stride.w;
-          imRow -= padding.h;
-          imCol -= padding.w;
-          int32_t colIdx = (c * outH + h) * outW + w;
-          int32_t imgIdx = imCol + width * (imRow + height * imC);
-          if (imRow < 0 || imRow >= height || imCol < 0 || imCol >= width) {
-            retTensor[n * colStride + colIdx] = 0;  // zero padding
-          } else {
-            retTensor[n * colStride + colIdx] = data_[n * imStride + imgIdx];
+    for (int32_t h = 0; h < outH; ++h) {
+      for (int32_t w = 0; w < outW; ++w) {
+        int32_t colIdx = (n * outH + h) * outW + w;
+        for (int32_t c = 0; c < channels; ++c) {
+          for (int32_t kh = 0; kh < kernelSize.h; ++kh) {
+            for (int32_t kw = 0; kw < kernelSize.w; ++kw) {
+              int32_t imRow = h * stride.h + kh - padding.h;
+              int32_t imCol = w * stride.w + kw - padding.w;
+              int32_t imC = c;
+              int32_t colWIdx =
+                  c * kernelSize.h * kernelSize.w + kh * kernelSize.w + kw;
+              if (imRow < 0 || imRow >= height || imCol < 0 || imCol >= width) {
+                retTensor[colIdx * colW + colWIdx] = 0;  // zero padding
+              } else {
+                int32_t imgIdx = imCol + width * (imRow + height * imC);
+                retTensor[colIdx * colW + colWIdx] =
+                    data_[n * imStride + imgIdx];
+              }
+            }
           }
         }
       }
     }
   }
-  return retTensor.transpose({0, 4, 5, 1, 2, 3})
-      .reshape({batch * outH * outW, -1});
+  return retTensor;
 }
 
 TensorImpl TensorImpl::col2im(const Shape &inputShape, Size2D kernelSize,
@@ -692,28 +692,27 @@ TensorImpl TensorImpl::col2im(const Shape &inputShape, Size2D kernelSize,
   int32_t colH = outH * outW;
   int32_t colW = channels * kernelSize.h * kernelSize.w;
 
-  auto col = reshape({batch, outH, outW, channels, kernelSize.h, kernelSize.w});
-  col = col.transpose({0, 3, 4, 5, 1, 2});
   TensorImpl retTensor = zeros(inputShape);
 
   auto imStride = retTensor.strides_[0];
-  auto colStride = colH * colW;
   for (int32_t n = 0; n < batch; n++) {
-    for (int32_t c = 0; c < colW; ++c) {
-      int32_t wOffset = c % kernelSize.w;
-      int32_t hOffset = (c / kernelSize.h) % kernelSize.h;
-      int32_t imC = c / (kernelSize.h * kernelSize.w);
-      for (int32_t h = 0; h < outH; ++h) {
-        for (int32_t w = 0; w < outW; ++w) {
-          int32_t imRow = hOffset + h * stride.h;
-          int32_t imCol = wOffset + w * stride.w;
-          imRow -= padding.h;
-          imCol -= padding.w;
-          int32_t colIdx = (c * outH + h) * outW + w;
-          int32_t imgIdx = imCol + width * (imRow + height * imC);
-          if (imRow >= 0 && imRow < height && imCol >= 0 && imCol < width) {
-            retTensor[n * imStride + imgIdx] +=
-                col.data_[n * colStride + colIdx];
+    for (int32_t h = 0; h < outH; ++h) {
+      for (int32_t w = 0; w < outW; ++w) {
+        int32_t colIdx = (n * outH + h) * outW + w;
+        for (int32_t c = 0; c < channels; ++c) {
+          for (int32_t kh = 0; kh < kernelSize.h; ++kh) {
+            for (int32_t kw = 0; kw < kernelSize.w; ++kw) {
+              int32_t imRow = h * stride.h + kh - padding.h;
+              int32_t imCol = w * stride.w + kw - padding.w;
+              int32_t imC = c;
+              int32_t colWIdx =
+                  c * kernelSize.h * kernelSize.w + kh * kernelSize.w + kw;
+              if (imRow >= 0 && imRow < height && imCol >= 0 && imCol < width) {
+                int32_t imgIdx = imCol + width * (imRow + height * imC);
+                retTensor[n * imStride + imgIdx] +=
+                    data_[colIdx * colW + colWIdx];
+              }
+            }
           }
         }
       }
@@ -1342,6 +1341,27 @@ TensorImpl TensorImpl::dot(const TensorImpl &a, const TensorImpl &b) {
   return {};
 }
 
+TensorImpl TensorImpl::dotTrans(const TensorImpl &a, const TensorImpl &b,
+                                bool transA, bool transB) {
+  // fast path
+  if (a.dim() == 2 && b.dim() == 2) {
+    // a[m, k], b[k, n] -> [m, n]
+    int32_t m = a.shape()[transA ? 1 : 0];
+    int32_t k = a.shape()[transA ? 0 : 1];
+    int32_t n = b.shape()[transB ? 0 : 1];
+    if (k != b.shape()[transB ? 1 : 0]) {
+      error(__FUNCTION__, TensorError_ShapeNotAligned);
+      return {};
+    }
+    TensorImpl ret = shape({m, n});
+    Blas::gemm(&ret[0], &a[0], &b[0], (int)m, (int)k, (int)n, transA, transB);
+    return ret;
+  }
+
+  // slow path
+  return dot(transA ? a.transpose() : a, transB ? b.transpose() : b);
+}
+
 TensorImpl TensorImpl::matmul(const TensorImpl &a, const TensorImpl &b) {
   TENSOR_CHECK_EMPTY_PAIR(a, b, {});
 
@@ -1432,24 +1452,25 @@ TensorImpl TensorImpl::matmul(const TensorImpl &a, const TensorImpl &b) {
   return retTensor;
 }
 
-TensorImpl TensorImpl::matmulTrans(const TensorImpl &a, const TensorImpl &b) {
+TensorImpl TensorImpl::matmulTrans(const TensorImpl &a, const TensorImpl &b,
+                                   bool transA, bool transB) {
   // fast path
   if (a.dim() == 2 && b.dim() == 2) {
-    // a[m, k], b[n, k] -> [k, n]
-    int32_t m = a.shape()[0];
-    int32_t k = a.shape()[1];
-    int32_t n = b.shape()[0];
-    if (k != b.shape()[1]) {
+    // a[m, k], b[k, n] -> [m, n]
+    int32_t m = a.shape()[transA ? 1 : 0];
+    int32_t k = a.shape()[transA ? 0 : 1];
+    int32_t n = b.shape()[transB ? 0 : 1];
+    if (k != b.shape()[transB ? 1 : 0]) {
       error(__FUNCTION__, TensorError_ShapeNotAligned);
       return {};
     }
-    TensorImpl retTensor = shape({m, n});
-    Blas::gemmTrans(&retTensor[0], &a[0], &b[0], (int)m, (int)k, (int)n);
-    return retTensor;
+    TensorImpl ret = shape({m, n});
+    Blas::gemm(&ret[0], &a[0], &b[0], (int)m, (int)k, (int)n, transA, transB);
+    return ret;
   }
 
   // slow path
-  return matmul(a, b.transpose());
+  return matmul(transA ? a.transpose() : a, transB ? b.transpose() : b);
 }
 
 float TensorImpl::min(const TensorImpl &t) {
