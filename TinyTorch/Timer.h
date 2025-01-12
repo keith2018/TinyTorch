@@ -16,7 +16,7 @@ namespace TinyTorch {
 class Timer {
  public:
   void start();
-  void stop();
+  void mark();
   int64_t elapseMillis() const;
 
  private:
@@ -29,7 +29,7 @@ class ScopedTimer {
   explicit ScopedTimer(const char *str) : tag_(str) { timer_.start(); }
 
   ~ScopedTimer() {
-    timer_.stop();
+    timer_.mark();
     LOGD("TIMER %s: cost: %lld ms", tag_.c_str(), timer_.elapseMillis());
   }
 

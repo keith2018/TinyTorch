@@ -46,6 +46,6 @@ void demo_optim() {
   LOGD("Result: y = %f + %f x + %f x^2 + %f x^3", biasData[0], weightData[0],
        weightData[1], weightData[2]);
 
-  timer.stop();
+  timer.mark();
   LOGD("Time cost: %lld ms", timer.elapseMillis());
 }

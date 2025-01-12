@@ -49,6 +49,6 @@ void demo_autograd() {
   LOGD("Result: y = %f + %f x + %f x^2 + %f x^3", a.item(), b.item(), c.item(),
        d.item());
 
-  timer.stop();
+  timer.mark();
   LOGD("Time cost: %lld ms", timer.elapseMillis());
 }

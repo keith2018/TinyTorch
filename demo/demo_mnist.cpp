@@ -41,6 +41,8 @@ class Net : public nn::Module {
 void train(nn::Module &model, data::DataLoader &dataLoader,
            optim::Optimizer &optimizer, int32_t epoch) {
   model.train();
+  Timer timer;
+  timer.start();
   for (auto [batchIdx, batch] : dataLoader) {
     auto &data = batch[0];
     auto &target = batch[1];
@@ -52,13 +54,25 @@ void train(nn::Module &model, data::DataLoader &dataLoader,
 
     auto currDataCnt = batchIdx * dataLoader.batchSize() + data.shape()[0];
     auto totalDataCnt = dataLoader.dataset().size();
-    LOGD("Train Epoch: %d [%d/%d %.2f%%], loss: %.6f", epoch, currDataCnt,
-         totalDataCnt, 100.f * currDataCnt / (float)totalDataCnt, loss.item());
+
+    timer.mark();
+    auto elapsed = (float)timer.elapseMillis() / 1000.f;  // seconds
+    auto progress = (float)currDataCnt / (float)totalDataCnt;
+    auto eta = elapsed / progress - elapsed;
+
+    LOGD(
+        "Train Epoch: %d, Iter [%d/%d %.2f%%], Loss: %.6f, Elapsed: %.2fs, "
+        "ETA: "
+        "%.2fs",
+        epoch + 1, currDataCnt, totalDataCnt,
+        100.f * currDataCnt / (float)totalDataCnt, loss.item(), elapsed, eta);
   }
 }
 
 void test(nn::Module &model, data::DataLoader &dataLoader) {
   model.eval();
+  Timer timer;
+  timer.start();
   auto total = 0;
   auto correct = 0;
   withNoGrad {
@@ -72,9 +86,17 @@ void test(nn::Module &model, data::DataLoader &dataLoader) {
 
       auto currDataCnt = batchIdx * dataLoader.batchSize() + data.shape()[0];
       auto totalDataCnt = dataLoader.dataset().size();
-      LOGD("Test [%d/%d %.2f%%], Accuracy: [%d/%d (%.2f%%)]", currDataCnt,
-           totalDataCnt, 100.f * currDataCnt / (float)totalDataCnt, correct,
-           total, 100. * correct / (float)total);
+
+      timer.mark();
+      auto elapsed = (float)timer.elapseMillis() / 1000.f;  // seconds
+      auto progress = (float)currDataCnt / (float)totalDataCnt;
+      auto eta = elapsed / progress - elapsed;
+
+      LOGD(
+          "Test [%d/%d %.2f%%], Accuracy: [%d/%d (%.2f%%)], Elapsed: %.2fs, "
+          "ETA: %.2fs",
+          currDataCnt, totalDataCnt, 100.f * currDataCnt / (float)totalDataCnt,
+          correct, total, 100. * correct / (float)total, elapsed, eta);
     }
   }
 }
@@ -125,6 +147,6 @@ void demo_mnist() {
     save(model, saveName.str().c_str());
   }
 
-  timer.stop();
+  timer.mark();
   LOGD("Time cost: %lld ms", timer.elapseMillis());
 }

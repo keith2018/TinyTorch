@@ -10,7 +10,7 @@ namespace TinyTorch {
 
 void Timer::start() { start_ = std::chrono::steady_clock::now(); }
 
-void Timer::stop() { end_ = std::chrono::steady_clock::now(); }
+void Timer::mark() { end_ = std::chrono::steady_clock::now(); }
 
 int64_t Timer::elapseMillis() const {
   auto duration =
