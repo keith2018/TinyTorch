@@ -117,6 +117,10 @@ class Tensor {
 
   const TensorImpl &data() const { return *data_; }
 
+  static void setAllocator(Allocator *allocator) {
+    TensorImpl::setAllocator(allocator);
+  }
+
  private:
   void initAutograd(bool requiresGrad,
                     const std::shared_ptr<Function> &gradFunc = nullptr);

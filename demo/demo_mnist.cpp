@@ -108,6 +108,9 @@ void demo_mnist() {
 
   manualSeed(0);
 
+  auto allocator = std::make_shared<CachedAllocator>();
+  Tensor::setAllocator(allocator.get());
+
   // config
   auto lr = 1.f;
   auto epochs = 2;

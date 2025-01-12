@@ -17,6 +17,9 @@ namespace TinyTorch {
 std::optional<unsigned int> RandomGenerator::seed_;
 std::default_random_engine RandomGenerator::randomEngine_;
 
+static Allocator defaultAllocator = Allocator();
+Allocator *TensorImpl::allocator_ = &defaultAllocator;
+
 // clang-format off
 #define TENSOR_CHECK_EMPTY(t, ret)                                             \
   do {                                                                         \
@@ -148,7 +151,7 @@ TensorImpl TensorImpl::scalar(const float &value) {
   ret.elemCount_ = 1;
   ret.shape_.clear();
   ret.strides_.clear();
-  ret.data_ = new float[1];
+  ret.data_ = (float *)allocator_->malloc(sizeof(float));
   ret.data_[0] = value;
   return ret;
 }
@@ -254,9 +257,23 @@ void TensorImpl::initMeta() {
 }
 
 void TensorImpl::initData(const float *from) {
-  data_ = new float[elemCount_];
+  data_ = (float *)allocator_->malloc(sizeof(float) * elemCount_);
   if (from) {
     memcpy(data_, from, elemCount_ * sizeof(float));
+  }
+}
+
+void TensorImpl::dispose() {
+  if (empty()) {
+    return;
+  }
+  dimCount_ = 0;
+  elemCount_ = 0;
+  shape_.clear();
+  strides_.clear();
+  if (data_ != nullptr) {
+    allocator_->free(data_);
+    data_ = nullptr;
   }
 }
 
@@ -689,7 +706,7 @@ TensorImpl TensorImpl::col2im(const Shape &inputShape, Size2D kernelSize,
   auto outH = (height - kernelSize.h + 2 * padding.h) / stride.h + 1;
   auto outW = (width - kernelSize.w + 2 * padding.w) / stride.w + 1;
 
-  int32_t colH = outH * outW;
+  // int32_t colH = outH * outW;
   int32_t colW = channels * kernelSize.h * kernelSize.w;
 
   TensorImpl retTensor = zeros(inputShape);

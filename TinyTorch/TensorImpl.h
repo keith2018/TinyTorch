@@ -44,6 +44,15 @@ typedef std::vector<float> Array1d;
 typedef std::vector<std::vector<float>> Array2d;
 typedef std::vector<std::vector<std::vector<float>>> Array3d;
 
+class Allocator {
+ public:
+  virtual ~Allocator() = default;
+
+  virtual void *malloc(size_t size) { return std::malloc(size); }
+  virtual void free(void *ptr) { std::free(ptr); }
+  virtual void clear() {}
+};
+
 class RandomGenerator {
  public:
   static void setSeed(const unsigned int seed) {
@@ -130,16 +139,9 @@ class TensorImpl {
     data_ = other.data_;
   }
 
-  void dispose() {
-    dimCount_ = 0;
-    elemCount_ = 0;
-    shape_.clear();
-    strides_.clear();
-    delete[] data_;
-    data_ = nullptr;
-  }
-
   ~TensorImpl() { dispose(); }
+
+  static void setAllocator(Allocator *allocator) { allocator_ = allocator; }
 
   static TensorImpl shape(const Shape &shape);
 
@@ -530,6 +532,7 @@ class TensorImpl {
  protected:
   void initMeta();
   void initData(const float *from = nullptr);
+  void dispose();
 
   void traverse(const std::shared_ptr<UFuncSingle> &func, int32_t start,
                 int32_t stride, int32_t cnt) const;
@@ -563,6 +566,8 @@ class TensorImpl {
   Shape shape_;
   Shape strides_;
   float *data_ = nullptr;
+
+  static Allocator *allocator_;
 };
 
 template <typename T>

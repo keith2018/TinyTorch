@@ -8,6 +8,7 @@
 
 #include <fstream>
 
+#include "Allocator.h"
 #include "Data.h"
 #include "Function.h"
 #include "Logger.h"
