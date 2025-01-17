@@ -558,6 +558,7 @@ class TensorImpl {
 
  private:
   static float fastTanh(float x);
+  static bool isLeadingOnes(const Shape &shape);
   void indexIntegerSet(const std::vector<int32_t> &idx, const float *valPtr);
 
  protected:

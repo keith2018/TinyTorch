@@ -415,8 +415,7 @@ TensorImpl FuncLinear::forward(const std::vector<const Tensor*>& inputs) {
   auto output = TensorImpl::matmulTrans(inputs[0]->data(), inputs[1]->data(),
                                         false, true);
   if (!inputs[2]->empty()) {
-    // output += bias.unsqueeze(0).expand_as(output)
-    output = output + inputs[2]->data();
+    output += inputs[2]->data();
   }
   return output;
 }
@@ -572,7 +571,7 @@ TensorImpl FuncConv2D::forward(const std::vector<const Tensor*>& inputs) {
   if (!bias.empty()) {
     assert(bias.dim() == 1);
     assert(bias.shape()[0] == outChannels);
-    ret = ret + bias;
+    ret += bias;
   }
   return ret.reshape({batch, outChannels, outH, outW});
 }
@@ -654,10 +653,10 @@ TensorImpl FuncBatchNorm::forward(const std::vector<const Tensor*>& inputs) {
   saveForBackward({&inputNorm, &inputCentered, &std});
 
   if (!weight.empty()) {
-    inputNorm.data() = inputNorm.data() * weight.view(viewShape_);
+    inputNorm.data() *= weight.view(viewShape_);
   }
   if (!bias.empty()) {
-    inputNorm.data() = inputNorm.data() + bias.view(viewShape_);
+    inputNorm.data() += bias.view(viewShape_);
   }
   return inputNorm.data();
 }
@@ -676,7 +675,7 @@ std::vector<TensorImpl> FuncBatchNorm::backward(const TensorImpl& grad) {
   if (savedTensors[0].isRequiresGrad()) {
     auto dInputNorm = grad;
     if (!weight.empty()) {
-      dInputNorm = dInputNorm * weight.view(viewShape_);
+      dInputNorm *= weight.view(viewShape_);
     }
     int32_t N = 1;
     for (int dim : dims_) {

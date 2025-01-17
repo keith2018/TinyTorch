@@ -67,20 +67,42 @@ Allocator *TensorImpl::allocator_ = &defaultAllocator;
     }                                                                          \
   } while (0)
 
-#define TENSOR_MATH_BROADCAST_PAIR(op)                                         \
+#define TENSOR_MATH_BROADCAST_SELF(op)                                         \
   if (other.isScalar()) {                                                      \
-    return *this op other[0];                                                  \
+    *this op## = other[0];                                                     \
+    return;                                                                    \
   }                                                                            \
   Shape retShape;                                                              \
   auto comp = checkCompatible(shape(), other.shape(), retShape);               \
   if (comp == ShapeCompatible_Error) {                                         \
     error(__FUNCTION__, TensorError_ShapeNotAligned);                          \
-    return {};                                                                 \
+    return;                                                                    \
   }                                                                            \
   if (comp == ShapeCompatible_SameShape) {                                     \
-    TENSOR_MATH_FAST_LOOP_PAIR(*this, op## =, other[idx]);                     \
+    TENSOR_MATH_FAST_LOOP_SELF(op## =, other[idx]);                            \
+    return;                                                                    \
   }                                                                            \
   TensorImpl ret = shape(retShape);                                            \
+  if (elemCount_ == ret.elemCount_ && isLeadingOnes(other.shape())) {          \
+    int32_t n = ret.elemCount_ / other.elemCount_;                             \
+    for (int32_t idx = 0; idx < n; idx++) {                                    \
+      for (int32_t i = 0; i < other.elemCount_; i++) {                         \
+        data_[i + idx * other.elemCount_] op## = other.data_[i];               \
+      }                                                                        \
+    }                                                                          \
+    return;                                                                    \
+  }                                                                            \
+  if (other.elemCount_ == ret.elemCount_ && isLeadingOnes(shape())) {          \
+    int32_t n = ret.elemCount_ / elemCount_;                                   \
+    memcpy(ret.data_, other.data_, ret.elemCount_ * sizeof(float));            \
+    for (int32_t idx = 0; idx < n; idx++) {                                    \
+      for (int32_t i = 0; i < elemCount_; i++) {                               \
+        ret.data_[i + idx * elemCount_] op## = data_[i];                       \
+      }                                                                        \
+    }                                                                          \
+    *this = std::move(ret);                                                    \
+    return;                                                                    \
+  }                                                                            \
   TensorIter it0(shape());                                                     \
   TensorIter it1(other.shape());                                               \
                                                                                \
@@ -90,7 +112,7 @@ Allocator *TensorImpl::allocator_ = &defaultAllocator;
   for (int32_t idx = 0; idx < ret.elemCount_; idx++) {                         \
     ret[idx] = (*this)[it0.next()] op other[it1.next()];                       \
   }                                                                            \
-  return ret
+  *this = std::move(ret);
 
 #define TENSOR_MATH_BROADCAST_PAIR_FUNC(op)                                    \
   Shape retShape;                                                              \
@@ -1155,46 +1177,50 @@ TensorImpl TensorImpl::minimum(const TensorImpl &a, const TensorImpl &b) {
 
 TensorImpl TensorImpl::operator+(const TensorImpl &other) const {
   TENSOR_CHECK_EMPTY_PAIR(*this, other, {});
-  TENSOR_MATH_BROADCAST_PAIR(+);
+  auto ret = *this;
+  ret += other;
+  return ret;
 }
 
 TensorImpl TensorImpl::operator-(const TensorImpl &other) const {
   TENSOR_CHECK_EMPTY_PAIR(*this, other, {});
-  TENSOR_MATH_BROADCAST_PAIR(-);
+  auto ret = *this;
+  ret -= other;
+  return ret;
 }
 
 TensorImpl TensorImpl::operator*(const TensorImpl &other) const {
   TENSOR_CHECK_EMPTY_PAIR(*this, other, {});
-  TENSOR_MATH_BROADCAST_PAIR(*);
+  auto ret = *this;
+  ret *= other;
+  return ret;
 }
 
 TensorImpl TensorImpl::operator/(const TensorImpl &other) const {
   TENSOR_CHECK_EMPTY_PAIR(*this, other, {});
-  TENSOR_MATH_BROADCAST_PAIR(/);
+  auto ret = *this;
+  ret /= other;
+  return ret;
 }
 
 void TensorImpl::operator+=(const TensorImpl &other) {
   TENSOR_CHECK_EMPTY_PAIR(*this, other, );
-  TENSOR_CHECK_SHAPE_EQUAL(shape_, other.shape_);
-  TENSOR_MATH_FAST_LOOP_SELF(+=, other[idx]);
+  TENSOR_MATH_BROADCAST_SELF(+)
 }
 
 void TensorImpl::operator-=(const TensorImpl &other) {
   TENSOR_CHECK_EMPTY_PAIR(*this, other, );
-  TENSOR_CHECK_SHAPE_EQUAL(shape_, other.shape_);
-  TENSOR_MATH_FAST_LOOP_SELF(-=, other[idx]);
+  TENSOR_MATH_BROADCAST_SELF(-)
 }
 
 void TensorImpl::operator*=(const TensorImpl &other) {
   TENSOR_CHECK_EMPTY_PAIR(*this, other, );
-  TENSOR_CHECK_SHAPE_EQUAL(shape_, other.shape_);
-  TENSOR_MATH_FAST_LOOP_SELF(*=, other[idx]);
+  TENSOR_MATH_BROADCAST_SELF(*)
 }
 
 void TensorImpl::operator/=(const TensorImpl &other) {
   TENSOR_CHECK_EMPTY_PAIR(*this, other, );
-  TENSOR_CHECK_SHAPE_EQUAL(shape_, other.shape_);
-  TENSOR_MATH_FAST_LOOP_SELF(/=, other[idx]);
+  TENSOR_MATH_BROADCAST_SELF(/)
 }
 
 TensorImpl TensorImpl::operator+(const float &other) const {
@@ -1796,6 +1822,20 @@ float TensorImpl::fastTanh(float x) {
   float a = x * (135135.0f + x2 * (17325.0f + x2 * (378.0f + x2)));
   float b = 135135.0f + x2 * (62370.0f + x2 * (3150.0f + x2 * 28.0f));
   return a / b;
+}
+
+bool TensorImpl::isLeadingOnes(const Shape &shape) {
+  int32_t notOneIdx = -1;
+  for (int32_t i = 0; i < shape.size(); i++) {
+    if (shape[i] != 1) {
+      notOneIdx = i;
+    } else {
+      if (notOneIdx != -1) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 TensorIter::TensorIter(const Shape &shape) { reshape(shape); }
