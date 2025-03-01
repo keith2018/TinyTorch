@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "Tensor.h"
+#include "TensorImpl/TensorImpl_cpu.h"
 
 namespace TinyTorch::data {
 
@@ -128,7 +129,7 @@ class DataLoader {
     std::iota(indices_.begin(), indices_.end(), 0);
     if (shuffle_) {
       std::shuffle(indices_.begin(), indices_.end(),
-                   RandomGenerator::getGenerator());
+                   RandomGeneratorCPU::getGenerator());
     }
   }
 

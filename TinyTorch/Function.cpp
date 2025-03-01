@@ -24,7 +24,9 @@ std::unordered_map<FunctionType, std::string> Function::funcTypeToString_ = {
     FUNC_ENUM_TO_STRING(Function_Mul),
     FUNC_ENUM_TO_STRING(Function_Div),
     FUNC_ENUM_TO_STRING(Function_Sin),
+    FUNC_ENUM_TO_STRING(Function_Cos),
     FUNC_ENUM_TO_STRING(Function_Pow),
+    FUNC_ENUM_TO_STRING(Function_PowScalar),
     FUNC_ENUM_TO_STRING(Function_Sum),
     FUNC_ENUM_TO_STRING(Function_Relu),
     FUNC_ENUM_TO_STRING(Function_Flatten),
@@ -63,9 +65,12 @@ Tensor Function::sin(const Tensor& a) {
   return std::make_shared<FuncSin>()->callForward({&a});
 }
 
+Tensor Function::cos(const Tensor& a) {
+  return std::make_shared<FuncCos>()->callForward({&a});
+}
+
 Tensor Function::pow(const Tensor& a, const float& b) {
-  auto tb = Tensor::scalar(b);
-  return std::make_shared<FuncPow>()->callForward({&a, &tb});
+  return std::make_shared<FuncPowScalar>(b)->callForward({&a});
 }
 
 Tensor Function::pow(const Tensor& a, const Tensor& b) {
@@ -196,7 +201,7 @@ std::vector<TensorImpl> FuncLeaf::backward(const TensorImpl& grad) {
   }
   // for broadcast
   if (owner->grad_.data_->shape() != grad.shape()) {
-    retGrad = TensorImpl::sum(grad, 0, !owner->grad_.data_->isScalar());
+    retGrad = TensorImpl::sum(grad, 0, owner->grad_.data_->dim() != 0);
   }
 
   assert(retGrad.shape() == owner->grad_.data_->shape());
@@ -287,6 +292,20 @@ std::vector<TensorImpl> FuncSin::backward(const TensorImpl& grad) {
   return ret;
 }
 
+TensorImpl FuncCos::forward(const std::vector<const Tensor*>& inputs) {
+  saveForBackward(inputs);
+  return TensorImpl::cos(inputs[0]->data());
+}
+
+std::vector<TensorImpl> FuncCos::backward(const TensorImpl& grad) {
+  const auto& savedTensors = getSavedTensors();
+  std::vector<TensorImpl> ret;
+  if (savedTensors[0].isRequiresGrad()) {
+    ret.push_back(-1.f * TensorImpl::sin(savedTensors[0].data()) * grad);
+  }
+  return ret;
+}
+
 TensorImpl FuncPow::forward(const std::vector<const Tensor*>& inputs) {
   saveForBackward(inputs);
   return TensorImpl::pow(inputs[0]->data(), inputs[1]->data());
@@ -307,16 +326,32 @@ std::vector<TensorImpl> FuncPow::backward(const TensorImpl& grad) {
   return ret;
 }
 
+TensorImpl FuncPowScalar::forward(const std::vector<const Tensor*>& inputs) {
+  saveForBackward(inputs);
+  return TensorImpl::pow(inputs[0]->data(), exp_);
+}
+
+std::vector<TensorImpl> FuncPowScalar::backward(const TensorImpl& grad) {
+  const auto& savedTensors = getSavedTensors();
+  std::vector<TensorImpl> ret;
+  if (savedTensors[0].isRequiresGrad()) {
+    ret.push_back(exp_ * TensorImpl::pow(savedTensors[0].data(), exp_ - 1.f) *
+                  grad);
+  }
+  return ret;
+}
+
 TensorImpl FuncSum::forward(const std::vector<const Tensor*>& inputs) {
   saveForBackward(inputs);
-  return TensorImpl::scalar(TensorImpl::sum(inputs[0]->data()));
+  return TensorImpl::sum(inputs[0]->data());
 }
 
 std::vector<TensorImpl> FuncSum::backward(const TensorImpl& grad) {
   const auto& savedTensors = getSavedTensors();
   std::vector<TensorImpl> ret;
-  if (savedTensors[0].isRequiresGrad()) {
-    ret.push_back(grad * TensorImpl::onesLike(savedTensors[0].data()));
+  auto& input = savedTensors[0];
+  if (input.isRequiresGrad()) {
+    ret.push_back(grad * TensorImpl::onesLike(input.data(), input.device()));
   }
   return ret;
 }
@@ -344,7 +379,7 @@ std::vector<TensorImpl> FuncFlatten::backward(const TensorImpl& grad) {
   const auto& savedTensors = getSavedTensors();
   std::vector<TensorImpl> ret;
   if (savedTensors[0].isRequiresGrad()) {
-    assert(grad.size() == savedTensors[0].size());
+    assert(grad.numel() == savedTensors[0].numel());
     ret.push_back(grad.reshape(savedTensors[0].shape()));
   }
   return ret;
@@ -359,7 +394,7 @@ std::vector<TensorImpl> FuncUnFlatten::backward(const TensorImpl& grad) {
   const auto& savedTensors = getSavedTensors();
   std::vector<TensorImpl> ret;
   if (savedTensors[0].isRequiresGrad()) {
-    assert(grad.size() == savedTensors[0].size());
+    assert(grad.numel() == savedTensors[0].numel());
     ret.push_back(grad.reshape(savedTensors[0].shape()));
   }
   return ret;
@@ -374,7 +409,7 @@ std::vector<TensorImpl> FuncSqueeze::backward(const TensorImpl& grad) {
   const auto& savedTensors = getSavedTensors();
   std::vector<TensorImpl> ret;
   if (savedTensors[0].isRequiresGrad()) {
-    assert(grad.size() == savedTensors[0].size());
+    assert(grad.numel() == savedTensors[0].numel());
     ret.push_back(grad.reshape(savedTensors[0].shape()));
   }
   return ret;
@@ -389,7 +424,7 @@ std::vector<TensorImpl> FuncUnsqueeze::backward(const TensorImpl& grad) {
   const auto& savedTensors = getSavedTensors();
   std::vector<TensorImpl> ret;
   if (savedTensors[0].isRequiresGrad()) {
-    assert(grad.size() == savedTensors[0].size());
+    assert(grad.numel() == savedTensors[0].numel());
     ret.push_back(grad.reshape(savedTensors[0].shape()));
   }
   return ret;
@@ -404,7 +439,7 @@ std::vector<TensorImpl> FuncReshape::backward(const TensorImpl& grad) {
   const auto& savedTensors = getSavedTensors();
   std::vector<TensorImpl> ret;
   if (savedTensors[0].isRequiresGrad()) {
-    assert(grad.size() == savedTensors[0].size());
+    assert(grad.numel() == savedTensors[0].numel());
     ret.push_back(grad.reshape(savedTensors[0].shape()));
   }
   return ret;
@@ -439,7 +474,8 @@ std::vector<TensorImpl> FuncLinear::backward(const TensorImpl& grad) {
 TensorImpl FuncDropout::forward(const std::vector<const Tensor*>& inputs) {
   saveForBackward(inputs);
   if (training_) {
-    mask_ = TensorImpl::bernoulli(inputs[0]->shape(), 1.f - p_);
+    mask_ = TensorImpl::bernoulli(inputs[0]->shape(), 1.f - p_,
+                                  inputs[0]->device());
     return mask_ * inputs[0]->data() / (1.f - p_);
   } else {
     return inputs[0]->data();
@@ -513,9 +549,9 @@ TensorImpl FuncMaxPool2D::forward(const std::vector<const Tensor*>& inputs) {
 
   maxIndices_ = TensorImpl::argmax(col, 1);
   // auto ret = TensorImpl::max(col, 1);
-  auto ret = col.indexAdvance(
-      {TensorImpl::arange(0, (float)col.shape()[0]).toArray<int32_t>(),
-       maxIndices_.toArray<int32_t>()});
+  auto ret = col.index(
+      {TensorImpl::arange(0, (float)col.shape()[0], 1.f, col.device()),
+       maxIndices_});
   return ret.reshape({batch, channels, outH, outW});
 }
 
@@ -533,11 +569,11 @@ std::vector<TensorImpl> FuncMaxPool2D::backward(const TensorImpl& grad) {
 
   std::vector<TensorImpl> ret;
   if (savedTensors[0].isRequiresGrad()) {
-    auto gradCol =
-        TensorImpl::zeros({grad.size(), kernelSize_.h * kernelSize_.w});
-    gradCol.indexAdvanceSet(
-        {TensorImpl::arange(0, (float)grad.size()).toArray<int32_t>(),
-         maxIndices_.toArray<int32_t>()},
+    auto gradCol = TensorImpl::zeros(
+        {grad.numel(), kernelSize_.h * kernelSize_.w}, grad.device());
+    gradCol.indexPut_(
+        {TensorImpl::arange(0, (float)grad.numel(), 1.f, grad.device()),
+         maxIndices_},
         grad);
     gradCol.reshape(
         {batch * outH * outW, channels * kernelSize_.h * kernelSize_.w});
@@ -567,7 +603,7 @@ TensorImpl FuncConv2D::forward(const std::vector<const Tensor*>& inputs) {
 
   col_ = input.im2col(kernelSize, stride_, padding_);
   auto colW = weight.reshape({outChannels, -1});
-  auto ret = TensorImpl::dotTrans(col_, colW, false, true);
+  auto ret = TensorImpl::matmulTrans(col_, colW, false, true);
   if (!bias.empty()) {
     assert(bias.dim() == 1);
     assert(bias.shape()[0] == outChannels);
@@ -590,13 +626,13 @@ std::vector<TensorImpl> FuncConv2D::backward(const TensorImpl& grad) {
 
   std::vector<TensorImpl> ret;
   if (savedTensors[0].isRequiresGrad()) {
-    auto gradCol = TensorImpl::dot(gradW, colW);
+    auto gradCol = TensorImpl::matmul(gradW, colW);
     auto dx = gradCol.col2im(input.shape(), kernelSize, stride_, padding_);
     ret.push_back(dx);
   }
   if (savedTensors[1].isRequiresGrad()) {
-    auto gradColW = TensorImpl::dotTrans(col_, gradW, true, false);
-    auto dw = gradColW.transpose().reshape(weight.shape());
+    auto gradColW = TensorImpl::matmulTrans(col_, gradW, true, false);
+    auto dw = gradColW.permute().reshape(weight.shape());
     ret.push_back(dw);
   }
   if (!savedTensors[2].empty() && savedTensors[2].isRequiresGrad()) {
@@ -708,9 +744,9 @@ TensorImpl FuncMSELoss::forward(const std::vector<const Tensor*>& inputs) {
   auto ret = TensorImpl::pow(inputs[0]->data() - inputs[1]->data(), 2);
   switch (reduction_) {
     case MEAN:
-      return TensorImpl::scalar(ret.mean());
+      return ret.mean();
     case SUM:
-      return TensorImpl::scalar(ret.sum());
+      return ret.sum();
     default:
       break;
   }
@@ -722,7 +758,7 @@ std::vector<TensorImpl> FuncMSELoss::backward(const TensorImpl& grad) {
   auto retGrad = grad * 2 * (savedTensors[0].data() - savedTensors[1].data());
   switch (reduction_) {
     case MEAN:
-      retGrad /= (float)savedTensors[0].size();
+      retGrad /= (float)savedTensors[0].numel();
     default:
       break;
   }
@@ -740,14 +776,15 @@ TensorImpl FuncNLLLoss::forward(const std::vector<const Tensor*>& inputs) {
   saveForBackward(inputs);
   assert(inputs[1]->dim() == 1);
   auto batchSize = (int32_t)inputs[0]->shape()[0];
-  auto ret = -1 * inputs[0]->data().indexAdvance(
-                      {TensorImpl::range(0, batchSize),
-                       inputs[1]->data().toArray<int32_t>()});
+  auto ret =
+      -1 * inputs[0]->data().index({TensorImpl::arange(0, (float)batchSize, 1.f,
+                                                       inputs[0]->device()),
+                                    inputs[1]->data()});
   switch (reduction_) {
     case MEAN:
-      return TensorImpl::scalar(ret.mean());
+      return ret.mean();
     case SUM:
-      return TensorImpl::scalar(ret.sum());
+      return ret.sum();
     default:
       break;
   }
@@ -757,10 +794,11 @@ TensorImpl FuncNLLLoss::forward(const std::vector<const Tensor*>& inputs) {
 std::vector<TensorImpl> FuncNLLLoss::backward(const TensorImpl& grad) {
   const auto& savedTensors = getSavedTensors();
   auto batchSize = (int32_t)savedTensors[0].shape()[0];
-  auto retGrad = TensorImpl::zeros(savedTensors[0].shape());
-  retGrad.indexAdvanceSet({TensorImpl::range(0, batchSize),
-                           savedTensors[1].data().toArray<int32_t>()},
-                          -1.f);
+  auto retGrad = TensorImpl::zeros(savedTensors[0].shape(), grad.device());
+  retGrad.indexPut_(
+      {TensorImpl::arange(0, (float)batchSize, 1.f, savedTensors[0].device()),
+       savedTensors[1].data()},
+      -1.f);
   switch (reduction_) {
     case MEAN:
       retGrad /= (float)batchSize;

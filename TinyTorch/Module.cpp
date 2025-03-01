@@ -45,6 +45,14 @@ void Module::zeroGrad() {
   }
 }
 
+void Module::to(Device device) {
+  for (auto &module : subModules_) {
+    for (auto p : module.get().states()) {
+      p->to(device);
+    }
+  }
+}
+
 Tensor Sequential::forward(Tensor &input) {
   Tensor ret = {input};
   for (auto &module : modules_) {
@@ -249,13 +257,13 @@ std::vector<Tensor *> BatchNorm2D::states() {
 
 void BatchNorm2D::resetParameters() {
   if (affine_) {
-    weights_.data().fill(1.f);
-    bias_.data().fill(0.f);
+    weights_.data().fill_(1.f);
+    bias_.data().fill_(0.f);
   }
 
   if (trackRunningStats_) {
-    runningMean_.data().fill(0.f);
-    runningVar_.data().fill(1.f);
+    runningMean_.data().fill_(0.f);
+    runningVar_.data().fill_(1.f);
     numBatchesTracked_ = 0;
   }
 }

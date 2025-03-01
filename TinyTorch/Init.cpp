@@ -11,12 +11,7 @@
 namespace TinyTorch::nn {
 
 void Init::uniform(Tensor &tensor, float min, float max) {
-  auto generator = RandomGenerator::getGenerator();
-  std::uniform_real_distribution distribution(min, max);
-  auto &t = tensor.data();
-  for (int i = 0; i < t.size(); i++) {
-    t[i] = distribution(generator);
-  }
+  tensor.data().fillUniform_(min, max);
 }
 
 void Init::kaimingUniform(Tensor &tensor, float a, FanMode mode) {

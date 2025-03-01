@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <optional>
+
 #include "Tensor.h"
 
 namespace TinyTorch::nn {
@@ -37,6 +39,8 @@ class Module {
   void registerModule(const std::reference_wrapper<Module> &module) {
     subModules_.push_back(module);
   }
+
+  void to(Device device);
 
   void eval() { train(false); }
 
