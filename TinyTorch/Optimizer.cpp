@@ -37,7 +37,8 @@ void Optimizer::initCache(std::vector<TensorImpl> &cache, bool setZero) {
   cache.resize(parameters_.size());
   if (setZero) {
     for (int32_t i = 0; i < parameters_.size(); i++) {
-      cache[i] = TensorImpl::zeros(parameters_[i]->shape());
+      cache[i] =
+          TensorImpl::zeros(parameters_[i]->shape(), parameters_[i]->device());
     }
   }
 }
@@ -82,8 +83,9 @@ Adagrad::Adagrad(std::vector<Tensor *> &&parameters, float lr, float lrDecay,
       eps_(eps) {
   stateSums_.resize(parameters_.size());
   for (int32_t i = 0; i < parameters_.size(); i++) {
-    stateSums_[i] = TensorImpl::shape(parameters_[i]->shape());
-    stateSums_[i].fill(initAcc);
+    stateSums_[i] =
+        TensorImpl::shape(parameters_[i]->shape(), parameters_[i]->device());
+    stateSums_[i].fill_(initAcc);
   }
 }
 

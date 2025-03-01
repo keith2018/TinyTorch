@@ -38,14 +38,14 @@ class Net : public nn::Module {
   nn::Linear fc2{128, 10};
 };
 
-void train(nn::Module &model, data::DataLoader &dataLoader,
+void train(nn::Module &model, Device device, data::DataLoader &dataLoader,
            optim::Optimizer &optimizer, int32_t epoch) {
   model.train();
   Timer timer;
   timer.start();
   for (auto [batchIdx, batch] : dataLoader) {
-    auto &data = batch[0];
-    auto &target = batch[1];
+    auto &data = batch[0].to(device);
+    auto &target = batch[1].to(device);
     optimizer.zeroGrad();
     auto output = model(data);
     auto loss = Function::nllloss(output, target);
@@ -64,12 +64,12 @@ void train(nn::Module &model, data::DataLoader &dataLoader,
         "Train Epoch: %d, Iter [%d/%d %.2f%%], Loss: %.6f, Elapsed: %.2fs, "
         "ETA: "
         "%.2fs",
-        epoch + 1, currDataCnt, totalDataCnt,
+        epoch, currDataCnt, totalDataCnt,
         100.f * currDataCnt / (float)totalDataCnt, loss.item(), elapsed, eta);
   }
 }
 
-void test(nn::Module &model, data::DataLoader &dataLoader) {
+void test(nn::Module &model, Device device, data::DataLoader &dataLoader) {
   model.eval();
   Timer timer;
   timer.start();
@@ -77,12 +77,13 @@ void test(nn::Module &model, data::DataLoader &dataLoader) {
   auto correct = 0;
   withNoGrad {
     for (auto [batchIdx, batch] : dataLoader) {
-      auto &data = batch[0];
-      auto &target = batch[1];
+      auto &data = batch[0].to(device);
+      auto &target = batch[1].to(device);
       auto output = model(data);
       total += target.shape()[0];
       auto pred = output.data().argmax(1, true);
-      correct += (int32_t)(pred == target.data().view(pred.shape())).sum();
+      correct +=
+          (int32_t)(pred == target.data().view(pred.shape())).sum().item();
 
       auto currDataCnt = batchIdx * dataLoader.batchSize() + data.shape()[0];
       auto totalDataCnt = dataLoader.dataset().size();
@@ -108,8 +109,11 @@ void demo_mnist() {
 
   manualSeed(0);
 
-  auto allocator = std::make_shared<CachedAllocator>();
-  Tensor::setAllocator(allocator.get());
+#ifdef USE_CUDA
+  auto device = Device::CUDA;
+#else
+  auto device = Device::CPU;
+#endif
 
   // config
   auto lr = 1.f;
@@ -130,24 +134,27 @@ void demo_mnist() {
     return;
   }
 
-  LOGD("train size: %d", trainDataset->size());
-  LOGD("test size: %d", testDataset->size());
+  LOGD("Train dataset size: %d", trainDataset->size());
+  LOGD("Test dataset size: %d", testDataset->size());
 
   auto trainDataloader = data::DataLoader(trainDataset, batchSize, true);
   auto testDataloader = data::DataLoader(testDataset, batchSize, true);
 
   auto model = Net();
+  model.to(device);
+
   auto optimizer = optim::AdaDelta(model.parameters(), lr);
   auto scheduler = optim::lr_scheduler::StepLR(optimizer, 1, 0.7f);
 
-  for (auto epoch = 0; epoch < epochs; epoch++) {
-    train(model, trainDataloader, optimizer, epoch);
-    test(model, testDataloader);
+  for (auto epoch = 1; epoch <= epochs; epoch++) {
+    train(model, device, trainDataloader, optimizer, epoch);
+    test(model, device, testDataloader);
     scheduler.step();
 
     std::ostringstream saveName;
     saveName << "mnist_cnn_epoch_" << epoch << ".model";
     save(model, saveName.str().c_str());
+    LOGD("Epoch %d save model: %s", epoch, saveName.str().c_str());
   }
 
   timer.mark();

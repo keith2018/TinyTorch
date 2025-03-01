@@ -8,7 +8,7 @@
 
 #include <memory>
 
-#include "TensorImpl.h"
+#include "TensorImpl/TensorImpl.h"
 
 namespace TinyTorch {
 
@@ -19,8 +19,7 @@ class FuncLeaf;
 class Tensor {
  public:
   Tensor() : data_(std::make_shared<TensorImpl>()) {}
-  explicit Tensor(const TensorImpl &data);
-  explicit Tensor(const TensorImpl &&data, bool requiresGrad = false,
+  explicit Tensor(TensorImpl &&data, bool requiresGrad = false,
                   const std::shared_ptr<Function> &gradFunc = nullptr);
 
   explicit Tensor(const Array1d &values1d, bool requiresGrad = false);
@@ -40,15 +39,13 @@ class Tensor {
 
   bool empty() const { return data_->empty(); }
 
-  bool isScalar() const { return data_->isScalar(); }
-
   int32_t dim() const { return data_->dim(); }
 
-  int32_t size() const { return data_->size(); }
-
-  int32_t numel() const { return data_->size(); }
+  int32_t numel() const { return data_->numel(); }
 
   const Shape &shape() const { return data_->shape(); }
+
+  Device device() const { return data_->device(); }
 
   float item() const { return data_->item(); }
 
@@ -89,6 +86,7 @@ class Tensor {
   void operator/=(const float &other);
 
   Tensor sin() const;
+  Tensor cos() const;
   Tensor pow(const float &exp) const;
   Tensor pow(const Tensor &exp) const;
   Tensor sum() const;
@@ -117,9 +115,12 @@ class Tensor {
 
   const TensorImpl &data() const { return *data_; }
 
-  static void setAllocator(Allocator *allocator) {
-    TensorImpl::setAllocator(allocator);
+  Tensor &to(Device device) {
+    data_->to_(device);
+    return *this;
   }
+
+  std::vector<float> toList() const { return data_->toList(); }
 
  private:
   void initAutograd(bool requiresGrad,
