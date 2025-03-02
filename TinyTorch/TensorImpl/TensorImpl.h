@@ -27,15 +27,29 @@ static Device defaultDevice = Device::CPU;
 
 class TensorOperations;
 class TensorOpsCPU;
+class TensorOpsCUDA;
 
 #ifdef USE_CUDA
 class TensorOpsCUDA;
 #endif
 
+struct Storage {
+  Storage(size_t nbytes, Device device);
+  ~Storage();
+
+  static TensorOperations *getOps(Device device);
+
+  float *data_ = nullptr;
+  size_t nbytes_ = 0;
+  TensorOperations *ops_ = nullptr;
+};
+
 // float type elements only
 class TensorImpl {
   friend class TensorOperations;
   friend class TensorOpsCPU;
+  friend class TensorOpsCUDA;
+  friend struct Storage;
 
 #ifdef USE_CUDA
   friend class TensorOpsCUDA;
@@ -43,7 +57,7 @@ class TensorImpl {
 
  public:
   TensorImpl() = default;
-  ~TensorImpl();
+  ~TensorImpl() = default;
 
   TensorImpl(const TensorImpl &other);
   TensorImpl(TensorImpl &&other) noexcept;
@@ -93,10 +107,9 @@ class TensorImpl {
   float item() const;
 
   // shape
-  TensorImpl reshape(const Shape &shape);
+  void reshape_(const Shape &shape);
   static TensorImpl reshape(const TensorImpl &t, const Shape &shape);
-  TensorImpl reshape(const Shape &shape) const;
-  TensorImpl view(const Shape &shape) const { return reshape(shape); }
+  TensorImpl view(const Shape &shape) const { return reshape(*this, shape); }
 
   void flatten_(int32_t startDim = 0, int32_t endDim = -1);
   static TensorImpl flatten(const TensorImpl &t, int32_t startDim = 0,
@@ -328,12 +341,15 @@ class TensorImpl {
     return index(indices);
   }
   TensorImpl index(const std::vector<int32_t> &indices) const;
-  TensorImpl index(const std::vector<TensorImpl> &indices) const;
+  TensorImpl index(
+      const std::vector<std::reference_wrapper<TensorImpl>> &indices) const;
 
   void indexPut_(const std::vector<int32_t> &indices, float val);
   void indexPut_(const std::vector<int32_t> &indices, const TensorImpl &val);
-  void indexPut_(const std::vector<TensorImpl> &indices, float val);
-  void indexPut_(const std::vector<TensorImpl> &indices, const TensorImpl &val);
+  void indexPut_(const std::vector<std::reference_wrapper<TensorImpl>> &indices,
+                 float val);
+  void indexPut_(const std::vector<std::reference_wrapper<TensorImpl>> &indices,
+                 const TensorImpl &val);
 
   // stack
   static TensorImpl stack(
@@ -381,27 +397,30 @@ class TensorImpl {
   TensorOperations *ops() const { return ops_; }
 
   static bool deviceAvailable(Device device) {
-    return getOps(device) != nullptr;
+    return Storage::getOps(device) != nullptr;
   }
 
  protected:
   void initMeta();
   void initMeta(const TensorImpl &other);
   void initData(const float *ptr = nullptr, Device device = Device::CPU);
-  void dispose();
 
+  void cow();
+  void shareFrom(const TensorImpl &other);
   void moveFrom(TensorImpl &&other);
   void copyToDevice(void *dst, const void *src, size_t count, Device srcDevice);
-  static TensorOperations *getOps(Device device);
 
   int32_t dimCount_ = 0;
   int32_t elemCount_ = 0;
   Shape shape_;
   Shape strides_;
+
+  // reference to storage_.data_
   float *data_ = nullptr;
 
   Device device_ = Device::CPU;
   TensorOperations *ops_ = nullptr;
+  std::shared_ptr<Storage> storage_;
 };
 
 }  // namespace TinyTorch

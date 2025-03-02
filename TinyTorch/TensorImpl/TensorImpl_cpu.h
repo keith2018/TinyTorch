@@ -50,6 +50,9 @@ class TensorOpsCPU : public TensorOperations {
   template <typename OP>
   static void opSingle_(TensorImpl &t);
 
+  template <typename OP>
+  static TensorImpl opSingle(const TensorImpl &t);
+
   // op pair
   template <typename OP>
   static TensorImpl opPair(const TensorImpl &a, const TensorImpl &b);
@@ -79,12 +82,13 @@ class TensorOpsCPU : public TensorOperations {
   // reduce
   static int32_t getReduceIndex(const TensorImpl &t, int32_t idx, int32_t dim);
   static int32_t getReduceIndex(const TensorImpl &t, int32_t idx,
-                                const DimsVector<uint8_t> &inAxis);
+                                const FixedVector<uint8_t> &inAxis);
 
   // index
-  static void getSubIndices(int32_t *subIndices, const TensorImpl &t,
-                            const std::vector<TensorImpl> &indices,
-                            int32_t idx);
+  static void getSubIndices(
+      int32_t *subIndices, const TensorImpl &t,
+      const std::vector<std::reference_wrapper<TensorImpl>> &indices,
+      int32_t idx);
 };
 
 }  // namespace TinyTorch

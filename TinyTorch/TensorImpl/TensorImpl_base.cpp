@@ -67,7 +67,7 @@ Shape TensorOperations::getReduceShape(const TensorImpl &t, int32_t dim,
 }
 
 Shape TensorOperations::getReduceShape(const TensorImpl &t,
-                                       const DimsVector<uint8_t> &inAxis,
+                                       const FixedVector<uint8_t> &inAxis,
                                        bool keepDims) {
   Shape retShape;
   retShape.reserve(t.dimCount_);

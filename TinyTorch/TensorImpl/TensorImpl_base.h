@@ -26,7 +26,7 @@ struct Size2D {
 };
 
 template <typename T>
-struct DimsVector {
+struct FixedVector {
   T data[TENSOR_MAX_DIMS]{};
 };
 
@@ -122,9 +122,20 @@ typedef enum ShapeCompatible_ {
   _H void exp_(TensorImpl& t) _T;                                              \
   _H void log_(TensorImpl& t) _T;                                              \
                                                                                \
+  _H TensorImpl sin(const TensorImpl& t) _T;                                   \
+  _H TensorImpl cos(const TensorImpl& t) _T;                                   \
+  _H TensorImpl sqrt(const TensorImpl& t) _T;                                  \
+  _H TensorImpl tanh(const TensorImpl& t) _T;                                  \
+  _H TensorImpl exp(const TensorImpl& t) _T;                                   \
+  _H TensorImpl log(const TensorImpl& t) _T;                                   \
+                                                                               \
   _H void clampMin_(TensorImpl& t, float min) _T;                              \
   _H void clampMax_(TensorImpl& t, float max) _T;                              \
   _H void clamp_(TensorImpl& t, float min, float max) _T;                      \
+                                                                               \
+  _H TensorImpl clampMin(const TensorImpl& t, float min) _T;                   \
+  _H TensorImpl clampMax(const TensorImpl& t, float max) _T;                   \
+  _H TensorImpl clamp(const TensorImpl& t, float min, float max) _T;           \
                                                                                \
   /* aggregation */                                                            \
   _H TensorImpl min(const TensorImpl& t) _T;                                   \
@@ -152,12 +163,17 @@ typedef enum ShapeCompatible_ {
       _T;                                                                      \
                                                                                \
   /* index */                                                                  \
-  _H TensorImpl index(const TensorImpl& t,                                     \
-                      const std::vector<TensorImpl>& indices) _T;              \
-  _H void indexPut_(TensorImpl& t, const std::vector<TensorImpl>& indices,     \
-                    float val) _T;                                             \
-  _H void indexPut_(TensorImpl& t, const std::vector<TensorImpl>& indices,     \
-                    const TensorImpl& val) _T;                                 \
+  _H TensorImpl index(                                                         \
+      const TensorImpl& t,                                                     \
+      const std::vector<std::reference_wrapper<TensorImpl>>& indices) _T;      \
+  _H void indexPut_(                                                           \
+      TensorImpl& t,                                                           \
+      const std::vector<std::reference_wrapper<TensorImpl>>& indices,          \
+      float val) _T;                                                           \
+  _H void indexPut_(                                                           \
+      TensorImpl& t,                                                           \
+      const std::vector<std::reference_wrapper<TensorImpl>>& indices,          \
+      const TensorImpl& val) _T;                                               \
                                                                                \
   /* stack */                                                                  \
   _H void stack(                                                               \
@@ -194,7 +210,8 @@ class TensorOperations {
 
   static Shape getReduceShape(const TensorImpl& t, int32_t dim, bool keepDims);
   static Shape getReduceShape(const TensorImpl& t,
-                              const DimsVector<uint8_t>& inAxis, bool keepDims);
+                              const FixedVector<uint8_t>& inAxis,
+                              bool keepDims);
 
   static ShapeCompatible checkShapeCompatible(const Shape& t0, const Shape& t1,
                                               Shape& retShape,

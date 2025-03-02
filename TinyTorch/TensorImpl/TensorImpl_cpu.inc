@@ -102,4 +102,28 @@ struct OpCpuLog_ {
   void operator()(float& a) const { a = std::log(a); }
 };
 
+struct OpCpuSin {
+  float operator()(const float a) const { return std::sin(a); }
+};
+
+struct OpCpuCos {
+  float operator()(const float a) const { return std::cos(a); }
+};
+
+struct OpCpuSqrt {
+  float operator()(const float a) const { return std::sqrt(a); }
+};
+
+struct OpCpuTanh {
+  float operator()(const float a) const { return std::tanh(a); }
+};
+
+struct OpCpuExp {
+  float operator()(const float a) const { return std::exp(a); }
+};
+
+struct OpCpuLog {
+  float operator()(const float a) const { return std::log(a); }
+};
+
 }  // namespace TinyTorch

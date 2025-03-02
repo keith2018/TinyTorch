@@ -50,6 +50,16 @@ void TensorOpsCPU::opSingle_(TensorImpl& t) {
 }
 
 template <typename OP>
+TensorImpl TensorOpsCPU::opSingle(const TensorImpl& t) {
+  OP opFunc;
+  auto result = TensorImpl::shape(t.shape(), t.device_);
+  for (int32_t i = 0; i < t.elemCount_; i++) {
+    result.data_[i] = opFunc(t.data_[i]);
+  }
+  return result;
+}
+
+template <typename OP>
 TensorImpl TensorOpsCPU::opPair(const TensorImpl& a, const TensorImpl& b) {
   OP opFunc;
   auto result = TensorImpl::shape(a.shape(), a.device_);
@@ -206,7 +216,7 @@ int32_t TensorOpsCPU::getReduceIndex(const TensorImpl& t, int32_t idx,
 }
 
 int32_t TensorOpsCPU::getReduceIndex(const TensorImpl& t, int32_t idx,
-                                     const DimsVector<uint8_t>& inAxis) {
+                                     const FixedVector<uint8_t>& inAxis) {
   int32_t retIdx = 0;
   int32_t stride = 1;
   for (int32_t d = t.dimCount_ - 1; d >= 0; d--) {
@@ -218,11 +228,12 @@ int32_t TensorOpsCPU::getReduceIndex(const TensorImpl& t, int32_t idx,
   return retIdx;
 }
 
-void TensorOpsCPU::getSubIndices(int32_t* subIndices, const TensorImpl& t,
-                                 const std::vector<TensorImpl>& indices,
-                                 int32_t idx) {
+void TensorOpsCPU::getSubIndices(
+    int32_t* subIndices, const TensorImpl& t,
+    const std::vector<std::reference_wrapper<TensorImpl>>& indices,
+    int32_t idx) {
   for (int32_t i = 0; i < indices.size(); i++) {
-    auto ind = (int32_t)indices[i].data_[idx];
+    auto ind = (int32_t)indices[i].get().data_[idx];
     subIndices[i] = ind >= 0 ? ind : ind + t.shape_[i];
   }
 }
@@ -531,6 +542,30 @@ void TensorOpsCPU::exp_(TensorImpl& t) { opSingle_<OpCpuExp_>(t); }
 
 void TensorOpsCPU::log_(TensorImpl& t) { opSingle_<OpCpuLog_>(t); }
 
+TensorImpl TensorOpsCPU::sin(const TensorImpl& t) {
+  return opSingle<OpCpuSin>(t);
+}
+
+TensorImpl TensorOpsCPU::cos(const TensorImpl& t) {
+  return opSingle<OpCpuCos>(t);
+}
+
+TensorImpl TensorOpsCPU::sqrt(const TensorImpl& t) {
+  return opSingle<OpCpuSqrt>(t);
+}
+
+TensorImpl TensorOpsCPU::tanh(const TensorImpl& t) {
+  return opSingle<OpCpuTanh>(t);
+}
+
+TensorImpl TensorOpsCPU::exp(const TensorImpl& t) {
+  return opSingle<OpCpuExp>(t);
+}
+
+TensorImpl TensorOpsCPU::log(const TensorImpl& t) {
+  return opSingle<OpCpuLog>(t);
+}
+
 void TensorOpsCPU::clampMin_(TensorImpl& t, float min) {
   opPair_<OpCpuMax>(t, min);
 }
@@ -543,6 +578,22 @@ void TensorOpsCPU::clamp_(TensorImpl& t, float min, float max) {
   for (int32_t i = 0; i < t.elemCount_; i++) {
     t.data_[i] = std::max(min, std::min(t.data_[i], max));
   }
+}
+
+TensorImpl TensorOpsCPU::clampMin(const TensorImpl& t, float min) {
+  return opPair<OpCpuMax>(t, min);
+}
+
+TensorImpl TensorOpsCPU::clampMax(const TensorImpl& t, float max) {
+  return opPair<OpCpuMin>(t, max);
+}
+
+TensorImpl TensorOpsCPU::clamp(const TensorImpl& t, float min, float max) {
+  auto result = TensorImpl::shape(t.shape(), t.device_);
+  for (int32_t i = 0; i < t.elemCount_; i++) {
+    result.data_[i] = std::max(min, std::min(t.data_[i], max));
+  }
+  return result;
 }
 
 TensorImpl TensorOpsCPU::min(const TensorImpl& t) {
@@ -749,7 +800,7 @@ TensorImpl TensorOpsCPU::sum(const TensorImpl& t,
   if (t.dimCount_ == 0) {
     return t;
   }
-  DimsVector<uint8_t> inAxis{};
+  FixedVector<uint8_t> inAxis{};
   int32_t reduceSize = 1;
   for (int32_t d : dims) {
     if (d < 0) {
@@ -781,7 +832,7 @@ TensorImpl TensorOpsCPU::mean(const TensorImpl& t,
   if (t.dimCount_ == 0) {
     return t;
   }
-  DimsVector<uint8_t> inAxis{};
+  FixedVector<uint8_t> inAxis{};
   int32_t reduceSize = 1;
   for (int32_t d : dims) {
     if (d < 0) {
@@ -816,7 +867,7 @@ TensorImpl TensorOpsCPU::var(const TensorImpl& t,
   if (t.dimCount_ == 0) {
     return TensorImpl::scalar(0, t.device_);
   }
-  DimsVector<uint8_t> inAxis{};
+  FixedVector<uint8_t> inAxis{};
   int32_t reduceSize = 1;
   for (int32_t d : dims) {
     if (d < 0) {
@@ -868,10 +919,11 @@ TensorImpl TensorOpsCPU::permute(const TensorImpl& t,
   return ret;
 }
 
-TensorImpl TensorOpsCPU::index(const TensorImpl& t,
-                               const std::vector<TensorImpl>& indices) {
+TensorImpl TensorOpsCPU::index(
+    const TensorImpl& t,
+    const std::vector<std::reference_wrapper<TensorImpl>>& indices) {
   auto len = (int32_t)indices.size();
-  auto fistDim = (int32_t)indices[0].elemCount_;
+  auto fistDim = (int32_t)indices[0].get().elemCount_;
   auto dimStride = t.strides_[len - 1];
   Shape retShape = {fistDim};
   for (auto i = len; i < t.dimCount_; i++) {
@@ -890,11 +942,11 @@ TensorImpl TensorOpsCPU::index(const TensorImpl& t,
   return retTensor;
 }
 
-void TensorOpsCPU::indexPut_(TensorImpl& t,
-                             const std::vector<TensorImpl>& indices,
-                             float val) {
+void TensorOpsCPU::indexPut_(
+    TensorImpl& t,
+    const std::vector<std::reference_wrapper<TensorImpl>>& indices, float val) {
   auto len = (int32_t)indices.size();
-  auto fistDim = (int32_t)indices[0].elemCount_;
+  auto fistDim = (int32_t)indices[0].get().elemCount_;
   auto dimStride = t.strides_[len - 1];
 
   static int32_t subIndices[TENSOR_MAX_DIMS];
@@ -905,11 +957,12 @@ void TensorOpsCPU::indexPut_(TensorImpl& t,
   }
 }
 
-void TensorOpsCPU::indexPut_(TensorImpl& t,
-                             const std::vector<TensorImpl>& indices,
-                             const TensorImpl& val) {
+void TensorOpsCPU::indexPut_(
+    TensorImpl& t,
+    const std::vector<std::reference_wrapper<TensorImpl>>& indices,
+    const TensorImpl& val) {
   auto len = (int32_t)indices.size();
-  auto fistDim = (int32_t)indices[0].elemCount_;
+  auto fistDim = (int32_t)indices[0].get().elemCount_;
   auto dimStride = t.strides_[len - 1];
   assert(val.elemCount_ == dimStride * fistDim);
 

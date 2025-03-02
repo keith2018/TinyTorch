@@ -156,6 +156,30 @@ struct OpCudaLog_ {
   __device__ void operator()(float& a) const { a = log(a); }
 };
 
+struct OpCudaSin {
+  __device__ float operator()(const float a) const { return sin(a); }
+};
+
+struct OpCudaCos {
+  __device__ float operator()(const float a) const { return cos(a); }
+};
+
+struct OpCudaSqrt {
+  __device__ float operator()(const float a) const { return sqrt(a); }
+};
+
+struct OpCudaTanh {
+  __device__ float operator()(const float a) const { return tanh(a); }
+};
+
+struct OpCudaExp {
+  __device__ float operator()(const float a) const { return exp(a); }
+};
+
+struct OpCudaLog {
+  __device__ float operator()(const float a) const { return log(a); }
+};
+
 template <typename T>
 __device__ void cuSwap(T& a, T& b) {
   T c(a);
@@ -177,7 +201,7 @@ __device__ int32_t cuGetReduceIndex(const TensorCudaCtx t, int32_t idx,
 }
 
 __device__ int32_t cuGetReduceIndex(const TensorCudaCtx t, int32_t idx,
-                                    const DimsVector<uint8_t> inAxis) {
+                                    const FixedVector<uint8_t> inAxis) {
   int32_t retIdx = 0;
   int32_t stride = 1;
   for (int32_t d = t.dimCount_ - 1; d >= 0; d--) {
@@ -238,7 +262,7 @@ __device__ void cuReorderIndices(int32_t* indices, const int32_t* order,
 }
 
 __device__ void cuGetSubIndices(int32_t* subIndices, const TensorCudaCtx t,
-                                const DimsVector<float*> indices, int32_t idx,
+                                const FixedVector<float*> indices, int32_t idx,
                                 int len) {
   for (int32_t i = 0; i < len; i++) {
     auto ind = (int32_t)((float*)indices.data[i])[idx];
@@ -316,6 +340,15 @@ __global__ void kSingleOp_(float* t, int n) {
   OP opFunc;
   if (index < n) {
     opFunc(t[index]);
+  }
+}
+
+template <typename OP>
+__global__ void kSingleOp(float* ret, const float* t, int n) {
+  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+  OP opFunc;
+  if (index < n) {
+    ret[index] = opFunc(t[index]);
   }
 }
 
@@ -457,7 +490,15 @@ __global__ void kBroadcastOp(TensorCudaCtx c, const TensorCudaCtx a,
   }
 }
 
-__global__ void kClamp(float* t, float minVal, float maxVal, int n) {
+__global__ void kClamp(float* ret, const float* t, float minVal, float maxVal,
+                       int n) {
+  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+  if (index < n) {
+    ret[index] = max(minVal, min(t[index], maxVal));
+  }
+}
+
+__global__ void kClamp_(float* t, float minVal, float maxVal, int n) {
   unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
     t[index] = max(minVal, min(t[index], maxVal));
@@ -539,7 +580,7 @@ __global__ void kReduceArgMax(float* retPtr, const float* maxValues,
 }
 
 __global__ void kReduceSum(float* retPtr, const TensorCudaCtx t,
-                           const DimsVector<uint8_t> inAxis, int n) {
+                           const FixedVector<uint8_t> inAxis, int n) {
   unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
     int32_t retIdx = cuGetReduceIndex(t, index, inAxis);
@@ -556,7 +597,7 @@ __global__ void kReduceAllSum(float* retPtr, const float* data, int n) {
 
 __global__ void kReduceVar(float* retPtr, const TensorCudaCtx t,
                            const float* meanValues,
-                           const DimsVector<uint8_t> inAxis, int n) {
+                           const FixedVector<uint8_t> inAxis, int n) {
   unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
     int32_t retIdx = cuGetReduceIndex(t, index, inAxis);
@@ -614,7 +655,7 @@ __global__ void kReduceAllArg(float* retPtr, const float* input, int n,
 }
 
 __global__ void kPermute(const TensorCudaCtx ret, const TensorCudaCtx t,
-                         const DimsVector<int32_t> dims, int n) {
+                         const FixedVector<int32_t> dims, int n) {
   unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
     int32_t originIndex = 0;
@@ -628,8 +669,8 @@ __global__ void kPermute(const TensorCudaCtx ret, const TensorCudaCtx t,
 }
 
 __global__ void kIndex(float* retData, const TensorCudaCtx t,
-                       const DimsVector<float*> indices, int dimStride, int len,
-                       int n) {
+                       const FixedVector<float*> indices, int dimStride,
+                       int len, int n) {
   unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
     int32_t subIndices[TENSOR_MAX_DIMS];
@@ -640,7 +681,7 @@ __global__ void kIndex(float* retData, const TensorCudaCtx t,
   }
 }
 
-__global__ void kIndexPut(TensorCudaCtx t, DimsVector<float*> indices,
+__global__ void kIndexPut(TensorCudaCtx t, FixedVector<float*> indices,
                           int dimStride, int len, float val, int n) {
   unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
@@ -653,7 +694,7 @@ __global__ void kIndexPut(TensorCudaCtx t, DimsVector<float*> indices,
   }
 }
 
-__global__ void kIndexPut(TensorCudaCtx t, DimsVector<float*> indices,
+__global__ void kIndexPut(TensorCudaCtx t, FixedVector<float*> indices,
                           int dimStride, int len, float* val, int n) {
   unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {

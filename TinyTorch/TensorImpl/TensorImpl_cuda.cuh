@@ -56,6 +56,8 @@ class TensorOpsCUDA : public TensorOperations {
   // op single
   template <typename OP>
   void opSingle_(TensorImpl &t) const;
+  template <typename OP>
+  TensorImpl opSingle(const TensorImpl &t) const;
 
   // op pair
   template <typename OP>

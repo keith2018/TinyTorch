@@ -66,6 +66,15 @@ void TensorOpsCUDA::opSingle_(TensorImpl& t) const {
 }
 
 template <typename OP>
+TensorImpl TensorOpsCUDA::opSingle(const TensorImpl& t) const {
+  auto result = TensorImpl::shape(t.shape(), t.device_);
+  kSingleOp<OP><<<getGridSize(t.elemCount_), getBlockSize()>>>(
+      result.data_, t.data_, t.elemCount_);
+  CUDA_KERNEL_CHECK();
+  return result;
+}
+
+template <typename OP>
 TensorImpl TensorOpsCUDA::opPair(const TensorImpl& a,
                                  const TensorImpl& b) const {
   auto result = TensorImpl::shape(a.shape(), a.device_);
@@ -518,6 +527,30 @@ void TensorOpsCUDA::exp_(TensorImpl& t) { opSingle_<OpCudaExp_>(t); }
 
 void TensorOpsCUDA::log_(TensorImpl& t) { opSingle_<OpCudaLog_>(t); }
 
+TensorImpl TensorOpsCUDA::sin(const TensorImpl& t) {
+  return opSingle<OpCudaSin>(t);
+}
+
+TensorImpl TensorOpsCUDA::cos(const TensorImpl& t) {
+  return opSingle<OpCudaCos>(t);
+}
+
+TensorImpl TensorOpsCUDA::sqrt(const TensorImpl& t) {
+  return opSingle<OpCudaSqrt>(t);
+}
+
+TensorImpl TensorOpsCUDA::tanh(const TensorImpl& t) {
+  return opSingle<OpCudaTanh>(t);
+}
+
+TensorImpl TensorOpsCUDA::exp(const TensorImpl& t) {
+  return opSingle<OpCudaExp>(t);
+}
+
+TensorImpl TensorOpsCUDA::log(const TensorImpl& t) {
+  return opSingle<OpCudaLog>(t);
+}
+
 void TensorOpsCUDA::clampMin_(TensorImpl& t, float min) {
   opPair_<OpCudaMax>(t, min);
 }
@@ -527,9 +560,25 @@ void TensorOpsCUDA::clampMax_(TensorImpl& t, float max) {
 }
 
 void TensorOpsCUDA::clamp_(TensorImpl& t, float min, float max) {
-  kClamp<<<getGridSize(t.elemCount_), getBlockSize()>>>(t.data_, min, max,
-                                                        t.elemCount_);
+  kClamp_<<<getGridSize(t.elemCount_), getBlockSize()>>>(t.data_, min, max,
+                                                         t.elemCount_);
   CUDA_KERNEL_CHECK();
+}
+
+TensorImpl TensorOpsCUDA::clampMin(const TensorImpl& t, float min) {
+  return opPair<OpCudaMax>(t, min);
+}
+
+TensorImpl TensorOpsCUDA::clampMax(const TensorImpl& t, float max) {
+  return opPair<OpCudaMin>(t, max);
+}
+
+TensorImpl TensorOpsCUDA::clamp(const TensorImpl& t, float min, float max) {
+  auto ret = TensorImpl::shape(t.shape_, t.device_);
+  kClamp<<<getGridSize(t.elemCount_), getBlockSize()>>>(ret.data_, t.data_, min,
+                                                        max, t.elemCount_);
+  CUDA_KERNEL_CHECK();
+  return ret;
 }
 
 TensorImpl TensorOpsCUDA::min(const TensorImpl& t) {
@@ -731,7 +780,7 @@ TensorImpl TensorOpsCUDA::argmax(const TensorImpl& t, int32_t dim,
 
 TensorImpl TensorOpsCUDA::sum(const TensorImpl& t,
                               const std::vector<int32_t>& dims, bool keepDims) {
-  DimsVector<uint8_t> inAxis{};
+  FixedVector<uint8_t> inAxis{};
   int32_t reduceSize = 1;
   for (int32_t d : dims) {
     if (d < 0) {
@@ -762,7 +811,7 @@ TensorImpl TensorOpsCUDA::sum(const TensorImpl& t,
 TensorImpl TensorOpsCUDA::mean(const TensorImpl& t,
                                const std::vector<int32_t>& dims,
                                bool keepDims) {
-  DimsVector<uint8_t> inAxis{};
+  FixedVector<uint8_t> inAxis{};
   int32_t reduceSize = 1;
   for (int32_t d : dims) {
     if (d < 0) {
@@ -796,7 +845,7 @@ TensorImpl TensorOpsCUDA::mean(const TensorImpl& t,
 TensorImpl TensorOpsCUDA::var(const TensorImpl& t,
                               const std::vector<int32_t>& dims, bool unbiased,
                               bool keepDims) {
-  DimsVector<uint8_t> inAxis{};
+  FixedVector<uint8_t> inAxis{};
   int32_t reduceSize = 1;
   for (int32_t d : dims) {
     if (d < 0) {
@@ -841,17 +890,18 @@ TensorImpl TensorOpsCUDA::permute(const TensorImpl& t,
   auto ctxT = getTensorCtx(t);
   auto ctxRet = getTensorCtx(ret);
 
-  auto* dimsDataPtr = (DimsVector<int32_t>*)dims.data();
+  auto* dimsDataPtr = (FixedVector<int32_t>*)dims.data();
   kPermute<<<getGridSize(t.elemCount_), getBlockSize()>>>(
       ctxRet, ctxT, *dimsDataPtr, t.elemCount_);
   CUDA_KERNEL_CHECK();
   return ret;
 }
 
-TensorImpl TensorOpsCUDA::index(const TensorImpl& t,
-                                const std::vector<TensorImpl>& indices) {
+TensorImpl TensorOpsCUDA::index(
+    const TensorImpl& t,
+    const std::vector<std::reference_wrapper<TensorImpl>>& indices) {
   auto len = (int32_t)indices.size();
-  auto fistDim = (int32_t)indices[0].elemCount_;
+  auto fistDim = (int32_t)indices[0].get().elemCount_;
   auto dimStride = t.strides_[len - 1];
   Shape retShape = {fistDim};
   for (auto i = len; i < t.dimCount_; i++) {
@@ -859,9 +909,9 @@ TensorImpl TensorOpsCUDA::index(const TensorImpl& t,
   }
   auto retTensor = TensorImpl::shape(retShape, t.device_);
 
-  DimsVector<float*> indicesData{};
+  FixedVector<float*> indicesData{};
   for (int32_t i = 0; i < len; i++) {
-    indicesData.data[i] = indices[i].data_;
+    indicesData.data[i] = indices[i].get().data_;
   }
   auto ctxT = getTensorCtx(t);
   kIndex<<<getGridSize(fistDim), getBlockSize()>>>(
@@ -870,16 +920,16 @@ TensorImpl TensorOpsCUDA::index(const TensorImpl& t,
   return retTensor;
 }
 
-void TensorOpsCUDA::indexPut_(TensorImpl& t,
-                              const std::vector<TensorImpl>& indices,
-                              float val) {
+void TensorOpsCUDA::indexPut_(
+    TensorImpl& t,
+    const std::vector<std::reference_wrapper<TensorImpl>>& indices, float val) {
   auto len = (int32_t)indices.size();
-  auto fistDim = (int32_t)indices[0].elemCount_;
+  auto fistDim = (int32_t)indices[0].get().elemCount_;
   auto dimStride = t.strides_[len - 1];
 
-  DimsVector<float*> indicesData{};
+  FixedVector<float*> indicesData{};
   for (int32_t i = 0; i < len; i++) {
-    indicesData.data[i] = indices[i].data_;
+    indicesData.data[i] = indices[i].get().data_;
   }
   auto ctxT = getTensorCtx(t);
   kIndexPut<<<getGridSize(fistDim), getBlockSize()>>>(
@@ -887,17 +937,18 @@ void TensorOpsCUDA::indexPut_(TensorImpl& t,
   CUDA_KERNEL_CHECK();
 }
 
-void TensorOpsCUDA::indexPut_(TensorImpl& t,
-                              const std::vector<TensorImpl>& indices,
-                              const TensorImpl& val) {
+void TensorOpsCUDA::indexPut_(
+    TensorImpl& t,
+    const std::vector<std::reference_wrapper<TensorImpl>>& indices,
+    const TensorImpl& val) {
   auto len = (int32_t)indices.size();
-  auto fistDim = (int32_t)indices[0].elemCount_;
+  auto fistDim = (int32_t)indices[0].get().elemCount_;
   auto dimStride = t.strides_[len - 1];
   assert(val.elemCount_ == dimStride * fistDim);
 
-  DimsVector<float*> indicesData{};
+  FixedVector<float*> indicesData{};
   for (int32_t i = 0; i < len; i++) {
-    indicesData.data[i] = indices[i].data_;
+    indicesData.data[i] = indices[i].get().data_;
   }
   auto ctxT = getTensorCtx(t);
   kIndexPut<<<getGridSize(fistDim), getBlockSize()>>>(
