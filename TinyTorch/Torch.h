@@ -8,7 +8,6 @@
 
 #include <fstream>
 
-#include "Allocator.h"
 #include "Data.h"
 #include "Function.h"
 #include "Logger.h"
@@ -17,14 +16,13 @@
 #include "Optimizer.h"
 #include "Scheduler.h"
 #include "Tensor.h"
-#include "TensorImpl.h"
 #include "Timer.h"
 
 namespace TinyTorch {
 
 constexpr float PI = 3.1415926535f;
 
-void manualSeed(unsigned int seed);
+void manualSeed(unsigned long seed);
 
 void print(const Tensor& tensor, bool full = false);
 

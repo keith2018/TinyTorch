@@ -6,14 +6,24 @@
 
 #include "Torch.h"
 
-#include "TensorImpl.h"
+#include "TensorImpl/TensorImpl.h"
+#include "TensorImpl/TensorImpl_cpu.h"
+#ifdef USE_CUDA
+#include "TensorImpl/TensorImpl_cuda.cuh"
+#endif
 
 namespace TinyTorch {
 
-void manualSeed(unsigned int seed) { RandomGenerator::setSeed(seed); }
+void manualSeed(unsigned long seed) {
+  RandomGeneratorCPU::setSeed(seed);
+#ifdef USE_CUDA
+  RandomGeneratorCUDA::setSeed(seed);
+#endif
+}
 
 template <typename T>
-static std::string printArray(const T* vec, int32_t size, bool full) {
+static std::string printArray(const std::vector<T>& vec, bool full) {
+  auto size = vec.size();
   std::ostringstream oss;
   oss << "(";
   if (full || size <= 16) {
@@ -44,13 +54,12 @@ static std::string printArray(const T* vec, int32_t size, bool full) {
 
 void print(const Tensor& tensor, bool full) {
   std::ostringstream oss;
-  oss << "Tensor { shape: "
-      << printArray(&tensor.shape()[0], tensor.dim(), false);
+  oss << "Tensor { shape: " << printArray(tensor.shape(), false);
   oss << ", requiresGrad: " << (tensor.isRequiresGrad() ? "true" : "false");
   if (tensor.isRequiresGrad()) {
     oss << ", gradFunc: " << tensor.getGradFunc()->typeString();
   }
-  oss << ", data: " << printArray(&tensor.data()[0], tensor.size(), full);
+  oss << ", data: " << printArray(tensor.data().toList(), full);
   LOGD("%s", oss.str().c_str());
 }
 
@@ -61,7 +70,7 @@ void save(const Tensor& tensor, std::ofstream& ofs) {
   ofs.write((const char*)(&dimCount), sizeof(dimCount));
 
   // elemCount
-  int32_t elemCount = t.size();
+  int32_t elemCount = t.numel();
   ofs.write((const char*)(&elemCount), sizeof(elemCount));
 
   // shape, strides, data
@@ -71,8 +80,17 @@ void save(const Tensor& tensor, std::ofstream& ofs) {
     ofs.write((const char*)(t.strides().data()),
               std::streamsize(dimCount * sizeof(int32_t)));
   }
+
+  // data
   if (elemCount > 0) {
-    ofs.write((const char*)(&t[0]), std::streamsize(elemCount * sizeof(float)));
+    auto dataBytesCnt = elemCount * sizeof(float);
+    if (t.device() == Device::CPU) {
+      ofs.write((const char*)t.data(), std::streamsize(dataBytesCnt));
+    } else {
+      std::vector<float> hostData(elemCount);
+      t.ops()->copyDeviceToHost(hostData.data(), t.data(), dataBytesCnt);
+      ofs.write((const char*)hostData.data(), std::streamsize(dataBytesCnt));
+    }
   }
 }
 
@@ -91,8 +109,8 @@ void load(Tensor& tensor, std::ifstream& ifs) {
   // elemCount
   int32_t elemCount;
   ifs.read((char*)(&elemCount), sizeof(elemCount));
-  if (elemCount != t.size()) {
-    LOGE("load failed: expect elemCount %d but got %d", t.size(), elemCount);
+  if (elemCount != t.numel()) {
+    LOGE("load failed: expect elemCount %d but got %d", t.numel(), elemCount);
     return;
   }
 
@@ -103,8 +121,17 @@ void load(Tensor& tensor, std::ifstream& ifs) {
     ifs.read((char*)(t.strides().data()),
              std::streamsize(dimCount * sizeof(int32_t)));
   }
+
+  // data
   if (elemCount > 0) {
-    ifs.read((char*)(&t[0]), std::streamsize(elemCount * sizeof(float)));
+    auto dataBytesCnt = elemCount * sizeof(float);
+    if (t.device() == Device::CPU) {
+      ifs.read((char*)(t.data()), std::streamsize(dataBytesCnt));
+    } else {
+      std::vector<float> hostData(elemCount);
+      ifs.read((char*)(hostData.data()), std::streamsize(dataBytesCnt));
+      t.ops()->copyHostToDevice(t.data(), hostData.data(), dataBytesCnt);
+    }
   }
 }
 

@@ -17,9 +17,7 @@ Tensor Normalize::process(Tensor& input) const {
   Tensor ret = Tensor::shape(input.shape());
   auto& src = input.data();
   auto& dst = ret.data();
-  for (int32_t j = 0; j < src.size(); j++) {
-    dst[j] = (src[j] - mean_) / std_;
-  }
+  dst = (src - mean_) / std_;
   return ret;
 }
 

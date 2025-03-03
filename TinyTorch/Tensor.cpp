@@ -179,6 +179,8 @@ void Tensor::operator/=(const float &other) {
 
 Tensor Tensor::sin() const { return Function::sin(*this); }
 
+Tensor Tensor::cos() const { return Function::cos(*this); }
+
 Tensor Tensor::pow(const float &exp) const { return Function::pow(*this, exp); }
 
 Tensor Tensor::pow(const Tensor &exp) const {
@@ -195,14 +197,10 @@ Tensor Tensor::unsqueeze(int32_t dim) const {
   return Function::unsqueeze(*this, dim);
 }
 
-Tensor::Tensor(const TensorImpl &data) : data_(std::make_shared<TensorImpl>()) {
-  *data_ = data;
-}
-
-Tensor::Tensor(const TensorImpl &&data, bool requiresGrad,
+Tensor::Tensor(TensorImpl &&data, bool requiresGrad,
                const std::shared_ptr<Function> &gradFunc)
     : data_(std::make_shared<TensorImpl>()) {
-  *data_ = data;
+  *data_ = std::move(data);
   initAutograd(requiresGrad, gradFunc);
 }
 
@@ -235,7 +233,8 @@ void Tensor::setGrad(const Tensor &grad) {
 
 void Tensor::zeroGrad() {
   if (requiresGrad_) {
-    *gradMeta_->grad_.data_ = TensorImpl::zeros(data_->shape());
+    *gradMeta_->grad_.data_ =
+        TensorImpl::zeros(data_->shape(), data_->device());
   }
 }
 
@@ -245,7 +244,8 @@ void Tensor::initAutograd(bool requiresGrad,
   if (requiresGrad_) {
     gradMeta_ = std::make_shared<AutogradMeta>();
     gradMeta_->setGradFunc(gradFunc);
-    *gradMeta_->grad_.data_ = TensorImpl::zeros(data_->shape());
+    *gradMeta_->grad_.data_ =
+        TensorImpl::zeros(data_->shape(), data_->device());
 
     if (isLeaf()) {
       gradMeta_->gradLeaf_ = std::make_shared<FuncLeaf>();
@@ -283,7 +283,7 @@ void AutogradMeta::backward(const Tensor &grad) {
   }
 
   if (grad.empty()) {
-    if (!grad_.data_->isScalar()) {
+    if (grad_.data_->dim() != 0) {
       LOGE("error call backward: input grad must not be omitted");
       return;
     }
@@ -299,7 +299,8 @@ void AutogradMeta::backward(const Tensor &grad) {
   }
 
   std::unordered_map<std::shared_ptr<Function>, TensorImpl> inputs = {
-      {gradFunc_, grad.empty() ? TensorImpl::scalar(1.f) : *grad.data_}};
+      {gradFunc_,
+       grad.empty() ? TensorImpl::scalar(1.f, grad_.device()) : *grad.data_}};
   for (auto &currFunc : backwardGraph_) {
     auto outputs = currFunc->callBackward(inputs[currFunc]);
 

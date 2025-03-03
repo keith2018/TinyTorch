@@ -7,42 +7,49 @@
 #include "Allocator.h"
 
 #include <cassert>
-#include <cstdlib>
 
 #include "Logger.h"
+
+#define ALLOC_ROUND(x) (((x) + 511) & ~511)  // 512 bytes
 
 namespace TinyTorch {
 
 CachedAllocator::CachedAllocator(size_t maxCacheSize)
-    : maxCacheSize_(maxCacheSize), currentCacheSize_(0) {}
+    : cacheEnabled_(maxCacheSize > 0),
+      base_(nullptr),
+      maxCacheSize_(maxCacheSize),
+      currentCacheSize_(0) {}
 
-CachedAllocator::~CachedAllocator() {
-  CachedAllocator::clear();
-  for (auto& pair : allocatedList_) {
-    std::free(pair.first);
+CachedAllocator::~CachedAllocator() { CachedAllocator::clear(); }
+
+void CachedAllocator::allocate(void** ptr, size_t size) {
+  if (!cacheEnabled_) {
+    base_->allocate(ptr, size);
+    return;
   }
-}
-
-void* CachedAllocator::malloc(size_t size) {
+  size = ALLOC_ROUND(size);
   auto it = freedList_.find(size);
   if (it != freedList_.end() && !it->second.empty()) {
-    void* ptr = it->second.front();
+    *ptr = it->second.front();
     it->second.pop_front();
-    allocatedList_[ptr] = size;
+    allocatedList_[*ptr] = size;
     currentCacheSize_ -= size;
-    return ptr;
+    return;
   }
 
-  void* ptr = std::malloc(size);
-  if (ptr) {
-    allocatedList_[ptr] = size;
+  base_->allocate(ptr, size);
+  if (*ptr) {
+    allocatedList_[*ptr] = size;
   } else {
-    LOGE("std::malloc failed with size: %lld", size);
+    LOGE("base_.allocate failed with size: %lld", size);
   }
-  return ptr;
 }
 
-void CachedAllocator::free(void* ptr) {
+void CachedAllocator::deallocate(void* ptr) {
+  if (!cacheEnabled_) {
+    base_->deallocate(ptr);
+    return;
+  }
   auto it = allocatedList_.find(ptr);
   if (it != allocatedList_.end()) {
     size_t size = it->second;
@@ -60,9 +67,10 @@ void CachedAllocator::clear() {
   assert(allocatedList_.empty());
   for (auto& pair : freedList_) {
     for (void* ptr : pair.second) {
-      std::free(ptr);
+      base_->deallocate(ptr);
     }
   }
+  freedList_.clear();
 }
 
 void CachedAllocator::shrink() {
@@ -71,7 +79,7 @@ void CachedAllocator::shrink() {
     if (!it->second.empty()) {
       void* ptr = it->second.front();
       it->second.pop_front();
-      std::free(ptr);
+      base_->deallocate(ptr);
       currentCacheSize_ -= it->first;
 
       if (it->second.empty()) {

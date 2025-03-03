@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <optional>
+
 #include "Optimizer.h"
 
 namespace TinyTorch::optim::lr_scheduler {

@@ -21,7 +21,9 @@ enum FunctionType {
   Function_Mul,
   Function_Div,
   Function_Sin,
+  Function_Cos,
   Function_Pow,
+  Function_PowScalar,
   Function_Sum,
   Function_Relu,
   Function_Flatten,
@@ -51,6 +53,7 @@ class Function : public std::enable_shared_from_this<Function> {
   static Tensor mul(const Tensor& a, const Tensor& b);
   static Tensor div(const Tensor& a, const Tensor& b);
   static Tensor sin(const Tensor& a);
+  static Tensor cos(const Tensor& a);
   static Tensor pow(const Tensor& a, const float& b);
   static Tensor pow(const Tensor& a, const Tensor& b);
   static Tensor sum(const Tensor& a);
@@ -167,9 +170,23 @@ class FuncSin : public Function {
   DEFINE_FUNCTION_MEMBERS(Function_Sin)
 };
 
+class FuncCos : public Function {
+ public:
+  DEFINE_FUNCTION_MEMBERS(Function_Cos)
+};
+
 class FuncPow : public Function {
  public:
   DEFINE_FUNCTION_MEMBERS(Function_Pow)
+};
+
+class FuncPowScalar : public Function {
+ public:
+  explicit FuncPowScalar(float exp) : exp_(exp) {}
+  DEFINE_FUNCTION_MEMBERS(Function_PowScalar)
+
+ private:
+  float exp_;
 };
 
 class FuncSum : public Function {

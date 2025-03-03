@@ -45,8 +45,8 @@ void demo_module() {
   }
 
   auto* linearLayer = dynamic_cast<nn::Linear*>(&model[0]);
-  auto& biasData = linearLayer->bias().data();
-  auto& weightData = linearLayer->weights().data();
+  auto biasData = linearLayer->bias().data().toList();
+  auto weightData = linearLayer->weights().data().toList();
   LOGD("Result: y = %f + %f x + %f x^2 + %f x^3", biasData[0], weightData[0],
        weightData[1], weightData[2]);
 

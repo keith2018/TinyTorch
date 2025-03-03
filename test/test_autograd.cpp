@@ -18,17 +18,19 @@ TEST(TEST_Autograd, backward_01) {
   Tensor grad({0.4948f, 0.8746f, 0.7076f});
   y.backward(grad);
 
-  auto &x1_grad = x1.getGrad().data();
-  EXPECT_THAT(x1_grad.shape(), ElementsAre(3));
-  EXPECT_FLOAT_NEAR(x1_grad[0], 0.654671);
-  EXPECT_FLOAT_NEAR(x1_grad[1], 1.161678);
-  EXPECT_FLOAT_NEAR(x1_grad[2], 1.371612);
+  auto &x1Grad = x1.getGrad().data();
+  auto x1GradData = x1Grad.toList();
+  EXPECT_THAT(x1Grad.shape(), ElementsAre(3));
+  EXPECT_FLOAT_NEAR(x1GradData[0], 0.654671);
+  EXPECT_FLOAT_NEAR(x1GradData[1], 1.161678);
+  EXPECT_FLOAT_NEAR(x1GradData[2], 1.371612);
 
-  auto &x2_grad = x2.getGrad().data();
-  EXPECT_THAT(x2_grad.shape(), ElementsAre(3));
-  EXPECT_FLOAT_NEAR(x2_grad[0], 0.006927);
-  EXPECT_FLOAT_NEAR(x2_grad[1], 0.504907);
-  EXPECT_FLOAT_NEAR(x2_grad[2], 0.033186);
+  auto &x2Grad = x2.getGrad().data();
+  auto x2GradData = x2Grad.toList();
+  EXPECT_THAT(x2Grad.shape(), ElementsAre(3));
+  EXPECT_FLOAT_NEAR(x2GradData[0], 0.006927);
+  EXPECT_FLOAT_NEAR(x2GradData[1], 0.504907);
+  EXPECT_FLOAT_NEAR(x2GradData[2], 0.033186);
 }
 
 TEST(TEST_Autograd, backward_02) {
@@ -37,7 +39,7 @@ TEST(TEST_Autograd, backward_02) {
   y.backward();
   auto &grad = x.getGrad().data();
   EXPECT_THAT(grad.shape(), ElementsAre(2, 2));
-  EXPECT_THAT(grad.toArray(), ElementsAre(2, -2, 2, 2));
+  EXPECT_THAT(grad.toList(), ElementsAre(2, -2, 2, 2));
 }
 
 TEST(TEST_Autograd, backward_03) {
@@ -53,11 +55,11 @@ TEST(TEST_Autograd, backward_03) {
 
   auto &gradA = a.getGrad().data();
   EXPECT_THAT(gradA.shape(), ElementsAre(1));
-  EXPECT_FLOAT_NEAR(gradA.toArray()[0], 299.9999389);
+  EXPECT_FLOAT_NEAR(gradA.item(), 300.f);
 
   auto &gradB = b.getGrad().data();
   EXPECT_THAT(gradB.shape(), ElementsAre(1));
-  EXPECT_FLOAT_NEAR(gradB.toArray()[0], 1278.8518);
+  EXPECT_FLOAT_NEAR(gradB.item(), 1278.851);
 }
 
 TEST(TEST_Autograd, backward_04) {
@@ -69,7 +71,7 @@ TEST(TEST_Autograd, backward_04) {
 
   auto grad = a.getGrad().data();
   EXPECT_THAT(grad.shape(), ElementsAre(1));
-  EXPECT_THAT(grad.toArray(), ElementsAre(18.6));
+  EXPECT_THAT(grad.toList(), ElementsAre(18.6));
 
   const float learningRate = 0.1f;
   withNoGrad {
@@ -81,7 +83,7 @@ TEST(TEST_Autograd, backward_04) {
 
   grad = a.getGrad().data();
   EXPECT_THAT(grad.shape(), ElementsAre(1));
-  EXPECT_THAT(grad.toArray(), ElementsAre(-4.464));
+  EXPECT_THAT(grad.toList(), ElementsAre(-4.464));
 }
 
 TEST(TEST_Autograd, backward_flatten) {
@@ -93,7 +95,7 @@ TEST(TEST_Autograd, backward_flatten) {
   auto &grad1 = x1.getGrad().data();
   auto &grad2 = x2.getGrad().data();
 
-  EXPECT_THAT(y.data().toArray(), ElementsAre(1, 4, 9, 16));
-  EXPECT_THAT(grad1.toArray(), ElementsAre(1, 2, 3, 4));
-  EXPECT_THAT(grad2.toArray(), ElementsAre(1, 2, 3, 4));
+  EXPECT_THAT(y.data().toList(), ElementsAre(1, 4, 9, 16));
+  EXPECT_THAT(grad1.toList(), ElementsAre(1, 2, 3, 4));
+  EXPECT_THAT(grad2.toList(), ElementsAre(1, 2, 3, 4));
 }
