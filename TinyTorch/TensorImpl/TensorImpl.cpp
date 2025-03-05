@@ -162,7 +162,7 @@ void TensorImpl::initData(const float *ptr, Device device) {
 }
 
 void TensorImpl::cow() {
-  if (storage_ && !storage_.unique()) {
+  if (storage_ && storage_.use_count() > 1) {
     auto oldData = data_;
     storage_ = std::make_shared<Storage>(sizeof(float) * elemCount_, device_);
     data_ = storage_->data_;
@@ -319,7 +319,6 @@ void TensorImpl::to_(Device device) {
     return;
   }
   auto oldStorage = storage_;
-  auto oldOps = ops_;
   auto oldData = data_;
 
   device_ = device;
@@ -327,7 +326,8 @@ void TensorImpl::to_(Device device) {
 
   if (!empty()) {
     if (device == Device::CPU) {
-      oldOps->copyDeviceToHost(data_, oldData, elemCount_ * sizeof(float));
+      oldStorage->ops_->copyDeviceToHost(data_, oldData,
+                                         elemCount_ * sizeof(float));
     } else {
       ops_->copyHostToDevice(data_, oldData, elemCount_ * sizeof(float));
     }
