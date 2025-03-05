@@ -52,6 +52,14 @@ static std::string printArray(const std::vector<T>& vec, bool full) {
   return oss.str();
 }
 
+void print(const TensorImpl& tensor, bool full) {
+  std::ostringstream oss;
+  oss << "TensorImpl { shape: " << printArray(tensor.shape(), false);
+  oss << ", data: " << printArray(tensor.toList(), full);
+  oss << " }";
+  LOGD("%s", oss.str().c_str());
+}
+
 void print(const Tensor& tensor, bool full) {
   std::ostringstream oss;
   oss << "Tensor { shape: " << printArray(tensor.shape(), false);
@@ -60,6 +68,7 @@ void print(const Tensor& tensor, bool full) {
     oss << ", gradFunc: " << tensor.getGradFunc()->typeString();
   }
   oss << ", data: " << printArray(tensor.data().toList(), full);
+  oss << " }";
   LOGD("%s", oss.str().c_str());
 }
 

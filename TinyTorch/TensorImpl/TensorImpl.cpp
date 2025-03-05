@@ -40,25 +40,52 @@ namespace TinyTorch {
     }                                                                 \
   } while (0)
 
-TensorImpl::~TensorImpl() { dispose(); }
-
-TensorImpl::TensorImpl(const TensorImpl &other) {
-  dispose();
-  initMeta(other);
-  initData(other.data_, other.device_);
+Storage::Storage(size_t nbytes, Device device) {
+  nbytes_ = nbytes;
+  ops_ = getOps(device);
+  if (ops_ == nullptr) {
+    TensorOperations::error(__FUNCTION__, TensorError_InvalidDevice);
+  } else {
+    ops_->allocate(reinterpret_cast<void **>(&data_), nbytes);
+  }
 }
+
+Storage::~Storage() {
+  if (ops_ && data_) {
+    ops_->deallocate(data_);
+    data_ = nullptr;
+  }
+}
+
+TensorOperations *Storage::getOps(Device device) {
+#ifdef USE_CUDA
+  static auto opsCUDA_ = std::make_shared<TensorOpsCUDA>();
+#endif
+  static auto opsCPU_ = std::make_shared<TensorOpsCPU>();
+  switch (device) {
+    case Device::CUDA:
+#ifdef USE_CUDA
+      return opsCUDA_.get();
+#else
+      LOGE("getOps error: cuda not support");
+      return nullptr;
+#endif
+    default:
+      break;
+  }
+  return opsCPU_.get();
+}
+
+TensorImpl::TensorImpl(const TensorImpl &other) { shareFrom(other); }
 
 TensorImpl::TensorImpl(TensorImpl &&other) noexcept {
   moveFrom(std::move(other));
 }
 
 TensorImpl &TensorImpl::operator=(const TensorImpl &other) {
-  if (this == &other) {
-    return *this;
+  if (this != &other) {
+    shareFrom(other);
   }
-  dispose();
-  initMeta(other);
-  initData(other.data_, other.device_);
   return *this;
 }
 
@@ -66,7 +93,6 @@ TensorImpl &TensorImpl::operator=(TensorImpl &&other) noexcept {
   if (this == &other) {
     return *this;
   }
-  dispose();
   moveFrom(std::move(other));
   return *this;
 }
@@ -112,10 +138,6 @@ void TensorImpl::initMeta() {
     strides_[dim] = elemCount_;
     elemCount_ *= shape_[dim];
   }
-  ops_ = getOps(device_);
-  if (ops_ == nullptr) {
-    TensorOperations::error(__FUNCTION__, TensorError_InvalidDevice);
-  }
 }
 
 void TensorImpl::initMeta(const TensorImpl &other) {
@@ -123,40 +145,59 @@ void TensorImpl::initMeta(const TensorImpl &other) {
   elemCount_ = other.elemCount_;
   shape_ = other.shape_;
   strides_ = other.strides_;
+
   device_ = other.device_;
-  ops_ = other.ops_;
 }
 
 void TensorImpl::initData(const float *ptr, Device device) {
-  if (!ops_) {
+  if (elemCount_ == 0) {
     return;
   }
-  ops_->allocate((void **)&data_, sizeof(float) * elemCount_);
+  storage_ = std::make_shared<Storage>(sizeof(float) * elemCount_, device_);
+  data_ = storage_->data_;
+  ops_ = storage_->ops_;
   if (ptr) {
-    copyToDevice(data_, ptr, elemCount_ * sizeof(float), device);
+    copyToDevice(data_, ptr, storage_->nbytes_, device);
   }
 }
 
-void TensorImpl::dispose() {
-  if (ops_ && data_) {
-    ops_->deallocate(data_);
-    data_ = nullptr;
+void TensorImpl::cow() {
+  if (storage_ && !storage_.unique()) {
+    auto oldData = data_;
+    storage_ = std::make_shared<Storage>(sizeof(float) * elemCount_, device_);
+    data_ = storage_->data_;
+    ops_ = storage_->ops_;
+    ops_->copyOnDevice(data_, oldData, storage_->nbytes_);
   }
+}
+
+void TensorImpl::shareFrom(const TensorImpl &other) {
+  dimCount_ = other.dimCount_;
+  elemCount_ = other.elemCount_;
+  shape_ = other.shape_;
+  strides_ = other.strides_;
+
+  data_ = other.data_;
+  device_ = other.device_;
+  ops_ = other.ops_;
+  storage_ = other.storage_;
 }
 
 void TensorImpl::moveFrom(TensorImpl &&other) {
   dimCount_ = other.dimCount_;
   elemCount_ = other.elemCount_;
-  device_ = other.device_;
-  data_ = other.data_;
-
   shape_ = std::move(other.shape_);
   strides_ = std::move(other.strides_);
+
+  data_ = other.data_;
+  device_ = other.device_;
   ops_ = other.ops_;
+  storage_ = std::move(other.storage_);
 
   other.dimCount_ = 0;
   other.elemCount_ = 0;
   other.data_ = nullptr;
+  other.ops_ = nullptr;
 }
 
 void TensorImpl::copyToDevice(void *dst, const void *src, size_t count,
@@ -166,24 +207,6 @@ void TensorImpl::copyToDevice(void *dst, const void *src, size_t count,
   } else {
     ops_->copyOnDevice(dst, src, count);
   }
-}
-
-TensorOperations *TensorImpl::getOps(Device device) {
-#ifdef USE_CUDA
-  static auto opsCUDA_ = std::make_shared<TensorOpsCUDA>();
-#endif
-  static auto opsCPU_ = std::make_shared<TensorOpsCPU>();
-  switch (device) {
-    case Device::CUDA:
-#ifdef USE_CUDA
-      return opsCUDA_.get();
-#else
-      return nullptr;
-#endif
-    default:
-      break;
-  }
-  return opsCPU_.get();
 }
 
 TensorImpl TensorImpl::shape(const Shape &s, Device device) {
@@ -278,10 +301,9 @@ TensorImpl TensorImpl::to(Device device) {
   ret.shape_ = shape_;
   ret.strides_ = strides_;
   ret.device_ = device;
-  ret.ops_ = getOps(device);
+  ret.initData();
 
   if (!empty()) {
-    ret.ops_->allocate((void **)&ret.data_, sizeof(float) * elemCount_);
     if (device == Device::CPU) {
       ops_->copyDeviceToHost(ret.data_, data_, elemCount_ * sizeof(float));
     } else {
@@ -296,19 +318,19 @@ void TensorImpl::to_(Device device) {
   if (device_ == device) {
     return;
   }
+  auto oldStorage = storage_;
   auto oldOps = ops_;
   auto oldData = data_;
 
   device_ = device;
-  ops_ = getOps(device);
+  initData();
+
   if (!empty()) {
-    ops_->allocate((void **)&data_, sizeof(float) * elemCount_);
     if (device == Device::CPU) {
       oldOps->copyDeviceToHost(data_, oldData, elemCount_ * sizeof(float));
     } else {
       ops_->copyHostToDevice(data_, oldData, elemCount_ * sizeof(float));
     }
-    oldOps->deallocate(oldData);
   }
 }
 
@@ -339,13 +361,13 @@ float TensorImpl::item() const {
   return 0.f;
 }
 
-TensorImpl TensorImpl::reshape(const Shape &shape) {
+void TensorImpl::reshape_(const Shape &shape) {
   // set scalar
   if (shape.empty() && elemCount_ == 1) {
     dimCount_ = 0;
     shape_.clear();
     strides_.clear();
-    return *this;
+    return;
   }
 
   shape_.resize(shape.size());
@@ -356,7 +378,7 @@ TensorImpl TensorImpl::reshape(const Shape &shape) {
     if (shape[i] == -1) {
       if (inferredIdx >= 0) {
         TensorOperations::error(__FUNCTION__, TensorError_InvalidShape);
-        return *this;
+        return;
       }
       inferredIdx = i;
       shape_[i] = 0;
@@ -370,18 +392,11 @@ TensorImpl TensorImpl::reshape(const Shape &shape) {
   }
 
   initMeta();
-  return *this;
 }
 
 TensorImpl TensorImpl::reshape(const TensorImpl &t, const Shape &shape) {
   TensorImpl ret = t;
-  ret.reshape(shape);
-  return ret;
-}
-
-TensorImpl TensorImpl::reshape(const Shape &shape) const {
-  TensorImpl ret = *this;
-  ret.reshape(shape);
+  ret.reshape_(shape);
   return ret;
 }
 
@@ -402,7 +417,7 @@ void TensorImpl::flatten_(int32_t startDim, int32_t endDim) {
     retShape.push_back(shape_[i]);
   }
 
-  reshape(retShape);
+  reshape_(retShape);
 }
 
 TensorImpl TensorImpl::flatten(const TensorImpl &t, int32_t startDim,
@@ -440,7 +455,7 @@ void TensorImpl::unflatten_(int32_t dim, const std::vector<int32_t> &sizes) {
   for (int32_t i = dim + 1; i < dimCount_; i++) {
     retShape.push_back(shape_[i]);
   }
-  reshape(retShape);
+  reshape_(retShape);
 }
 
 TensorImpl TensorImpl::unflatten(const TensorImpl &t, int32_t dim,
@@ -472,7 +487,7 @@ void TensorImpl::squeeze_(int32_t dim) {
       }
     }
   }
-  reshape(retShape);
+  reshape_(retShape);
 }
 
 void TensorImpl::squeeze_(const std::vector<int32_t> &dims) {
@@ -510,7 +525,7 @@ void TensorImpl::unsqueeze_(int32_t dim) {
   for (int32_t i = dim; i < dimCount_; i++) {
     retShape.push_back(shape_[i]);
   }
-  reshape(retShape);
+  reshape_(retShape);
 }
 
 TensorImpl TensorImpl::unsqueeze(const TensorImpl &t, int32_t dim) {
@@ -519,9 +534,13 @@ TensorImpl TensorImpl::unsqueeze(const TensorImpl &t, int32_t dim) {
   return ret;
 }
 
-void TensorImpl::fill_(float value) { ops_->fillConstant_(*this, value); }
+void TensorImpl::fill_(float value) {
+  cow();
+  ops_->fillConstant_(*this, value);
+}
 
 void TensorImpl::fillUniform_(float min, float max) {
+  cow();
   ops_->fillRandUniform_(*this, min, max);
 }
 
@@ -597,6 +616,7 @@ void TensorImpl::operator+=(const TensorImpl &other) {
   TENSOR_CHECK_EMPTY_RET(*this, );
   TENSOR_CHECK_EMPTY_RET(other, );
   TENSOR_CHECK_DEVICE_RET(*this, other, );
+  cow();
   ops_->add_(*this, other);
 }
 
@@ -604,6 +624,7 @@ void TensorImpl::operator-=(const TensorImpl &other) {
   TENSOR_CHECK_EMPTY_RET(*this, );
   TENSOR_CHECK_EMPTY_RET(other, );
   TENSOR_CHECK_DEVICE_RET(*this, other, );
+  cow();
   ops_->sub_(*this, other);
 }
 
@@ -611,6 +632,7 @@ void TensorImpl::operator*=(const TensorImpl &other) {
   TENSOR_CHECK_EMPTY_RET(*this, );
   TENSOR_CHECK_EMPTY_RET(other, );
   TENSOR_CHECK_DEVICE_RET(*this, other, );
+  cow();
   ops_->mul_(*this, other);
 }
 
@@ -618,26 +640,31 @@ void TensorImpl::operator/=(const TensorImpl &other) {
   TENSOR_CHECK_EMPTY_RET(*this, );
   TENSOR_CHECK_EMPTY_RET(other, );
   TENSOR_CHECK_DEVICE_RET(*this, other, );
+  cow();
   ops_->div_(*this, other);
 }
 
 void TensorImpl::operator+=(const float &other) {
   TENSOR_CHECK_EMPTY_RET(*this, );
+  cow();
   ops_->add_(*this, other);
 }
 
 void TensorImpl::operator-=(const float &other) {
   TENSOR_CHECK_EMPTY_RET(*this, );
+  cow();
   ops_->sub_(*this, other);
 }
 
 void TensorImpl::operator*=(const float &other) {
   TENSOR_CHECK_EMPTY_RET(*this, );
+  cow();
   ops_->mul_(*this, other);
 }
 
 void TensorImpl::operator/=(const float &other) {
   TENSOR_CHECK_EMPTY_RET(*this, );
+  cow();
   ops_->div_(*this, other);
 }
 
@@ -655,74 +682,68 @@ TensorImpl TensorImpl::pow(const float &other) const {
 
 void TensorImpl::sin_() {
   TENSOR_CHECK_EMPTY_RET(*this, );
+  cow();
   ops_->sin_(*this);
 }
 
 void TensorImpl::cos_() {
   TENSOR_CHECK_EMPTY_RET(*this, );
+  cow();
   ops_->cos_(*this);
 }
 
 void TensorImpl::sqrt_() {
   TENSOR_CHECK_EMPTY_RET(*this, );
+  cow();
   ops_->sqrt_(*this);
 }
 
 void TensorImpl::tanh_() {
   TENSOR_CHECK_EMPTY_RET(*this, );
+  cow();
   ops_->tanh_(*this);
 }
 
 void TensorImpl::exp_() {
   TENSOR_CHECK_EMPTY_RET(*this, );
+  cow();
   ops_->exp_(*this);
 }
 
 void TensorImpl::log_() {
   TENSOR_CHECK_EMPTY_RET(*this, );
+  cow();
   ops_->log_(*this);
 }
 
 TensorImpl TensorImpl::sin(const TensorImpl &t) {
   TENSOR_CHECK_EMPTY_RET(t, {});
-  auto ret = t;
-  ret.sin_();
-  return ret;
+  return t.ops_->sin(t);
 }
 
 TensorImpl TensorImpl::cos(const TensorImpl &t) {
   TENSOR_CHECK_EMPTY_RET(t, {});
-  auto ret = t;
-  ret.cos_();
-  return ret;
+  return t.ops_->cos(t);
 }
 
 TensorImpl TensorImpl::sqrt(const TensorImpl &t) {
   TENSOR_CHECK_EMPTY_RET(t, {});
-  auto ret = t;
-  ret.sqrt_();
-  return ret;
+  return t.ops_->sqrt(t);
 }
 
 TensorImpl TensorImpl::tanh(const TensorImpl &t) {
   TENSOR_CHECK_EMPTY_RET(t, {});
-  auto ret = t;
-  ret.tanh_();
-  return ret;
+  return t.ops_->tanh(t);
 }
 
 TensorImpl TensorImpl::exp(const TensorImpl &t) {
   TENSOR_CHECK_EMPTY_RET(t, {});
-  auto ret = t;
-  ret.exp_();
-  return ret;
+  return t.ops_->exp(t);
 }
 
 TensorImpl TensorImpl::log(const TensorImpl &t) {
   TENSOR_CHECK_EMPTY_RET(t, {});
-  auto ret = t;
-  ret.log_();
-  return ret;
+  return t.ops_->log(t);
 }
 
 TensorImpl TensorImpl::operator<(const TensorImpl &other) const {
@@ -813,38 +834,35 @@ TensorImpl TensorImpl::minimum(const TensorImpl &a, const TensorImpl &b) {
 
 void TensorImpl::clampMin_(float min) {
   TENSOR_CHECK_EMPTY_RET(*this, );
+  cow();
   ops_->clampMin_(*this, min);
 }
 
 void TensorImpl::clampMax_(float max) {
   TENSOR_CHECK_EMPTY_RET(*this, );
+  cow();
   ops_->clampMax_(*this, max);
 }
 
 void TensorImpl::clamp_(float min, float max) {
   TENSOR_CHECK_EMPTY_RET(*this, );
+  cow();
   ops_->clamp_(*this, min, max);
 }
 
 TensorImpl TensorImpl::clampMin(const TensorImpl &t, float min) {
   TENSOR_CHECK_EMPTY_RET(t, {});
-  TensorImpl ret = t;
-  ret.clampMin_(min);
-  return ret;
+  return t.ops_->clampMin(t, min);
 }
 
 TensorImpl TensorImpl::clampMax(const TensorImpl &t, float max) {
   TENSOR_CHECK_EMPTY_RET(t, {});
-  TensorImpl ret = t;
-  ret.clampMax_(max);
-  return ret;
+  return t.ops_->clampMax(t, max);
 }
 
 TensorImpl TensorImpl::clamp(const TensorImpl &t, float min, float max) {
   TENSOR_CHECK_EMPTY_RET(t, {});
-  TensorImpl ret = t;
-  ret.clamp_(min, max);
-  return ret;
+  return t.ops_->clamp(t, min, max);
 }
 
 TensorImpl TensorImpl::min(const TensorImpl &t) {
@@ -980,9 +998,14 @@ void TensorImpl::t_() {
 
 TensorImpl TensorImpl::t(const TensorImpl &t) {
   TENSOR_CHECK_EMPTY_RET(t, {});
-  TensorImpl ret = t;
-  ret.t_();
-  return ret;
+  if (t.dimCount_ < 2) {
+    return {};
+  }
+  if (t.dimCount_ > 2) {
+    TensorOperations::error(__FUNCTION__, TensorError_InvalidShape);
+    return {};
+  }
+  return transpose(t, 0, 1);
 }
 
 TensorImpl TensorImpl::permute(const std::vector<int32_t> &dims) const {
@@ -1034,10 +1057,11 @@ TensorImpl TensorImpl::index(const std::vector<int32_t> &indices) const {
   return retTensor;
 }
 
-TensorImpl TensorImpl::index(const std::vector<TensorImpl> &indices) const {
+TensorImpl TensorImpl::index(
+    const std::vector<std::reference_wrapper<TensorImpl>> &indices) const {
   TENSOR_CHECK_EMPTY_RET(*this, {});
   for (auto &t : indices) {
-    if (t.device_ != device_) {
+    if (t.get().device_ != device_) {
       TensorOperations::error(__FUNCTION__, TensorError_DeviceNotAligned);
       return {};
     }
@@ -1047,6 +1071,7 @@ TensorImpl TensorImpl::index(const std::vector<TensorImpl> &indices) const {
 
 void TensorImpl::indexPut_(const std::vector<int32_t> &indices, float val) {
   TENSOR_CHECK_EMPTY_RET(*this, );
+  cow();
   auto len = (int32_t)indices.size();
   int32_t dataIdx = 0;
   for (int32_t i = 0; i < len; i++) {
@@ -1060,6 +1085,7 @@ void TensorImpl::indexPut_(const std::vector<int32_t> &indices, float val) {
 void TensorImpl::indexPut_(const std::vector<int32_t> &indices,
                            const TensorImpl &val) {
   TENSOR_CHECK_EMPTY_RET(*this, );
+  cow();
   auto len = (int32_t)indices.size();
   int32_t dataIdx = 0;
   for (int32_t i = 0; i < len; i++) {
@@ -1072,26 +1098,30 @@ void TensorImpl::indexPut_(const std::vector<int32_t> &indices,
                val.device_);
 }
 
-void TensorImpl::indexPut_(const std::vector<TensorImpl> &indices, float val) {
+void TensorImpl::indexPut_(
+    const std::vector<std::reference_wrapper<TensorImpl>> &indices, float val) {
   TENSOR_CHECK_EMPTY_RET(*this, );
   for (auto &t : indices) {
-    if (t.device_ != device_) {
+    if (t.get().device_ != device_) {
       TensorOperations::error(__FUNCTION__, TensorError_DeviceNotAligned);
       return;
     }
   }
+  cow();
   ops_->indexPut_(*this, indices, val);
 }
 
-void TensorImpl::indexPut_(const std::vector<TensorImpl> &indices,
-                           const TensorImpl &val) {
+void TensorImpl::indexPut_(
+    const std::vector<std::reference_wrapper<TensorImpl>> &indices,
+    const TensorImpl &val) {
   TENSOR_CHECK_EMPTY_RET(*this, );
   for (auto &t : indices) {
-    if (t.device_ != device_) {
+    if (t.get().device_ != device_) {
       TensorOperations::error(__FUNCTION__, TensorError_DeviceNotAligned);
       return;
     }
   }
+  cow();
   ops_->indexPut_(*this, indices, val);
 }
 
@@ -1227,16 +1257,16 @@ TensorImpl TensorImpl::matmul(const TensorImpl &a, const TensorImpl &b) {
   } else {
     a.ops_->gemm(retTensor.data_, a.data_, b.data_, m, k, n, false, false);
     if (prependA) {
-      retTensor.reshape({n});
+      retTensor.reshape_({n});
     }
   }
 
   // reduce dimension if necessary
   if (appendB) {
     if (prependA) {
-      retTensor.reshape({});
+      retTensor.reshape_({});
     } else {
-      retTensor.reshape({m});
+      retTensor.reshape_({m});
     }
   }
 

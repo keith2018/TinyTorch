@@ -116,13 +116,13 @@ TEST(TEST_TensorImpl, constructor_3d) {
 
 TEST(TEST_TensorImpl, basic_reshape) {
   TensorImpl x({{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}});
-  auto y = x.reshape({2, 4});
+  auto y = TensorImpl::reshape(x, {2, 4});
   EXPECT_THAT(y.shape(), ElementsAre(2, 4));
 
-  y = x.reshape({2, -1});
+  y = TensorImpl::reshape(x, {2, -1});
   EXPECT_THAT(y.shape(), ElementsAre(2, 4));
 
-  y = x.reshape({-1, 2});
+  y = TensorImpl::reshape(x, {-1, 2});
   EXPECT_THAT(y.shape(), ElementsAre(4, 2));
 }
 
@@ -226,23 +226,30 @@ TEST(TEST_TensorImpl, basic_indexing) {
   EXPECT_TRUE(y.dim() == 0);
   EXPECT_THAT(y.toList(), ElementsAre(5));
 
-  y = x.index({TensorImpl({-1, 0})});
+  auto idx = TensorImpl({-1, 0});
+  y = x.index({idx});
   EXPECT_THAT(y.shape(), ElementsAre(2, 3));
   EXPECT_THAT(y.toList(), ElementsAre(7, 8, 9, 1, 2, 3));
 
-  y = x.index({TensorImpl(Array1d{1})});
+  idx = TensorImpl(Array1d{1});
+  y = x.index({idx});
   EXPECT_THAT(y.shape(), ElementsAre(1, 3));
   EXPECT_THAT(y.toList(), ElementsAre(4, 5, 6));
 
-  y = x.index({TensorImpl({0, 1})});
+  idx = TensorImpl({0, 1});
+  y = x.index({idx});
   EXPECT_THAT(y.shape(), ElementsAre(2, 3));
   EXPECT_THAT(y.toList(), ElementsAre(1, 2, 3, 4, 5, 6));
 
-  y = x.index({TensorImpl({0, 1}), TensorImpl({2, 1})});
+  auto idx1 = TensorImpl({0, 1});
+  auto idx2 = TensorImpl({2, 1});
+  y = x.index({idx1, idx2});
   EXPECT_THAT(y.shape(), ElementsAre(2));
   EXPECT_THAT(y.toList(), ElementsAre(3, 5));
 
-  y = x.index({TensorImpl({-1, 1}), TensorImpl({2, -1})});
+  idx1 = TensorImpl({-1, 1});
+  idx2 = TensorImpl({2, -1});
+  y = x.index({idx1, idx2});
   EXPECT_THAT(y.shape(), ElementsAre(2));
   EXPECT_THAT(y.toList(), ElementsAre(9, 6));
 
@@ -252,11 +259,14 @@ TEST(TEST_TensorImpl, basic_indexing) {
   x.indexPut_(std::vector<int32_t>{1}, TensorImpl({4, 5, 6}));
   EXPECT_THAT(x.toList(), ElementsAre(1, 2, 3, 4, 5, 6, 7, 8, 9));
 
-  x.indexPut_({TensorImpl({-1, 1}), TensorImpl({2, -1})}, -1);
+  idx1 = TensorImpl({-1, 1});
+  idx2 = TensorImpl({2, -1});
+  x.indexPut_({idx1, idx2}, -1);
   EXPECT_THAT(x.toList(), ElementsAre(1, 2, 3, 4, 5, -1, 7, 8, -1));
 
-  x.indexPut_({TensorImpl({-1, 1}), TensorImpl({2, -1})},
-              TensorImpl({1.2, 2.3}));
+  idx1 = TensorImpl({-1, 1});
+  idx2 = TensorImpl({2, -1});
+  x.indexPut_({idx1, idx2}, TensorImpl({1.2, 2.3}));
   EXPECT_THAT(x.toList(), ElementsAre(1, 2, 3, 4, 5, 2.3, 7, 8, 1.2));
 }
 
@@ -296,7 +306,7 @@ TEST(TEST_TensorImpl, basic_permute) {
   EXPECT_THAT(y.toList(), ElementsAre(1, 2, 3, 4, 5, 6));
 
   x = TensorImpl::arange(0, 8);
-  x.reshape({1, 2, 2, 2});
+  x.reshape_({1, 2, 2, 2});
   y = x.permute({0, 3, 1, 2});
   EXPECT_THAT(y.shape(), ElementsAre(1, 2, 2, 2));
   EXPECT_THAT(y.toList(), ElementsAre(0, 2, 4, 6, 1, 3, 5, 7));
@@ -550,7 +560,7 @@ TEST(TEST_TensorImpl, math_var_02) {
                 0.12, 6.78, 3.45, 7.12, 1.56, 4.89, 9.34, 2.67,
                 5.89, 8.23, 0.45, 6.12, 3.78, 7.45, 1.89, 4.23,
                 9.56, 2.12, 5.34, 8.67, 0.78, 6.45, 3.12, 7.78});
-  x = x.reshape({2, 2, 2, 4});
+  x.reshape_({2, 2, 2, 4});
 
   auto y = TensorImpl::var(x, (0), true, true);
   EXPECT_THAT(y.shape(), ElementsAre(1, 2, 2, 4));
@@ -596,7 +606,7 @@ TEST(TEST_TensorImpl, math_argmin_02) {
                 0.12, 6.78, 3.45, 7.12, 1.56, 4.89, 9.34, 2.67,
                 5.89, 8.23, 0.45, 6.12, 3.78, 7.45, 1.89, 4.23,
                 9.56, 2.12, 5.34, 8.67, 0.78, 6.45, 3.12, 7.78});
-  x = x.reshape({2, 2, 2, 4});
+  x.reshape_({2, 2, 2, 4});
   auto y = TensorImpl::argmin(x, (2), true);
   EXPECT_THAT(y.shape(), ElementsAre(2, 2, 1, 4));
   EXPECT_THAT(y.toList(),
@@ -618,9 +628,10 @@ TEST(TEST_TensorImpl, math_argmax_01) {
 }
 
 TEST(TEST_TensorImpl, math_argmax_02) {
-  TensorImpl x({1, 2, 3, 5, 6, 7, 9, 10, 11, 2, 3, 4, 6, 7, 8, 10, 11, 12, 5
-                , 6, 7, 9, 10, 11, 13, 14, 15, 6, 7, 8, 10, 11, 12, 14, 15, 16});
-  x = x.reshape({4, 9});
+  TensorImpl x({1,  2,  3,  5,  6,  7,  9,  10, 11, 2,  3,  4,
+                6,  7,  8,  10, 11, 12, 5,  6,  7,  9,  10, 11,
+                13, 14, 15, 6,  7,  8,  10, 11, 12, 14, 15, 16});
+  x.reshape_({4, 9});
 
   auto y = TensorImpl::argmax(x, 1);
   EXPECT_THAT(y.shape(), ElementsAre(4));
@@ -744,9 +755,12 @@ TEST(TEST_TensorImpl, math_matmul) {
   EXPECT_THAT(y.toList(), ElementsAre(4));
 
   // broadcast
-  auto a = TensorImpl::arange(0, 2 * 2 * 4).reshape({2, 2, 4});
-  auto b = TensorImpl::arange(0, 2 * 2 * 4).reshape({1, 2, 4, 2});
-  auto c = TensorImpl::arange(0, 1 * 2 * 4).reshape({1, 4, 2});
+  auto a = TensorImpl::arange(0, 2 * 2 * 4);
+  a.reshape_({2, 2, 4});
+  auto b = TensorImpl::arange(0, 2 * 2 * 4);
+  b.reshape_({1, 2, 4, 2});
+  auto c = TensorImpl::arange(0, 1 * 2 * 4);
+  c.reshape_({1, 4, 2});
   auto d = TensorImpl::matmul(a, b);
   auto e = TensorImpl::matmul(a, c);
 
@@ -833,7 +847,7 @@ TEST(TEST_TensorImpl, math_broadcast_inplace) {
 TEST(TEST_TensorImpl, basic_im2col_col2im) {
   auto input = TensorImpl(
       {{1, 2, 3, 4}, {5, 6, 7, 8}, {9, 10, 11, 12}, {13, 14, 15, 16}});
-  input.reshape({1, 1, 4, 4});
+  input.reshape_({1, 1, 4, 4});
   auto col = input.im2col(2, 2, 0);
   EXPECT_THAT(col.shape(), ElementsAre(4, 4));
   EXPECT_THAT(col.toList(), ElementsAre(1, 2, 5, 6, 3, 4, 7, 8, 9, 10, 13, 14,

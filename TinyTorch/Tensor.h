@@ -111,9 +111,7 @@ class Tensor {
 
   bool isLeaf() const;
 
-  TensorImpl &data() { return *data_; }
-
-  const TensorImpl &data() const { return *data_; }
+  TensorImpl &data() const { return *data_; }
 
   Tensor &to(Device device) {
     data_->to_(device);

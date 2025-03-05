@@ -310,7 +310,7 @@ void AutogradMeta::backward(const Tensor &grad) {
       if (inputs.find(nextFunc) != inputs.end()) {
         inputs[nextFunc] += outputs[i];
       } else {
-        inputs[nextFunc] = outputs[i];
+        inputs[nextFunc] = std::move(outputs[i]);
       }
     }
   }
