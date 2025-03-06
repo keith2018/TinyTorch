@@ -175,12 +175,6 @@ typedef enum ShapeCompatible_ {
       const std::vector<std::reference_wrapper<TensorImpl>>& indices,          \
       const TensorImpl& val) _T;                                               \
                                                                                \
-  /* stack */                                                                  \
-  _H void stack(                                                               \
-      TensorImpl& ret,                                                         \
-      const std::vector<std::reference_wrapper<TensorImpl>>& tensors,          \
-      int32_t dim) _T;                                                         \
-                                                                               \
   /* im2col */                                                                 \
   _H TensorImpl im2col(const TensorImpl& t, Size2D kernel, Size2D stride,      \
                        Size2D padding) _T;                                     \

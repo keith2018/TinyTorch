@@ -956,22 +956,6 @@ void TensorOpsCUDA::indexPut_(
   CUDA_KERNEL_CHECK();
 }
 
-void TensorOpsCUDA::stack(
-    TensorImpl& ret,
-    const std::vector<std::reference_wrapper<TensorImpl>>& tensors,
-    int32_t dim) {
-  auto ctxRet = getTensorCtx(ret);
-  for (int32_t k = 0; k < tensors.size(); k++) {
-    auto& t = tensors[k].get();
-    for (int32_t i = 0; i < t.elemCount_; i++) {
-      auto ctxT = getTensorCtx(t);
-      kStack<<<getGridSize(t.elemCount_), getBlockSize()>>>(ctxRet, ctxT, dim,
-                                                            k, t.elemCount_);
-      CUDA_KERNEL_CHECK();
-    }
-  }
-}
-
 TensorImpl TensorOpsCUDA::im2col(const TensorImpl& t, Size2D kernel,
                                  Size2D stride, Size2D padding) {
   // this: [C, H, W], [N, C, H, W]

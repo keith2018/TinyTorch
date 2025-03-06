@@ -1157,7 +1157,26 @@ TensorImpl TensorImpl::stack(
   retShape.insert(retShape.begin() + targetDim, (int32_t)tensors.size());
   TensorImpl retTensor = shape(retShape, t0.device_);
 
-  retTensor.ops_->stack(retTensor, tensors, targetDim);
+  int32_t innerSize = 1;
+  for (int32_t i = targetDim; i < t0.dimCount_; i++) {
+    innerSize *= t0.shape_[i];
+  }
+
+  int32_t outerSize = 1;
+  for (int32_t i = 0; i < targetDim; i++) {
+    outerSize *= t0.shape_[i];
+  }
+
+  for (int32_t i = 0; i < tensors.size(); i++) {
+    const TensorImpl &t = tensors[i].get();
+    for (int32_t j = 0; j < outerSize; j++) {
+      float *dest =
+          retTensor.data_ + j * (tensors.size() * innerSize) + i * innerSize;
+      const float *src = t.data_ + j * innerSize;
+      retTensor.ops_->copyOnDevice(dest, src, innerSize * sizeof(float));
+    }
+  }
+
   return retTensor;
 }
 

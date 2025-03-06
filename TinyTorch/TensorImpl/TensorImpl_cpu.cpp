@@ -975,39 +975,6 @@ void TensorOpsCPU::indexPut_(
   }
 }
 
-void TensorOpsCPU::stack(
-    TensorImpl& ret,
-    const std::vector<std::reference_wrapper<TensorImpl>>& tensors,
-    int32_t dim) {
-  static int32_t tIndices[TENSOR_MAX_DIMS];
-  static int32_t retIndices[TENSOR_MAX_DIMS];
-
-  int32_t elemIdx = 0;
-  for (int32_t k = 0; k < tensors.size(); k++) {
-    auto& t = tensors[k].get();
-    for (int32_t index = 0; index < t.elemCount_; index++) {
-      int carry = elemIdx++;
-      for (int32_t j = t.dimCount_ - 1; j >= 0; j--) {
-        tIndices[j] = carry % t.shape_[j];
-        carry /= t.shape_[j];
-      }
-
-      for (int32_t j = 0; j < t.dimCount_; j++) {
-        if (j < dim) {
-          retIndices[j] = tIndices[j];
-        } else {
-          retIndices[j + 1] = tIndices[j];
-        }
-      }
-      retIndices[dim] = k;
-
-      int32_t offsetOld = indicesToOffset(t.strides_, tIndices);
-      int32_t offsetNew = indicesToOffset(ret.strides_, retIndices);
-      ret.data_[offsetNew] = t.data_[offsetOld];
-    }
-  }
-}
-
 TensorImpl TensorOpsCPU::im2col(const TensorImpl& t, Size2D kernel,
                                 Size2D stride, Size2D padding) {
   // this: [C, H, W], [N, C, H, W]

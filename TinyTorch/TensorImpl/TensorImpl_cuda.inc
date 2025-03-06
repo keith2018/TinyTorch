@@ -706,36 +706,6 @@ __global__ void kIndexPut(TensorCudaCtx t, FixedVector<float*> indices,
   }
 }
 
-__global__ void kStack(const TensorCudaCtx ret, const TensorCudaCtx t,
-                       int32_t dim, int32_t k, int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (index < n) {
-    int32_t retIndices[TENSOR_MAX_DIMS];
-    int32_t localTIndices[TENSOR_MAX_DIMS];
-
-    auto carry = (int32_t)index;
-    for (int32_t i = t.dimCount_ - 1; i >= 0; i--) {
-      localTIndices[i] = carry % t.shape_[i];
-      carry /= t.shape_[i];
-    }
-
-    for (int32_t i = 0; i < t.dimCount_; i++) {
-      if (i < dim) {
-        retIndices[i] = localTIndices[i];
-      } else {
-        retIndices[i + 1] = localTIndices[i];
-      }
-    }
-    retIndices[dim] = k;
-
-    int32_t offsetOld =
-        cuIndicesToOffset(t.strides_, localTIndices, t.dimCount_);
-    int32_t offsetNew =
-        cuIndicesToOffset(ret.strides_, retIndices, ret.dimCount_);
-    ret.data_[offsetNew] = t.data_[offsetOld];
-  }
-}
-
 __global__ void kIm2Col(float* ret, const float* t, int32_t batch,
                         int32_t channels, int32_t height, int32_t width,
                         int32_t outH, int32_t outW, int32_t kernelH,
