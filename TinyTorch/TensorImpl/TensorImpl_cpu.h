@@ -80,9 +80,12 @@ class TensorOpsCPU : public TensorOperations {
   static void opPairBroadcast_(TensorImpl &a, const TensorImpl &b);
 
   // reduce
-  static int32_t getReduceIndex(const TensorImpl &t, int32_t idx, int32_t dim);
-  static int32_t getReduceIndex(const TensorImpl &t, int32_t idx,
-                                const FixedVector<uint8_t> &inAxis);
+  static int32_t getReduceSrcIndex(const TensorImpl &ret, const TensorImpl &t,
+                                   int32_t idx, int32_t dim, bool keepDims);
+  static int32_t getReduceDstIndex(const TensorImpl &t, int32_t idx,
+                                   int32_t dim);
+  static int32_t getReduceDstIndex(const TensorImpl &t, int32_t idx,
+                                   const FixedVector<uint8_t> &inAxis);
 
   // index
   static void getSubIndices(

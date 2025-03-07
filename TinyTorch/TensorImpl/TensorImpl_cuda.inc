@@ -187,8 +187,25 @@ __device__ void cuSwap(T& a, T& b) {
   b = c;
 }
 
-__device__ int32_t cuGetReduceIndex(const TensorCudaCtx t, int32_t idx,
-                                    int32_t dim) {
+__device__ int32_t cuGetReduceSrcIndex(const TensorCudaCtx ret,
+                                       const TensorCudaCtx t, int32_t idx,
+                                       int32_t dim, bool keepDims) {
+  int32_t outIndex = idx;
+  int32_t inIndex = 0;
+  for (int32_t d = ret.dimCount_ - 1; d >= 0; d--) {
+    int32_t coord = outIndex % ret.shape_[d];
+    outIndex /= ret.shape_[d];
+    if (keepDims || d < dim) {
+      inIndex += coord * t.strides_[d];
+    } else {
+      inIndex += coord * t.strides_[d + 1];
+    }
+  }
+  return inIndex;
+}
+
+__device__ int32_t cuGetReduceDstIndex(const TensorCudaCtx t, int32_t idx,
+                                       int32_t dim) {
   int32_t retIdx = 0;
   int32_t stride = 1;
   for (int32_t d = t.dimCount_ - 1; d >= 0; d--) {
@@ -200,8 +217,8 @@ __device__ int32_t cuGetReduceIndex(const TensorCudaCtx t, int32_t idx,
   return retIdx;
 }
 
-__device__ int32_t cuGetReduceIndex(const TensorCudaCtx t, int32_t idx,
-                                    const FixedVector<uint8_t> inAxis) {
+__device__ int32_t cuGetReduceDstIndex(const TensorCudaCtx t, int32_t idx,
+                                       const FixedVector<uint8_t> inAxis) {
   int32_t retIdx = 0;
   int32_t stride = 1;
   for (int32_t d = t.dimCount_ - 1; d >= 0; d--) {
@@ -505,28 +522,10 @@ __global__ void kClamp_(float* t, float minVal, float maxVal, int n) {
   }
 }
 
-__global__ void kReduceMin(float* retPtr, const TensorCudaCtx t, int dim,
-                           int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (index < n) {
-    int32_t retIdx = cuGetReduceIndex(t, index, dim);
-    cuAtomicMinFloat(&retPtr[retIdx], t.data_[index]);
-  }
-}
-
 __global__ void kReduceAllMin(float* retPtr, const float* data, int n) {
   unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
     cuAtomicMinFloat(retPtr, data[index]);
-  }
-}
-
-__global__ void kReduceMax(float* retPtr, const TensorCudaCtx t, int dim,
-                           int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (index < n) {
-    int32_t retIdx = cuGetReduceIndex(t, index, dim);
-    cuAtomicMaxFloat(&retPtr[retIdx], t.data_[index]);
   }
 }
 
@@ -537,45 +536,75 @@ __global__ void kReduceAllMax(float* retPtr, const float* data, int n) {
   }
 }
 
-__global__ void kMinValues(float* minValues, const TensorCudaCtx t, int dim,
-                           int n) {
+__global__ void kReduceMin(TensorCudaCtx ret, const TensorCudaCtx t, int dim,
+                           bool keepDims, int n) {
   unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
-    int32_t retIdx = cuGetReduceIndex(t, index, dim);
-    cuAtomicMinFloat(&minValues[retIdx], t.data_[index]);
-  }
-}
-
-__global__ void kReduceArgMin(float* retPtr, const float* minValues,
-                              const TensorCudaCtx t, int dim, int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (index < n) {
-    int32_t retIdx = cuGetReduceIndex(t, index, dim);
-    if (t.data_[index] == minValues[retIdx]) {
-      atomicExch(&retPtr[retIdx],
-                 (float)(index / t.strides_[dim] % t.shape_[dim]));
+    int32_t inIndex = cuGetReduceSrcIndex(ret, t, index, dim, keepDims);
+    float minVal = FLT_MAX;
+    for (int32_t j = 0; j < t.shape_[dim]; j++) {
+      float val = t.data_[inIndex + j * t.strides_[dim]];
+      if (val < minVal) {
+        minVal = val;
+      }
     }
+
+    ret.data_[index] = minVal;
   }
 }
 
-__global__ void kMaxValues(float* maxValues, const TensorCudaCtx t, int dim,
-                           int n) {
+__global__ void kReduceMax(TensorCudaCtx ret, const TensorCudaCtx t, int dim,
+                           bool keepDims, int n) {
   unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
-    int32_t retIdx = cuGetReduceIndex(t, index, dim);
-    cuAtomicMaxFloat(&maxValues[retIdx], t.data_[index]);
-  }
-}
-
-__global__ void kReduceArgMax(float* retPtr, const float* maxValues,
-                              const TensorCudaCtx t, int dim, int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (index < n) {
-    int32_t retIdx = cuGetReduceIndex(t, index, dim);
-    if (t.data_[index] == maxValues[retIdx]) {
-      atomicExch(&retPtr[retIdx],
-                 (float)(index / t.strides_[dim] % t.shape_[dim]));
+    int32_t inIndex = cuGetReduceSrcIndex(ret, t, index, dim, keepDims);
+    float maxVal = -FLT_MAX;
+    for (int32_t j = 0; j < t.shape_[dim]; j++) {
+      float val = t.data_[inIndex + j * t.strides_[dim]];
+      if (val > maxVal) {
+        maxVal = val;
+      }
     }
+
+    ret.data_[index] = maxVal;
+  }
+}
+
+__global__ void kReduceArgMin(TensorCudaCtx ret, const TensorCudaCtx t, int dim,
+                              bool keepDims, int n) {
+  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+  if (index < n) {
+    int32_t inIndex = cuGetReduceSrcIndex(ret, t, index, dim, keepDims);
+    float minVal = FLT_MAX;
+    int32_t minIdx = 0;
+    for (int32_t j = 0; j < t.shape_[dim]; j++) {
+      float val = t.data_[inIndex + j * t.strides_[dim]];
+      if (val < minVal) {
+        minVal = val;
+        minIdx = j;
+      }
+    }
+
+    ret.data_[index] = (float)minIdx;
+  }
+}
+
+__global__ void kReduceArgMax(TensorCudaCtx ret, const TensorCudaCtx t, int dim,
+                              bool keepDims, int n) {
+  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+  if (index < n) {
+    int32_t inIndex = cuGetReduceSrcIndex(ret, t, index, dim, keepDims);
+    float maxVal = -FLT_MAX;
+    int32_t maxIdx = 0;
+    for (int32_t j = 0; j < t.shape_[dim]; j++) {
+      float val = t.data_[inIndex + j * t.strides_[dim]];
+      if (val > maxVal) {
+        maxVal = val;
+        maxIdx = j;
+      }
+    }
+
+    ret.data_[index] = (float)maxIdx;
   }
 }
 
@@ -583,7 +612,7 @@ __global__ void kReduceSum(float* retPtr, const TensorCudaCtx t,
                            const FixedVector<uint8_t> inAxis, int n) {
   unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
-    int32_t retIdx = cuGetReduceIndex(t, index, inAxis);
+    int32_t retIdx = cuGetReduceDstIndex(t, index, inAxis);
     atomicAdd(&retPtr[retIdx], t.data_[index]);
   }
 }
@@ -600,7 +629,7 @@ __global__ void kReduceVar(float* retPtr, const TensorCudaCtx t,
                            const FixedVector<uint8_t> inAxis, int n) {
   unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
-    int32_t retIdx = cuGetReduceIndex(t, index, inAxis);
+    int32_t retIdx = cuGetReduceDstIndex(t, index, inAxis);
     float diff = t.data_[index] - meanValues[retIdx];
     atomicAdd(&retPtr[retIdx], diff * diff);
   }

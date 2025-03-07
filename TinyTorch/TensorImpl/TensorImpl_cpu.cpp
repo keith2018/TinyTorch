@@ -202,8 +202,25 @@ void TensorOpsCPU::opPairBroadcast_(TensorImpl& a, const TensorImpl& b) {
   a = std::move(result);
 }
 
-int32_t TensorOpsCPU::getReduceIndex(const TensorImpl& t, int32_t idx,
-                                     int32_t dim) {
+int32_t TensorOpsCPU::getReduceSrcIndex(const TensorImpl& ret,
+                                        const TensorImpl& t, int32_t idx,
+                                        int32_t dim, bool keepDims) {
+  int32_t outIndex = idx;
+  int32_t inIndex = 0;
+  for (int32_t d = ret.dimCount_ - 1; d >= 0; d--) {
+    int32_t coord = outIndex % ret.shape_[d];
+    outIndex /= ret.shape_[d];
+    if (keepDims || d < dim) {
+      inIndex += coord * t.strides_[d];
+    } else {
+      inIndex += coord * t.strides_[d + 1];
+    }
+  }
+  return inIndex;
+}
+
+int32_t TensorOpsCPU::getReduceDstIndex(const TensorImpl& t, int32_t idx,
+                                        int32_t dim) {
   int32_t retIdx = 0;
   int32_t stride = 1;
   for (int32_t d = t.dimCount_ - 1; d >= 0; d--) {
@@ -215,8 +232,8 @@ int32_t TensorOpsCPU::getReduceIndex(const TensorImpl& t, int32_t idx,
   return retIdx;
 }
 
-int32_t TensorOpsCPU::getReduceIndex(const TensorImpl& t, int32_t idx,
-                                     const FixedVector<uint8_t>& inAxis) {
+int32_t TensorOpsCPU::getReduceDstIndex(const TensorImpl& t, int32_t idx,
+                                        const FixedVector<uint8_t>& inAxis) {
   int32_t retIdx = 0;
   int32_t stride = 1;
   for (int32_t d = t.dimCount_ - 1; d >= 0; d--) {
@@ -706,10 +723,17 @@ TensorImpl TensorOpsCPU::min(const TensorImpl& t, int32_t dim, bool keepDims) {
   auto retShape = getReduceShape(t, dim, keepDims);
   auto ret = TensorImpl::shape(retShape, t.device_);
 
-  fillConstant_(ret, std::numeric_limits<float>::max());
-  for (int32_t i = 0; i < t.elemCount_; i++) {
-    int32_t retIdx = getReduceIndex(t, i, dim);
-    ret.data_[retIdx] = std::min(ret.data_[retIdx], t.data_[i]);
+  for (int32_t i = 0; i < ret.elemCount_; i++) {
+    int32_t inIndex = getReduceSrcIndex(ret, t, i, dim, keepDims);
+    float minVal = std::numeric_limits<float>::max();
+    for (int32_t j = 0; j < t.shape_[dim]; j++) {
+      float val = t.data_[inIndex + j * t.strides_[dim]];
+      if (val < minVal) {
+        minVal = val;
+      }
+    }
+
+    ret.data_[i] = minVal;
   }
   return ret;
 }
@@ -729,10 +753,17 @@ TensorImpl TensorOpsCPU::max(const TensorImpl& t, int32_t dim, bool keepDims) {
   auto retShape = getReduceShape(t, dim, keepDims);
   auto ret = TensorImpl::shape(retShape, t.device_);
 
-  fillConstant_(ret, -std::numeric_limits<float>::max());
-  for (int32_t i = 0; i < t.elemCount_; i++) {
-    int32_t retIdx = getReduceIndex(t, i, dim);
-    ret.data_[retIdx] = std::max(ret.data_[retIdx], t.data_[i]);
+  for (int32_t i = 0; i < ret.elemCount_; i++) {
+    int32_t inIndex = getReduceSrcIndex(ret, t, i, dim, keepDims);
+    float maxVal = -std::numeric_limits<float>::max();
+    for (int32_t j = 0; j < t.shape_[dim]; j++) {
+      float val = t.data_[inIndex + j * t.strides_[dim]];
+      if (val > maxVal) {
+        maxVal = val;
+      }
+    }
+
+    ret.data_[i] = maxVal;
   }
   return ret;
 }
@@ -753,15 +784,19 @@ TensorImpl TensorOpsCPU::argmin(const TensorImpl& t, int32_t dim,
   auto retShape = getReduceShape(t, dim, keepDims);
   auto ret = TensorImpl::shape(retShape, t.device_);
 
-  fillConstant_(ret, 0);
-  std::vector minValues(ret.elemCount_, std::numeric_limits<float>::max());
-
-  for (int32_t i = 0; i < t.elemCount_; i++) {
-    int32_t retIdx = getReduceIndex(t, i, dim);
-    if (t.data_[i] < minValues[retIdx]) {
-      minValues[retIdx] = t.data_[i];
-      ret.data_[retIdx] = (float)(i / t.strides_[dim] % t.shape_[dim]);
+  for (int32_t i = 0; i < ret.elemCount_; i++) {
+    int32_t inIndex = getReduceSrcIndex(ret, t, i, dim, keepDims);
+    float minVal = std::numeric_limits<float>::max();
+    int32_t minIdx = 0;
+    for (int32_t j = 0; j < t.shape_[dim]; j++) {
+      float val = t.data_[inIndex + j * t.strides_[dim]];
+      if (val < minVal) {
+        minVal = val;
+        minIdx = j;
+      }
     }
+
+    ret.data_[i] = static_cast<float>(minIdx);
   }
   return ret;
 }
@@ -782,15 +817,19 @@ TensorImpl TensorOpsCPU::argmax(const TensorImpl& t, int32_t dim,
   auto retShape = getReduceShape(t, dim, keepDims);
   auto ret = TensorImpl::shape(retShape, t.device_);
 
-  fillConstant_(ret, 0);
-  std::vector maxValues(ret.elemCount_, -std::numeric_limits<float>::max());
-
-  for (int32_t i = 0; i < t.elemCount_; i++) {
-    int32_t retIdx = getReduceIndex(t, i, dim);
-    if (t.data_[i] > maxValues[retIdx]) {
-      maxValues[retIdx] = t.data_[i];
-      ret.data_[retIdx] = (float)(i / t.strides_[dim] % t.shape_[dim]);
+  for (int32_t i = 0; i < ret.elemCount_; i++) {
+    int32_t inIndex = getReduceSrcIndex(ret, t, i, dim, keepDims);
+    float maxVal = -std::numeric_limits<float>::max();
+    int32_t maxIdx = 0;
+    for (int32_t j = 0; j < t.shape_[dim]; j++) {
+      float val = t.data_[inIndex + j * t.strides_[dim]];
+      if (val > maxVal) {
+        maxVal = val;
+        maxIdx = j;
+      }
     }
+
+    ret.data_[i] = static_cast<float>(maxIdx);
   }
   return ret;
 }
@@ -820,7 +859,7 @@ TensorImpl TensorOpsCPU::sum(const TensorImpl& t,
   fillConstant_(ret, 0);
 
   for (int32_t i = 0; i < t.elemCount_; i++) {
-    int32_t retIdx = getReduceIndex(t, i, inAxis);
+    int32_t retIdx = getReduceDstIndex(t, i, inAxis);
     ret.data_[retIdx] += t.data_[i];
   }
 
@@ -852,7 +891,7 @@ TensorImpl TensorOpsCPU::mean(const TensorImpl& t,
   fillConstant_(ret, 0);
 
   for (int32_t i = 0; i < t.elemCount_; i++) {
-    int32_t retIdx = getReduceIndex(t, i, inAxis);
+    int32_t retIdx = getReduceDstIndex(t, i, inAxis);
     ret.data_[retIdx] += t.data_[i];
   }
 
@@ -888,7 +927,7 @@ TensorImpl TensorOpsCPU::var(const TensorImpl& t,
   fillConstant_(ret, 0);
 
   for (int32_t i = 0; i < t.elemCount_; i++) {
-    int32_t retIdx = getReduceIndex(t, i, inAxis);
+    int32_t retIdx = getReduceDstIndex(t, i, inAxis);
     float diff = t.data_[i] - meanTensor.data_[retIdx];
     ret.data_[retIdx] += diff * diff;
   }

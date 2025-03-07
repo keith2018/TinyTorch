@@ -685,10 +685,11 @@ TensorImpl TensorOpsCUDA::min(const TensorImpl& t, int32_t dim, bool keepDims) {
   auto retShape = getReduceShape(t, dim, keepDims);
   auto ret = TensorImpl::shape(retShape, t.device_);
 
-  fillConstant_(ret, std::numeric_limits<float>::max());
   auto ctxT = getTensorCtx(t);
-  kReduceMin<<<getGridSize(t.elemCount_), getBlockSize()>>>(ret.data_, ctxT,
-                                                            dim, t.elemCount_);
+  auto ctxRet = getTensorCtx(ret);
+
+  kReduceMin<<<getGridSize(t.elemCount_), getBlockSize()>>>(
+      ctxRet, ctxT, dim, keepDims, ret.elemCount_);
   CUDA_KERNEL_CHECK();
   return ret;
 }
@@ -708,10 +709,11 @@ TensorImpl TensorOpsCUDA::max(const TensorImpl& t, int32_t dim, bool keepDims) {
   auto retShape = getReduceShape(t, dim, keepDims);
   auto ret = TensorImpl::shape(retShape, t.device_);
 
-  fillConstant_(ret, -std::numeric_limits<float>::max());
   auto ctxT = getTensorCtx(t);
-  kReduceMax<<<getGridSize(t.elemCount_), getBlockSize()>>>(ret.data_, ctxT,
-                                                            dim, t.elemCount_);
+  auto ctxRet = getTensorCtx(ret);
+
+  kReduceMax<<<getGridSize(t.elemCount_), getBlockSize()>>>(
+      ctxRet, ctxT, dim, keepDims, ret.elemCount_);
   CUDA_KERNEL_CHECK();
   return ret;
 }
@@ -732,17 +734,11 @@ TensorImpl TensorOpsCUDA::argmin(const TensorImpl& t, int32_t dim,
   auto retShape = getReduceShape(t, dim, keepDims);
   auto ret = TensorImpl::shape(retShape, t.device_);
 
-  fillConstant_(ret, 0);
-  auto minValues = TensorImpl::shape({t.elemCount_}, t.device_);
-  fillConstant_(minValues, std::numeric_limits<float>::max());
   auto ctxT = getTensorCtx(t);
-
-  kMinValues<<<getGridSize(t.elemCount_), getBlockSize()>>>(
-      minValues.data_, ctxT, dim, t.elemCount_);
-  CUDA_KERNEL_CHECK();
+  auto ctxRet = getTensorCtx(ret);
 
   kReduceArgMin<<<getGridSize(t.elemCount_), getBlockSize()>>>(
-      ret.data_, minValues.data_, ctxT, dim, t.elemCount_);
+      ctxRet, ctxT, dim, keepDims, ret.elemCount_);
   CUDA_KERNEL_CHECK();
   return ret;
 }
@@ -763,17 +759,11 @@ TensorImpl TensorOpsCUDA::argmax(const TensorImpl& t, int32_t dim,
   auto retShape = getReduceShape(t, dim, keepDims);
   auto ret = TensorImpl::shape(retShape, t.device_);
 
-  fillConstant_(ret, 0);
-  auto maxValues = TensorImpl::shape({t.elemCount_}, t.device_);
-  fillConstant_(maxValues, -std::numeric_limits<float>::max());
   auto ctxT = getTensorCtx(t);
-
-  kMaxValues<<<getGridSize(t.elemCount_), getBlockSize()>>>(
-      maxValues.data_, ctxT, dim, t.elemCount_);
-  CUDA_KERNEL_CHECK();
+  auto ctxRet = getTensorCtx(ret);
 
   kReduceArgMax<<<getGridSize(t.elemCount_), getBlockSize()>>>(
-      ret.data_, maxValues.data_, ctxT, dim, t.elemCount_);
+      ctxRet, ctxT, dim, keepDims, ret.elemCount_);
   CUDA_KERNEL_CHECK();
   return ret;
 }
