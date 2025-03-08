@@ -42,10 +42,11 @@ class TensorOpsCUDA : public TensorOperations {
   explicit TensorOpsCUDA(size_t blockSize = 512);
   ~TensorOpsCUDA() override;
 
-  size_t getGridSize(size_t n, int32_t batch = 1) const {
-    return (n + (blockSize_ * batch) - 1) / (blockSize_ * batch);
+  unsigned int getGridSize(size_t n, int32_t batch = 1) const {
+    return (unsigned int)((n + (blockSize_ * batch) - 1) /
+                          (blockSize_ * batch));
   }
-  size_t getBlockSize() const { return blockSize_; }
+  unsigned int getBlockSize() const { return (unsigned int)blockSize_; }
 
   cublasHandle_t getCublasHandle();
   static TensorCudaCtx getTensorCtx(const TensorImpl &t);
