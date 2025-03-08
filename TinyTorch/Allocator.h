@@ -12,6 +12,8 @@
 
 namespace TinyTorch {
 
+#define DEFAULT_ALLOC_MAX_CACHE (512 * 1024 * 1024) /* 512 MB */
+
 class Allocator {
  public:
   virtual ~Allocator() = default;
@@ -23,7 +25,7 @@ class Allocator {
 
 class CachedAllocator : public Allocator {
  public:
-  explicit CachedAllocator(size_t maxCacheSize = 512 * 1024 * 1024);  // 512 MB
+  explicit CachedAllocator(uint64_t maxCacheSize = DEFAULT_ALLOC_MAX_CACHE);
   ~CachedAllocator() override;
 
   void setBaseAllocator(const std::shared_ptr<Allocator>& base) {
@@ -34,12 +36,10 @@ class CachedAllocator : public Allocator {
   void clear() override;
 
  private:
-  void shrink();
-
   bool cacheEnabled_;
   std::shared_ptr<Allocator> base_;
-  size_t maxCacheSize_;
-  size_t currentCacheSize_;
+  uint64_t maxCacheSize_;
+  uint64_t currentCacheSize_;
   std::unordered_map<void*, size_t> allocatedList_;
   std::unordered_map<size_t, std::list<void*>> freedList_;
 };

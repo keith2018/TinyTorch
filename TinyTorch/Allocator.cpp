@@ -14,7 +14,7 @@
 
 namespace TinyTorch {
 
-CachedAllocator::CachedAllocator(size_t maxCacheSize)
+CachedAllocator::CachedAllocator(uint64_t maxCacheSize)
     : cacheEnabled_(maxCacheSize > 0),
       base_(nullptr),
       maxCacheSize_(maxCacheSize),
@@ -53,11 +53,14 @@ void CachedAllocator::deallocate(void* ptr) {
   auto it = allocatedList_.find(ptr);
   if (it != allocatedList_.end()) {
     size_t size = it->second;
-    freedList_[size].push_back(ptr);
     allocatedList_.erase(it);
-    currentCacheSize_ += size;
 
-    shrink();
+    if (currentCacheSize_ + size > maxCacheSize_) {
+      base_->deallocate(ptr);
+    } else {
+      freedList_[size].push_back(ptr);
+      currentCacheSize_ += size;
+    }
   } else {
     LOGE("error: ptr not valid: %p", ptr);
   }
@@ -71,22 +74,6 @@ void CachedAllocator::clear() {
     }
   }
   freedList_.clear();
-}
-
-void CachedAllocator::shrink() {
-  while (!freedList_.empty() && currentCacheSize_ > maxCacheSize_) {
-    auto it = freedList_.begin();
-    if (!it->second.empty()) {
-      void* ptr = it->second.front();
-      it->second.pop_front();
-      base_->deallocate(ptr);
-      currentCacheSize_ -= it->first;
-
-      if (it->second.empty()) {
-        freedList_.erase(it);
-      }
-    }
-  }
 }
 
 }  // namespace TinyTorch
