@@ -228,6 +228,36 @@ void TensorOpsCUDA::opPairBroadcast_(TensorImpl& a, const TensorImpl& b) const {
   a = std::move(result);
 }
 
+template <typename Compare>
+TensorImpl TensorOpsCUDA::reduce(const TensorImpl& t, int32_t dim,
+                                 bool keepDims, float initVal, Compare comp,
+                                 bool returnIndex) {
+  if (dim < 0) {
+    dim += t.dimCount_;
+  }
+  if (dim < 0 || dim >= t.dimCount_) {
+    error(__FUNCTION__, TensorError_InvalidAxis);
+    return {};
+  }
+
+  auto retShape = getReduceShape(t, dim, keepDims);
+  auto ret = TensorImpl::shape(retShape, t.device_);
+
+  auto ctxT = getTensorCtx(t);
+  auto ctxRet = getTensorCtx(ret);
+  if (dim == t.dimCount_ - 1) {
+    kReduceDim<Compare, true><<<getGridSize(t.elemCount_), getBlockSize()>>>(
+        ctxRet, ctxT, dim, keepDims, initVal, comp, returnIndex,
+        ret.elemCount_);
+  } else {
+    kReduceDim<Compare, false><<<getGridSize(t.elemCount_), getBlockSize()>>>(
+        ctxRet, ctxT, dim, keepDims, initVal, comp, returnIndex,
+        ret.elemCount_);
+  }
+  CUDA_KERNEL_CHECK();
+  return ret;
+}
+
 void TensorOpsCUDA::allocate(void** ptr, size_t size) {
   allocator_.allocate(ptr, size);
 }
@@ -616,7 +646,8 @@ TensorImpl TensorOpsCUDA::sum(const TensorImpl& t) {
     return t;
   }
   auto ret = TensorImpl::scalar(0, t.device_);
-  kReduceAllSum<<<getGridSize(t.elemCount_), getBlockSize()>>>(
+  auto sharedMemSize = getBlockSize() * sizeof(float);
+  kReduceAllSum<<<getGridSize(t.elemCount_), getBlockSize(), sharedMemSize>>>(
       ret.data_, t.data_, t.elemCount_);
   CUDA_KERNEL_CHECK();
   return ret;
@@ -627,7 +658,8 @@ TensorImpl TensorOpsCUDA::mean(const TensorImpl& t) {
     return t;
   }
   auto ret = TensorImpl::scalar(0, t.device_);
-  kReduceAllSum<<<getGridSize(t.elemCount_), getBlockSize()>>>(
+  auto sharedMemSize = getBlockSize() * sizeof(float);
+  kReduceAllSum<<<getGridSize(t.elemCount_), getBlockSize(), sharedMemSize>>>(
       ret.data_, t.data_, t.elemCount_);
   CUDA_KERNEL_CHECK();
   auto r = 1.f / (float)t.elemCount_;
@@ -641,7 +673,8 @@ TensorImpl TensorOpsCUDA::var(const TensorImpl& t, bool unbiased) {
   }
   auto meanVal = mean(t);
   auto ret = TensorImpl::scalar(0, t.device_);
-  kReduceAllVar<<<getGridSize(t.elemCount_), getBlockSize()>>>(
+  auto sharedMemSize = getBlockSize() * sizeof(float);
+  kReduceAllVar<<<getGridSize(t.elemCount_), getBlockSize(), sharedMemSize>>>(
       ret.data_, t.data_, meanVal.data_, t.elemCount_);
   CUDA_KERNEL_CHECK();
   auto r = 1.f / (float)t.elemCount_;
@@ -659,8 +692,9 @@ TensorImpl TensorOpsCUDA::argmin(const TensorImpl& t) {
 
   auto ret = TensorImpl::scalar(0, t.device_);
   auto sharedMemSize = getBlockSize() * (sizeof(float) + sizeof(int));
-  kReduceAllArg<<<getGridSize(t.elemCount_), getBlockSize(), sharedMemSize>>>(
-      ret.data_, t.data_, t.elemCount_, false);
+  kReduceAllArg<false>
+      <<<getGridSize(t.elemCount_), getBlockSize(), sharedMemSize>>>(
+          ret.data_, t.data_, t.elemCount_);
   CUDA_KERNEL_CHECK();
   return ret;
 }
@@ -672,108 +706,45 @@ TensorImpl TensorOpsCUDA::argmax(const TensorImpl& t) {
 
   auto ret = TensorImpl::scalar(0, t.device_);
   auto sharedMemSize = getBlockSize() * (sizeof(float) + sizeof(int));
-  kReduceAllArg<<<getGridSize(t.elemCount_), getBlockSize(), sharedMemSize>>>(
-      ret.data_, t.data_, t.elemCount_, true);
+  kReduceAllArg<true>
+      <<<getGridSize(t.elemCount_), getBlockSize(), sharedMemSize>>>(
+          ret.data_, t.data_, t.elemCount_);
   CUDA_KERNEL_CHECK();
   return ret;
 }
 
 TensorImpl TensorOpsCUDA::min(const TensorImpl& t, int32_t dim, bool keepDims) {
-  if (dim < 0) {
-    dim += t.dimCount_;
-  }
-  if (dim < 0 || dim >= t.dimCount_) {
-    error(__FUNCTION__, TensorError_InvalidAxis);
-    return {};
-  }
   if (t.dimCount_ == 0) {
     return t;
   }
-
-  auto retShape = getReduceShape(t, dim, keepDims);
-  auto ret = TensorImpl::shape(retShape, t.device_);
-
-  auto ctxT = getTensorCtx(t);
-  auto ctxRet = getTensorCtx(ret);
-
-  kReduceMin<<<getGridSize(t.elemCount_), getBlockSize()>>>(
-      ctxRet, ctxT, dim, keepDims, ret.elemCount_);
-  CUDA_KERNEL_CHECK();
-  return ret;
+  return reduce(t, dim, keepDims, std::numeric_limits<float>::max(),
+                OpCudaLess());
 }
 
 TensorImpl TensorOpsCUDA::max(const TensorImpl& t, int32_t dim, bool keepDims) {
-  if (dim < 0) {
-    dim += t.dimCount_;
-  }
-  if (dim < 0 || dim >= t.dimCount_) {
-    error(__FUNCTION__, TensorError_InvalidAxis);
-    return {};
-  }
   if (t.dimCount_ == 0) {
     return t;
   }
-
-  auto retShape = getReduceShape(t, dim, keepDims);
-  auto ret = TensorImpl::shape(retShape, t.device_);
-
-  auto ctxT = getTensorCtx(t);
-  auto ctxRet = getTensorCtx(ret);
-
-  kReduceMax<<<getGridSize(t.elemCount_), getBlockSize()>>>(
-      ctxRet, ctxT, dim, keepDims, ret.elemCount_);
-  CUDA_KERNEL_CHECK();
-  return ret;
+  return reduce(t, dim, keepDims, -std::numeric_limits<float>::max(),
+                OpCudaGreater());
 }
 
 TensorImpl TensorOpsCUDA::argmin(const TensorImpl& t, int32_t dim,
                                  bool keepDims) {
-  if (dim < 0) {
-    dim += t.dimCount_;
-  }
-  if (dim < 0 || dim >= t.dimCount_) {
-    error(__FUNCTION__, TensorError_InvalidAxis);
-    return {};
-  }
   if (t.dimCount_ == 0) {
     return TensorImpl::scalar(0, t.device_);
   }
-
-  auto retShape = getReduceShape(t, dim, keepDims);
-  auto ret = TensorImpl::shape(retShape, t.device_);
-
-  auto ctxT = getTensorCtx(t);
-  auto ctxRet = getTensorCtx(ret);
-
-  kReduceArgMin<<<getGridSize(t.elemCount_), getBlockSize()>>>(
-      ctxRet, ctxT, dim, keepDims, ret.elemCount_);
-  CUDA_KERNEL_CHECK();
-  return ret;
+  return reduce(t, dim, keepDims, std::numeric_limits<float>::max(),
+                OpCudaLess(), true);
 }
 
 TensorImpl TensorOpsCUDA::argmax(const TensorImpl& t, int32_t dim,
                                  bool keepDims) {
-  if (dim < 0) {
-    dim += t.dimCount_;
-  }
-  if (dim < 0 || dim >= t.dimCount_) {
-    error(__FUNCTION__, TensorError_InvalidAxis);
-    return {};
-  }
   if (t.dimCount_ == 0) {
     return TensorImpl::scalar(0, t.device_);
   }
-
-  auto retShape = getReduceShape(t, dim, keepDims);
-  auto ret = TensorImpl::shape(retShape, t.device_);
-
-  auto ctxT = getTensorCtx(t);
-  auto ctxRet = getTensorCtx(ret);
-
-  kReduceArgMax<<<getGridSize(t.elemCount_), getBlockSize()>>>(
-      ctxRet, ctxT, dim, keepDims, ret.elemCount_);
-  CUDA_KERNEL_CHECK();
-  return ret;
+  return reduce(t, dim, keepDims, -std::numeric_limits<float>::max(),
+                OpCudaGreater(), true);
 }
 
 TensorImpl TensorOpsCUDA::sum(const TensorImpl& t,

@@ -87,6 +87,13 @@ class TensorOpsCPU : public TensorOperations {
   static int32_t getReduceDstIndex(const TensorImpl &t, int32_t idx,
                                    const FixedVector<uint8_t> &inAxis);
 
+  template <typename Compare, bool IsLastDim>
+  void reduceImpl(TensorImpl &ret, const TensorImpl &t, int32_t dim,
+                  bool keepDims, float initVal, Compare comp, bool returnIndex);
+  template <typename Compare>
+  TensorImpl reduce(const TensorImpl &t, int32_t dim, bool keepDims,
+                    float initVal, Compare comp, bool returnIndex = false);
+
   // index
   static void getSubIndices(
       int32_t *subIndices, const TensorImpl &t,

@@ -91,6 +91,11 @@ class TensorOpsCUDA : public TensorOperations {
   template <typename OP>
   void opPairBroadcast_(TensorImpl &a, const TensorImpl &b) const;
 
+  // reduce
+  template <typename Compare>
+  TensorImpl reduce(const TensorImpl &t, int32_t dim, bool keepDims,
+                    float initVal, Compare comp, bool returnIndex = false);
+
  protected:
   int32_t cudaDeviceIdx_ = 0;
   size_t blockSize_;

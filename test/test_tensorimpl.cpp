@@ -469,7 +469,7 @@ TEST(TEST_TensorImpl, math_min) {
   EXPECT_THAT(y.toList(), ElementsAre(1, 4));
 }
 
-TEST(TEST_TensorImpl, math_max) {
+TEST(TEST_TensorImpl, math_max_01) {
   TensorImpl x({{1, 2, 3}, {4, 5, 6}});
 
   EXPECT_TRUE(TensorImpl::max(x).item() == 6);
@@ -481,6 +481,24 @@ TEST(TEST_TensorImpl, math_max) {
   y = TensorImpl::max(x, 1);
   EXPECT_THAT(y.shape(), ElementsAre(2));
   EXPECT_THAT(y.toList(), ElementsAre(3, 6));
+}
+
+TEST(TEST_TensorImpl, math_max_02) {
+  auto x = TensorImpl::arange(0, 24, 1);
+  x.reshape_({2, 3, 4});
+
+  auto y = TensorImpl::max(x, 0, true);
+  EXPECT_THAT(y.shape(), ElementsAre(1, 3, 4));
+  EXPECT_THAT(y.toList(),
+              ElementsAre(12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23));
+
+  y = TensorImpl::max(x, 1, true);
+  EXPECT_THAT(y.shape(), ElementsAre(2, 1, 4));
+  EXPECT_THAT(y.toList(), ElementsAre(8, 9, 10, 11, 20, 21, 22, 23));
+
+  y = TensorImpl::max(x, 2, true);
+  EXPECT_THAT(y.shape(), ElementsAre(2, 3, 1));
+  EXPECT_THAT(y.toList(), ElementsAre(3, 7, 11, 15, 19, 23));
 }
 
 TEST(TEST_TensorImpl, math_meam) {
