@@ -92,6 +92,7 @@ class TensorOpsCUDA : public TensorOperations {
   void opPairBroadcast_(TensorImpl &a, const TensorImpl &b) const;
 
  protected:
+  int32_t cudaDeviceIdx_ = 0;
   size_t blockSize_;
   cublasHandle_t blasHandle_ = nullptr;
 };

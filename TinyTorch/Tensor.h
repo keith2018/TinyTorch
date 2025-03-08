@@ -120,6 +120,10 @@ class Tensor {
 
   std::vector<float> toList() const { return data_->toList(); }
 
+  static bool deviceAvailable(Device device) {
+    return TensorImpl::deviceAvailable(device);
+  }
+
  private:
   void initAutograd(bool requiresGrad,
                     const std::shared_ptr<Function> &gradFunc = nullptr);
