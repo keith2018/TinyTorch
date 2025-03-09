@@ -229,11 +229,11 @@ void TensorOpsCUDA::opPairBroadcast_(TensorImpl& a, const TensorImpl& b) const {
 }
 
 template <typename Compare>
-std::pair<TensorImpl, TensorImpl> TensorOpsCUDA::reduce(const TensorImpl& t,
-                                                        int32_t dim,
-                                                        bool keepDims,
-                                                        float initVal,
-                                                        Compare comp) {
+std::pair<TensorImpl, TensorImpl> TensorOpsCUDA::reduceDim(const TensorImpl& t,
+                                                           int32_t dim,
+                                                           bool keepDims,
+                                                           float initVal,
+                                                           Compare comp) {
   if (dim < 0) {
     dim += t.dimCount_;
   }
@@ -724,8 +724,8 @@ std::pair<TensorImpl, TensorImpl> TensorOpsCUDA::min(const TensorImpl& t,
   if (t.dimCount_ == 0) {
     return {t, TensorImpl::scalar(0, t.device_)};
   }
-  return reduce(t, dim, keepDims, std::numeric_limits<float>::max(),
-                OpCudaLess());
+  return reduceDim(t, dim, keepDims, std::numeric_limits<float>::max(),
+                   OpCudaLess());
 }
 
 std::pair<TensorImpl, TensorImpl> TensorOpsCUDA::max(const TensorImpl& t,
@@ -734,8 +734,8 @@ std::pair<TensorImpl, TensorImpl> TensorOpsCUDA::max(const TensorImpl& t,
   if (t.dimCount_ == 0) {
     return {t, TensorImpl::scalar(0, t.device_)};
   }
-  return reduce(t, dim, keepDims, -std::numeric_limits<float>::max(),
-                OpCudaGreater());
+  return reduceDim(t, dim, keepDims, -std::numeric_limits<float>::max(),
+                   OpCudaGreater());
 }
 
 TensorImpl TensorOpsCUDA::sum(const TensorImpl& t,
@@ -771,34 +771,12 @@ TensorImpl TensorOpsCUDA::sum(const TensorImpl& t,
 TensorImpl TensorOpsCUDA::mean(const TensorImpl& t,
                                const std::vector<int32_t>& dims,
                                bool keepDims) {
-  FixedVector<uint8_t> inAxis{};
-  int32_t reduceSize = 1;
-  for (int32_t d : dims) {
-    if (d < 0) {
-      d += t.dimCount_;
-    }
-    if (d < 0 || d >= t.dimCount_) {
-      error(__FUNCTION__, TensorError_InvalidAxis);
-      return {};
-    }
-    reduceSize *= t.shape_[d];
-    inAxis.data[d] = 1;
+  auto ret = sum(t, dims, keepDims);
+  if (!ret.empty()) {
+    auto reduceSize = (float)t.elemCount_ / (float)ret.elemCount_;
+    auto r = 1.f / reduceSize;
+    mul_(ret, r);
   }
-  if (t.dimCount_ == 0) {
-    return t;
-  }
-
-  auto retShape = getReduceShape(t, inAxis, keepDims);
-  auto ret = TensorImpl::shape(retShape, t.device_);
-
-  fillConstant_(ret, 0);
-  auto ctxT = getTensorCtx(t);
-  kReduceSum<<<getGridSize(t.elemCount_), getBlockSize()>>>(
-      ret.data_, ctxT, inAxis, t.elemCount_);
-  CUDA_KERNEL_CHECK();
-
-  auto r = 1.f / (float)reduceSize;
-  mul_(ret, r);
   return ret;
 }
 
@@ -806,7 +784,6 @@ TensorImpl TensorOpsCUDA::var(const TensorImpl& t,
                               const std::vector<int32_t>& dims, bool unbiased,
                               bool keepDims) {
   FixedVector<uint8_t> inAxis{};
-  int32_t reduceSize = 1;
   for (int32_t d : dims) {
     if (d < 0) {
       d += t.dimCount_;
@@ -815,7 +792,6 @@ TensorImpl TensorOpsCUDA::var(const TensorImpl& t,
       error(__FUNCTION__, TensorError_InvalidAxis);
       return {};
     }
-    reduceSize *= t.shape_[d];
     inAxis.data[d] = 1;
   }
   if (t.dimCount_ == 0) {
@@ -833,9 +809,10 @@ TensorImpl TensorOpsCUDA::var(const TensorImpl& t,
       ret.data_, ctxT, meanTensor.data_, inAxis, t.elemCount_);
   CUDA_KERNEL_CHECK();
 
-  auto r = 1.f / (float)reduceSize;
+  auto reduceSize = (float)t.elemCount_ / (float)ret.elemCount_;
+  auto r = 1.f / reduceSize;
   if (unbiased) {
-    r *= (float)reduceSize / ((float)reduceSize - 1.f);
+    r *= reduceSize / (reduceSize - 1.f);
   }
   mul_(ret, r);
   return ret;
