@@ -605,11 +605,11 @@ __global__ void kReduceAllArg(float* retPtr, const float* input, int n) {
 }
 
 template <typename Compare, bool IsLastDim>
-__global__ void kReduceDim(TensorCudaCtx ret, const TensorCudaCtx t,
-                           int32_t dim, bool keepDims, float initVal,
-                           Compare comp, bool returnIndex, int n) {
-  auto dimSize = t.shape_[dim];
-  auto stride = IsLastDim ? 1 : t.strides_[dim];
+__global__ void kReduceDim(TensorCudaCtx values, TensorCudaCtx indices,
+                           const TensorCudaCtx t, int32_t dim, bool keepDims,
+                           float initVal, Compare comp, int n) {
+  const auto dimSize = t.shape_[dim];
+  const auto stride = IsLastDim ? 1 : t.strides_[dim];
 
   unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
@@ -617,7 +617,7 @@ __global__ void kReduceDim(TensorCudaCtx ret, const TensorCudaCtx t,
     int32_t targetIdx = 0;
     int32_t srcIdx = IsLastDim
                          ? index * dimSize
-                         : cuGetReduceSrcIndex(ret, t, index, dim, keepDims);
+                         : cuGetReduceSrcIndex(values, t, index, dim, keepDims);
     for (int32_t j = 0; j < dimSize; j++) {
       auto val = t.data_[srcIdx];
       srcIdx += stride;
@@ -626,7 +626,8 @@ __global__ void kReduceDim(TensorCudaCtx ret, const TensorCudaCtx t,
         targetIdx = j;
       }
     }
-    ret.data_[index] = returnIndex ? static_cast<float>(targetIdx) : targetVal;
+    values.data_[index] = targetVal;
+    indices.data_[index] = static_cast<float>(targetIdx);
   }
 }
 

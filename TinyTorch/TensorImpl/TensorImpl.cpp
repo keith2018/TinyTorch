@@ -900,12 +900,14 @@ TensorImpl TensorImpl::argmax(const TensorImpl &t) {
   return t.ops_->argmax(t);
 }
 
-TensorImpl TensorImpl::min(const TensorImpl &t, int32_t dim, bool keepDims) {
+std::pair<TensorImpl, TensorImpl> TensorImpl::min(const TensorImpl &t,
+                                                  int32_t dim, bool keepDims) {
   TENSOR_CHECK_EMPTY_RET(t, {});
   return t.ops_->min(t, dim, keepDims);
 }
 
-TensorImpl TensorImpl::max(const TensorImpl &t, int32_t dim, bool keepDims) {
+std::pair<TensorImpl, TensorImpl> TensorImpl::max(const TensorImpl &t,
+                                                  int32_t dim, bool keepDims) {
   TENSOR_CHECK_EMPTY_RET(t, {});
   return t.ops_->max(t, dim, keepDims);
 }
@@ -928,12 +930,12 @@ TensorImpl TensorImpl::var(const TensorImpl &t, int32_t dim, bool unbiased,
 
 TensorImpl TensorImpl::argmin(const TensorImpl &t, int32_t dim, bool keepDims) {
   TENSOR_CHECK_EMPTY_RET(t, {});
-  return t.ops_->argmin(t, dim, keepDims);
+  return t.ops_->min(t, dim, keepDims).second;
 }
 
 TensorImpl TensorImpl::argmax(const TensorImpl &t, int32_t dim, bool keepDims) {
   TENSOR_CHECK_EMPTY_RET(t, {});
-  return t.ops_->argmax(t, dim, keepDims);
+  return t.ops_->max(t, dim, keepDims).second;
 }
 
 TensorImpl TensorImpl::sum(const TensorImpl &t,

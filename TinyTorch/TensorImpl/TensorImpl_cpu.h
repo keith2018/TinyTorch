@@ -88,11 +88,13 @@ class TensorOpsCPU : public TensorOperations {
                                    const FixedVector<uint8_t> &inAxis);
 
   template <typename Compare, bool IsLastDim>
-  void reduceImpl(TensorImpl &ret, const TensorImpl &t, int32_t dim,
-                  bool keepDims, float initVal, Compare comp, bool returnIndex);
+  static void reduceImpl(TensorImpl &values, TensorImpl &indices,
+                         const TensorImpl &t, int32_t dim, bool keepDims,
+                         float initVal, Compare comp);
   template <typename Compare>
-  TensorImpl reduce(const TensorImpl &t, int32_t dim, bool keepDims,
-                    float initVal, Compare comp, bool returnIndex = false);
+  std::pair<TensorImpl, TensorImpl> reduce(const TensorImpl &t, int32_t dim,
+                                           bool keepDims, float initVal,
+                                           Compare comp);
 
   // index
   static void getSubIndices(

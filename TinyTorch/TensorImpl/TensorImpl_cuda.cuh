@@ -93,8 +93,9 @@ class TensorOpsCUDA : public TensorOperations {
 
   // reduce
   template <typename Compare>
-  TensorImpl reduce(const TensorImpl &t, int32_t dim, bool keepDims,
-                    float initVal, Compare comp, bool returnIndex = false);
+  std::pair<TensorImpl, TensorImpl> reduce(const TensorImpl &t, int32_t dim,
+                                           bool keepDims, float initVal,
+                                           Compare comp);
 
  protected:
   int32_t cudaDeviceIdx_ = 0;
