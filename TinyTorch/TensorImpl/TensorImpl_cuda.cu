@@ -739,7 +739,6 @@ std::pair<TensorImpl, TensorImpl> TensorOpsCUDA::max(const TensorImpl& t,
 TensorImpl TensorOpsCUDA::sum(const TensorImpl& t,
                               const std::vector<int32_t>& dims, bool keepDims) {
   FixedVector<uint8_t> inAxis{};
-  int32_t reduceSize = 1;
   for (int32_t d : dims) {
     if (d < 0) {
       d += t.dimCount_;
@@ -748,7 +747,6 @@ TensorImpl TensorOpsCUDA::sum(const TensorImpl& t,
       error(__FUNCTION__, TensorError_InvalidAxis);
       return {};
     }
-    reduceSize *= t.shape_[d];
     inAxis.data[d] = 1;
   }
   if (t.dimCount_ == 0) {
@@ -759,6 +757,33 @@ TensorImpl TensorOpsCUDA::sum(const TensorImpl& t,
   auto ret = TensorImpl::shape(retShape, t.device_);
 
   fillConstant_(ret, 0);
+
+  if (dims.size() == 1) {
+    auto d = dims[0];
+    if (d < 0) {
+      d += t.dimCount_;
+    }
+
+    // first dim
+    if (d == 0) {
+      const auto dimSize = t.shape_.front();
+      const auto stride = ret.elemCount_;
+      kReduceSumFirstDim<<<getGridSize(t.elemCount_), getBlockSize()>>>(
+          ret.data_, t.data_, dimSize, stride, ret.elemCount_);
+      CUDA_KERNEL_CHECK();
+      return ret;
+    }
+
+    // last dim
+    if (d == t.dimCount_ - 1) {
+      const auto dimSize = t.shape_.back();
+      kReduceSumLastDim<<<getGridSize(t.elemCount_), getBlockSize()>>>(
+          ret.data_, t.data_, dimSize, ret.elemCount_);
+      CUDA_KERNEL_CHECK();
+      return ret;
+    }
+  }
+
   auto ctxT = getTensorCtx(t);
   kReduceSum<<<getGridSize(t.elemCount_), getBlockSize()>>>(
       ret.data_, ctxT, inAxis, t.elemCount_);
