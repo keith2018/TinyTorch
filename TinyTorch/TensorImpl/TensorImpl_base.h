@@ -146,10 +146,10 @@ typedef enum ShapeCompatible_ {
   _H TensorImpl argmin(const TensorImpl& t) _T;                                \
   _H TensorImpl argmax(const TensorImpl& t) _T;                                \
                                                                                \
-  _H TensorImpl min(const TensorImpl& t, int32_t dim, bool keepDims) _T;       \
-  _H TensorImpl max(const TensorImpl& t, int32_t dim, bool keepDims) _T;       \
-  _H TensorImpl argmin(const TensorImpl& t, int32_t dim, bool keepDims) _T;    \
-  _H TensorImpl argmax(const TensorImpl& t, int32_t dim, bool keepDims) _T;    \
+  _H std::pair<TensorImpl, TensorImpl> min(const TensorImpl& t, int32_t dim,   \
+                                           bool keepDims) _T;                  \
+  _H std::pair<TensorImpl, TensorImpl> max(const TensorImpl& t, int32_t dim,   \
+                                           bool keepDims) _T;                  \
                                                                                \
   _H TensorImpl sum(const TensorImpl& t, const std::vector<int32_t>& dims,     \
                     bool keepDims) _T;                                         \

@@ -497,7 +497,7 @@ std::vector<TensorImpl> FuncDropout::backward(const TensorImpl& grad) {
 
 TensorImpl FuncSoftmax::forward(const std::vector<const Tensor*>& inputs) {
   saveForBackward(inputs);
-  auto max = TensorImpl::max(inputs[0]->data(), dim_, true);
+  auto max = TensorImpl::max(inputs[0]->data(), dim_, true).first;
   auto shifted = inputs[0]->data() - max;
   auto exp = TensorImpl::exp(shifted);
   auto sumExp = TensorImpl::sum(exp, dim_, true);
@@ -518,7 +518,7 @@ std::vector<TensorImpl> FuncSoftmax::backward(const TensorImpl& grad) {
 
 TensorImpl FuncLogSoftmax::forward(const std::vector<const Tensor*>& inputs) {
   saveForBackward(inputs);
-  auto max = TensorImpl::max(inputs[0]->data(), dim_, true);
+  auto max = TensorImpl::max(inputs[0]->data(), dim_, true).first;
   auto logSumExp = TensorImpl::log(
       TensorImpl::sum(TensorImpl::exp(inputs[0]->data() - max), dim_, true));
   forwardOutput_ = inputs[0]->data() - max - logSumExp;
@@ -551,10 +551,9 @@ TensorImpl FuncMaxPool2D::forward(const std::vector<const Tensor*>& inputs) {
   auto col = inputs[0]->data().im2col(kernelSize_, stride_, padding_);
   col.reshape_({-1, kernelSize_.h * kernelSize_.w});
 
-  maxIndices_ = TensorImpl::argmax(col, 1);
-  // auto ret = TensorImpl::max(col, 1);
-  auto colIdx = TensorImpl::arange(0, (float)col.shape()[0], 1.f, col.device());
-  auto ret = col.index({colIdx, maxIndices_});
+  auto maxRet = TensorImpl::max(col, 1);
+  maxIndices_ = maxRet.second;
+  auto ret = maxRet.first;
   ret.reshape_({batch, channels, outH, outW});
   return ret;
 }
