@@ -604,20 +604,40 @@ __global__ void kReduceAllArg(float* retPtr, const float* input, int n) {
   }
 }
 
-template <typename Compare, bool IsLastDim>
-__global__ void kReduceDim(TensorCudaCtx values, TensorCudaCtx indices,
+template <typename Compare>
+__global__ void kReduceLastDim(float* values, float* indices, const float* t,
+                               float initVal, int32_t dimSize, Compare comp,
+                               int n) {
+  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+  if (index < n) {
+    auto targetVal = initVal;
+    int32_t targetIdx = 0;
+    int32_t srcIdx = index * dimSize;
+#pragma unroll
+    for (int32_t j = 0; j < dimSize; j++) {
+      auto val = t[srcIdx++];
+      if (comp(val, targetVal)) {
+        targetVal = val;
+        targetIdx = j;
+      }
+    }
+    values[index] = targetVal;
+    indices[index] = static_cast<float>(targetIdx);
+  }
+}
+
+template <typename Compare>
+__global__ void kReduceDim(TensorCudaCtx values, float* indices,
                            const TensorCudaCtx t, int32_t dim, bool keepDims,
                            float initVal, Compare comp, int n) {
   const auto dimSize = t.shape_[dim];
-  const auto stride = IsLastDim ? 1 : t.strides_[dim];
+  const auto stride = t.strides_[dim];
 
   unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
     auto targetVal = initVal;
     int32_t targetIdx = 0;
-    int32_t srcIdx = IsLastDim
-                         ? index * dimSize
-                         : cuGetReduceSrcIndex(values, t, index, dim, keepDims);
+    int32_t srcIdx = cuGetReduceSrcIndex(values, t, index, dim, keepDims);
     for (int32_t j = 0; j < dimSize; j++) {
       auto val = t.data_[srcIdx];
       srcIdx += stride;
@@ -627,7 +647,34 @@ __global__ void kReduceDim(TensorCudaCtx values, TensorCudaCtx indices,
       }
     }
     values.data_[index] = targetVal;
-    indices.data_[index] = static_cast<float>(targetIdx);
+    indices[index] = static_cast<float>(targetIdx);
+  }
+}
+
+__global__ void kReduceSumFirstDim(float* retPtr, const float* t,
+                                   int32_t dimSize, int32_t stride, int n) {
+  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+  if (index < n) {
+    auto srcIdx = index;
+    float val = 0.f;
+    for (int32_t j = 0; j < dimSize; j++) {
+      val += t[srcIdx];
+      srcIdx += stride;
+    }
+    retPtr[index] = val;
+  }
+}
+
+__global__ void kReduceSumLastDim(float* retPtr, const float* t,
+                                  int32_t dimSize, int n) {
+  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+  if (index < n) {
+    auto srcIdx = index * dimSize;
+    float val = 0.f;
+    for (int32_t j = 0; j < dimSize; j++) {
+      val += t[srcIdx++];
+    }
+    retPtr[index] = val;
   }
 }
 
