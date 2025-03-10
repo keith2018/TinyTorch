@@ -246,17 +246,15 @@ std::pair<TensorImpl, TensorImpl> TensorOpsCUDA::reduceDim(const TensorImpl& t,
   auto values = TensorImpl::shape(retShape, t.device_);
   auto indices = TensorImpl::shape(retShape, t.device_);
 
-  auto ctxT = getTensorCtx(t);
-  auto ctxValues = getTensorCtx(values);
-  auto ctxIndices = getTensorCtx(indices);
-
   if (dim == t.dimCount_ - 1) {
-    kReduceDim<Compare, true><<<getGridSize(t.elemCount_), getBlockSize()>>>(
-        ctxValues, ctxIndices, ctxT, dim, keepDims, initVal, comp,
-        ctxValues.elemCount_);
+    kReduceLastDim<Compare><<<getGridSize(t.elemCount_), getBlockSize()>>>(
+        values.data_, indices.data_, t.data_, initVal, t.shape_[dim], comp,
+        values.elemCount_);
   } else {
-    kReduceDim<Compare, false><<<getGridSize(t.elemCount_), getBlockSize()>>>(
-        ctxValues, ctxIndices, ctxT, dim, keepDims, initVal, comp,
+    auto ctxT = getTensorCtx(t);
+    auto ctxValues = getTensorCtx(values);
+    kReduceDim<Compare><<<getGridSize(t.elemCount_), getBlockSize()>>>(
+        ctxValues, indices.data_, ctxT, dim, keepDims, initVal, comp,
         ctxValues.elemCount_);
   }
   CUDA_KERNEL_CHECK();
