@@ -233,10 +233,10 @@ class TensorImpl {
   static TensorImpl argmin(const TensorImpl &t);
   static TensorImpl argmax(const TensorImpl &t);
 
-  static TensorImpl min(const TensorImpl &t, int32_t dim,
-                        bool keepDims = false);
-  static TensorImpl max(const TensorImpl &t, int32_t dim,
-                        bool keepDims = false);
+  static std::pair<TensorImpl, TensorImpl> min(const TensorImpl &t, int32_t dim,
+                                               bool keepDims = false);
+  static std::pair<TensorImpl, TensorImpl> max(const TensorImpl &t, int32_t dim,
+                                               bool keepDims = false);
   static TensorImpl sum(const TensorImpl &t, int32_t dim,
                         bool keepDims = false);
   static TensorImpl mean(const TensorImpl &t, int32_t dim,
@@ -269,11 +269,13 @@ class TensorImpl {
 
   TensorImpl argmax() const { return argmax(*this); }
 
-  TensorImpl min(int32_t dim, bool keepDims = false) const {
+  std::pair<TensorImpl, TensorImpl> min(int32_t dim,
+                                        bool keepDims = false) const {
     return min(*this, dim, keepDims);
   }
 
-  TensorImpl max(int32_t dim, bool keepDims = false) const {
+  std::pair<TensorImpl, TensorImpl> max(int32_t dim,
+                                        bool keepDims = false) const {
     return max(*this, dim, keepDims);
   }
 

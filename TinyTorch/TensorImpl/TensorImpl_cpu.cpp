@@ -245,6 +245,86 @@ int32_t TensorOpsCPU::getReduceDstIndex(const TensorImpl& t, int32_t idx,
   return retIdx;
 }
 
+template <typename Compare, bool IsLastDim>
+void TensorOpsCPU::reduceDimImpl(TensorImpl& values, TensorImpl& indices,
+                                 const TensorImpl& t, int32_t dim,
+                                 bool keepDims, float initVal, Compare comp) {
+  const auto dimSize = t.shape_[dim];
+  const auto stride = IsLastDim ? 1 : t.strides_[dim];
+
+  for (int32_t i = 0; i < values.elemCount_; i++) {
+    auto targetVal = initVal;
+    int32_t targetIdx = 0;
+    int32_t srcIdx = IsLastDim ? i * dimSize
+                               : getReduceSrcIndex(values, t, i, dim, keepDims);
+    for (int32_t j = 0; j < dimSize; j++) {
+      auto val = t.data_[srcIdx];
+      srcIdx += stride;
+      if (comp(val, targetVal)) {
+        targetVal = val;
+        targetIdx = j;
+      }
+    }
+    values.data_[i] = targetVal;
+    indices.data_[i] = static_cast<float>(targetIdx);
+  }
+}
+
+template <typename Compare>
+std::pair<TensorImpl, TensorImpl> TensorOpsCPU::reduceDim(const TensorImpl& t,
+                                                          int32_t dim,
+                                                          bool keepDims,
+                                                          float initVal,
+                                                          Compare comp) {
+  if (dim < 0) {
+    dim += t.dimCount_;
+  }
+  if (dim < 0 || dim >= t.dimCount_) {
+    error(__FUNCTION__, TensorError_InvalidAxis);
+    return {};
+  }
+
+  const auto retShape = getReduceShape(t, dim, keepDims);
+  auto values = TensorImpl::shape(retShape, t.device_);
+  auto indices = TensorImpl::shape(retShape, t.device_);
+
+  if (dim == t.dimCount_ - 1) {
+    reduceDimImpl<Compare, true>(values, indices, t, dim, keepDims, initVal,
+                                 comp);
+  } else {
+    reduceDimImpl<Compare, false>(values, indices, t, dim, keepDims, initVal,
+                                  comp);
+  }
+  return {values, indices};
+}
+
+template <typename Op>
+TensorImpl TensorOpsCPU::reduceMultiDim(const TensorImpl& t,
+                                        const std::vector<int32_t>& dims,
+                                        bool keepDims, Op op) {
+  FixedVector<uint8_t> inAxis{};
+  for (int32_t d : dims) {
+    if (d < 0) {
+      d += t.dimCount_;
+    }
+    if (d < 0 || d >= t.dimCount_) {
+      error(__FUNCTION__, TensorError_InvalidAxis);
+      return {};
+    }
+    inAxis.data[d] = 1;
+  }
+
+  const auto retShape = getReduceShape(t, inAxis, keepDims);
+  auto ret = TensorImpl::shape(retShape, t.device_);
+
+  fillConstant_(ret, 0);
+  for (int32_t srcIdx = 0; srcIdx < t.elemCount_; srcIdx++) {
+    int32_t retIdx = getReduceDstIndex(t, srcIdx, inAxis);
+    op(ret, t, retIdx, srcIdx);
+  }
+  return ret;
+}
+
 void TensorOpsCPU::getSubIndices(
     int32_t* subIndices, const TensorImpl& t,
     const std::vector<std::reference_wrapper<TensorImpl>>& indices,
@@ -708,130 +788,24 @@ TensorImpl TensorOpsCPU::argmax(const TensorImpl& t) {
   return TensorImpl::scalar((float)maxIdx, t.device_);
 }
 
-TensorImpl TensorOpsCPU::min(const TensorImpl& t, int32_t dim, bool keepDims) {
+std::pair<TensorImpl, TensorImpl> TensorOpsCPU::min(const TensorImpl& t,
+                                                    int32_t dim,
+                                                    bool keepDims) {
   if (t.dimCount_ == 0) {
-    return t;
+    return {t, TensorImpl::scalar(0, t.device_)};
   }
-  if (dim < 0) {
-    dim += t.dimCount_;
-  }
-  if (dim < 0 || dim >= t.dimCount_) {
-    error(__FUNCTION__, TensorError_InvalidAxis);
-    return {};
-  }
-
-  auto retShape = getReduceShape(t, dim, keepDims);
-  auto ret = TensorImpl::shape(retShape, t.device_);
-
-  for (int32_t i = 0; i < ret.elemCount_; i++) {
-    int32_t inIndex = getReduceSrcIndex(ret, t, i, dim, keepDims);
-    float minVal = std::numeric_limits<float>::max();
-    for (int32_t j = 0; j < t.shape_[dim]; j++) {
-      float val = t.data_[inIndex + j * t.strides_[dim]];
-      if (val < minVal) {
-        minVal = val;
-      }
-    }
-
-    ret.data_[i] = minVal;
-  }
-  return ret;
+  return reduceDim(t, dim, keepDims, std::numeric_limits<float>::max(),
+                   std::less<>());
 }
 
-TensorImpl TensorOpsCPU::max(const TensorImpl& t, int32_t dim, bool keepDims) {
+std::pair<TensorImpl, TensorImpl> TensorOpsCPU::max(const TensorImpl& t,
+                                                    int32_t dim,
+                                                    bool keepDims) {
   if (t.dimCount_ == 0) {
-    return t;
+    return {t, TensorImpl::scalar(0, t.device_)};
   }
-  if (dim < 0) {
-    dim += t.dimCount_;
-  }
-  if (dim < 0 || dim >= t.dimCount_) {
-    error(__FUNCTION__, TensorError_InvalidAxis);
-    return {};
-  }
-
-  auto retShape = getReduceShape(t, dim, keepDims);
-  auto ret = TensorImpl::shape(retShape, t.device_);
-
-  for (int32_t i = 0; i < ret.elemCount_; i++) {
-    int32_t inIndex = getReduceSrcIndex(ret, t, i, dim, keepDims);
-    float maxVal = -std::numeric_limits<float>::max();
-    for (int32_t j = 0; j < t.shape_[dim]; j++) {
-      float val = t.data_[inIndex + j * t.strides_[dim]];
-      if (val > maxVal) {
-        maxVal = val;
-      }
-    }
-
-    ret.data_[i] = maxVal;
-  }
-  return ret;
-}
-
-TensorImpl TensorOpsCPU::argmin(const TensorImpl& t, int32_t dim,
-                                bool keepDims) {
-  if (t.dimCount_ == 0) {
-    return TensorImpl::scalar(0, t.device_);
-  }
-  if (dim < 0) {
-    dim += t.dimCount_;
-  }
-  if (dim < 0 || dim >= t.dimCount_) {
-    error(__FUNCTION__, TensorError_InvalidAxis);
-    return {};
-  }
-
-  auto retShape = getReduceShape(t, dim, keepDims);
-  auto ret = TensorImpl::shape(retShape, t.device_);
-
-  for (int32_t i = 0; i < ret.elemCount_; i++) {
-    int32_t inIndex = getReduceSrcIndex(ret, t, i, dim, keepDims);
-    float minVal = std::numeric_limits<float>::max();
-    int32_t minIdx = 0;
-    for (int32_t j = 0; j < t.shape_[dim]; j++) {
-      float val = t.data_[inIndex + j * t.strides_[dim]];
-      if (val < minVal) {
-        minVal = val;
-        minIdx = j;
-      }
-    }
-
-    ret.data_[i] = static_cast<float>(minIdx);
-  }
-  return ret;
-}
-
-TensorImpl TensorOpsCPU::argmax(const TensorImpl& t, int32_t dim,
-                                bool keepDims) {
-  if (t.dimCount_ == 0) {
-    return TensorImpl::scalar(0, t.device_);
-  }
-  if (dim < 0) {
-    dim += t.dimCount_;
-  }
-  if (dim < 0 || dim >= t.dimCount_) {
-    error(__FUNCTION__, TensorError_InvalidAxis);
-    return {};
-  }
-
-  auto retShape = getReduceShape(t, dim, keepDims);
-  auto ret = TensorImpl::shape(retShape, t.device_);
-
-  for (int32_t i = 0; i < ret.elemCount_; i++) {
-    int32_t inIndex = getReduceSrcIndex(ret, t, i, dim, keepDims);
-    float maxVal = -std::numeric_limits<float>::max();
-    int32_t maxIdx = 0;
-    for (int32_t j = 0; j < t.shape_[dim]; j++) {
-      float val = t.data_[inIndex + j * t.strides_[dim]];
-      if (val > maxVal) {
-        maxVal = val;
-        maxIdx = j;
-      }
-    }
-
-    ret.data_[i] = static_cast<float>(maxIdx);
-  }
-  return ret;
+  return reduceDim(t, dim, keepDims, -std::numeric_limits<float>::max(),
+                   std::greater<>());
 }
 
 TensorImpl TensorOpsCPU::sum(const TensorImpl& t,
@@ -839,31 +813,11 @@ TensorImpl TensorOpsCPU::sum(const TensorImpl& t,
   if (t.dimCount_ == 0) {
     return t;
   }
-  FixedVector<uint8_t> inAxis{};
-  int32_t reduceSize = 1;
-  for (int32_t d : dims) {
-    if (d < 0) {
-      d += t.dimCount_;
-    }
-    if (d < 0 || d >= t.dimCount_) {
-      error(__FUNCTION__, TensorError_InvalidAxis);
-      return {};
-    }
-    reduceSize *= t.shape_[d];
-    inAxis.data[d] = 1;
-  }
-
-  auto retShape = getReduceShape(t, inAxis, keepDims);
-  auto ret = TensorImpl::shape(retShape, t.device_);
-
-  fillConstant_(ret, 0);
-
-  for (int32_t i = 0; i < t.elemCount_; i++) {
-    int32_t retIdx = getReduceDstIndex(t, i, inAxis);
-    ret.data_[retIdx] += t.data_[i];
-  }
-
-  return ret;
+  return reduceMultiDim(
+      t, dims, keepDims,
+      [](TensorImpl& ret, const TensorImpl& t, int32_t retIdx, int32_t srcIdx) {
+        ret.data_[retIdx] += t.data_[srcIdx];
+      });
 }
 
 TensorImpl TensorOpsCPU::mean(const TensorImpl& t,
@@ -871,32 +825,12 @@ TensorImpl TensorOpsCPU::mean(const TensorImpl& t,
   if (t.dimCount_ == 0) {
     return t;
   }
-  FixedVector<uint8_t> inAxis{};
-  int32_t reduceSize = 1;
-  for (int32_t d : dims) {
-    if (d < 0) {
-      d += t.dimCount_;
-    }
-    if (d < 0 || d >= t.dimCount_) {
-      error(__FUNCTION__, TensorError_InvalidAxis);
-      return {};
-    }
-    reduceSize *= t.shape_[d];
-    inAxis.data[d] = 1;
+  auto ret = sum(t, dims, keepDims);
+  if (!ret.empty()) {
+    auto reduceSize = (float)t.elemCount_ / (float)ret.elemCount_;
+    auto r = 1.f / reduceSize;
+    mul_(ret, r);
   }
-
-  auto retShape = getReduceShape(t, inAxis, keepDims);
-  auto ret = TensorImpl::shape(retShape, t.device_);
-
-  fillConstant_(ret, 0);
-
-  for (int32_t i = 0; i < t.elemCount_; i++) {
-    int32_t retIdx = getReduceDstIndex(t, i, inAxis);
-    ret.data_[retIdx] += t.data_[i];
-  }
-
-  auto r = 1.f / (float)reduceSize;
-  mul_(ret, r);
   return ret;
 }
 
@@ -906,37 +840,22 @@ TensorImpl TensorOpsCPU::var(const TensorImpl& t,
   if (t.dimCount_ == 0) {
     return TensorImpl::scalar(0, t.device_);
   }
-  FixedVector<uint8_t> inAxis{};
-  int32_t reduceSize = 1;
-  for (int32_t d : dims) {
-    if (d < 0) {
-      d += t.dimCount_;
-    }
-    if (d < 0 || d >= t.dimCount_) {
-      error(__FUNCTION__, TensorError_InvalidAxis);
-      return {};
-    }
-    reduceSize *= t.shape_[d];
-    inAxis.data[d] = 1;
-  }
-
-  auto retShape = getReduceShape(t, inAxis, keepDims);
-  auto ret = TensorImpl::shape(retShape, t.device_);
-
   auto meanTensor = mean(t, dims, true);
-  fillConstant_(ret, 0);
-
-  for (int32_t i = 0; i < t.elemCount_; i++) {
-    int32_t retIdx = getReduceDstIndex(t, i, inAxis);
-    float diff = t.data_[i] - meanTensor.data_[retIdx];
-    ret.data_[retIdx] += diff * diff;
+  auto ret = reduceMultiDim(t, dims, keepDims,
+                            [&meanTensor](TensorImpl& ret, const TensorImpl& t,
+                                          int32_t retIdx, int32_t srcIdx) {
+                              float diff =
+                                  t.data_[srcIdx] - meanTensor.data_[retIdx];
+                              ret.data_[retIdx] += diff * diff;
+                            });
+  if (!ret.empty()) {
+    auto reduceSize = (float)t.elemCount_ / (float)ret.elemCount_;
+    auto r = 1.f / reduceSize;
+    if (unbiased) {
+      r *= reduceSize / (reduceSize - 1.f);
+    }
+    mul_(ret, r);
   }
-
-  auto r = 1.f / (float)reduceSize;
-  if (unbiased) {
-    r *= (float)reduceSize / ((float)reduceSize - 1.f);
-  }
-  mul_(ret, r);
   return ret;
 }
 
