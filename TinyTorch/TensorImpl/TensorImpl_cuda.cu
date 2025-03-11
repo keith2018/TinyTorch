@@ -756,8 +756,6 @@ TensorImpl TensorOpsCUDA::sum(const TensorImpl& t,
   auto retShape = getReduceShape(t, inAxis, keepDims);
   auto ret = TensorImpl::shape(retShape, t.device_);
 
-  fillConstant_(ret, 0);
-
   if (dims.size() == 1) {
     auto d = dims[0];
     if (d < 0) {
@@ -768,8 +766,10 @@ TensorImpl TensorOpsCUDA::sum(const TensorImpl& t,
     if (d == 0) {
       const auto dimSize = t.shape_.front();
       const auto stride = ret.elemCount_;
-      kReduceSumFirstDim<<<getGridSize(t.elemCount_), getBlockSize()>>>(
-          ret.data_, t.data_, dimSize, stride, ret.elemCount_);
+      auto sharedMemSize = stride * sizeof(float);
+      kReduceSumFirstDim<<<getGridSize(dimSize), getBlockSize(),
+                           sharedMemSize>>>(ret.data_, t.data_, dimSize,
+                                            stride);
       CUDA_KERNEL_CHECK();
       return ret;
     }
@@ -777,7 +777,7 @@ TensorImpl TensorOpsCUDA::sum(const TensorImpl& t,
     // last dim
     if (d == t.dimCount_ - 1) {
       const auto dimSize = t.shape_.back();
-      kReduceSumLastDim<<<getGridSize(t.elemCount_), getBlockSize()>>>(
+      kReduceSumLastDim<<<getGridSize(ret.elemCount_), getBlockSize()>>>(
           ret.data_, t.data_, dimSize, ret.elemCount_);
       CUDA_KERNEL_CHECK();
       return ret;
@@ -785,6 +785,7 @@ TensorImpl TensorOpsCUDA::sum(const TensorImpl& t,
   }
 
   auto ctxT = getTensorCtx(t);
+  fillConstant_(ret, 0);
   kReduceSum<<<getGridSize(t.elemCount_), getBlockSize()>>>(
       ret.data_, ctxT, inAxis, t.elemCount_);
   CUDA_KERNEL_CHECK();
