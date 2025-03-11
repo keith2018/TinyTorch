@@ -4,20 +4,79 @@
  *
  */
 
+#include <cuda_runtime.h>
 #include <curand_kernel.h>
 
 #include <cassert>
 #include <cfloat>
 #include <iostream>
 
+#include "TensorImpl_cpu.h"
 #include "TensorImpl_cuda.cuh"
 #include "TensorImpl_cuda.inc"
 
 namespace TinyTorch {
 
+const char* curandGetErrorString(curandStatus_t status);
+const char* cublasGetErrorString(cublasStatus_t status);
+
+#define CUDA_CHECK(call)                                                      \
+  do {                                                                        \
+    cudaError_t err = call;                                                   \
+    if (err != cudaSuccess) {                                                 \
+      std::cerr << "CUDA error in file '" << __FILE__ << "' in line "         \
+                << __LINE__ << ": " << cudaGetErrorString(err) << " (" << err \
+                << ")" << std::endl;                                          \
+      abort();                                                                \
+    }                                                                         \
+  } while (0)
+
+#define CURAND_CHECK(call)                                               \
+  do {                                                                   \
+    curandStatus_t err = call;                                           \
+    if (err != CURAND_STATUS_SUCCESS) {                                  \
+      std::cerr << "CURAND error in file '" << __FILE__ << "' in line "  \
+                << __LINE__ << ": " << curandGetErrorString(err) << " (" \
+                << err << ")" << std::endl;                              \
+      abort();                                                           \
+    }                                                                    \
+  } while (0)
+
+#define CUBLAS_CHECK(call)                                               \
+  do {                                                                   \
+    cublasStatus_t err = call;                                           \
+    if (err != CUBLAS_STATUS_SUCCESS) {                                  \
+      std::cerr << "CUBLAS error in file '" << __FILE__ << "' in line "  \
+                << __LINE__ << ": " << cublasGetErrorString(err) << " (" \
+                << err << ")" << std::endl;                              \
+      abort();                                                           \
+    }                                                                    \
+  } while (0)
+
+#define CUDA_KERNEL_CHECK()                                                   \
+  do {                                                                        \
+    cudaError_t err = cudaGetLastError();                                     \
+    if (err != cudaSuccess) {                                                 \
+      std::cerr << "CUDA kernel error in file '" << __FILE__ << "' in line "  \
+                << __LINE__ << ": " << cudaGetErrorString(err) << " (" << err \
+                << ")" << std::endl;                                          \
+      abort();                                                                \
+    }                                                                         \
+  } while (0)
+
 static std::random_device _r;
 unsigned long RandomGeneratorCUDA::seed_ = _r();
 unsigned long RandomGeneratorCUDA::sequence_ = 0;
+
+void* AllocatorCPU::allocatePinned(size_t size) {
+  void* ptr = nullptr;
+  CUDA_CHECK(cudaMallocHost(&ptr, size));
+  return ptr;
+}
+
+void AllocatorCPU::deallocatePinned(void* ptr) {
+  CUDA_CHECK(cudaFreeHost(ptr));
+}
 
 void AllocatorCUDA::allocate(void** ptr, size_t size) {
   CUDA_CHECK(cudaMalloc(ptr, size));
@@ -992,6 +1051,64 @@ void TensorOpsCUDA::gemm(float* c, const float* a, const float* b, int32_t m,
 
   CUBLAS_CHECK(cublasSgemm(getCublasHandle(), opB, opA, n, m, k, &alpha, b, ldb,
                            a, lda, &beta, c, ldc));
+}
+
+const char* curandGetErrorString(curandStatus_t status) {
+  switch (status) {
+    case CURAND_STATUS_SUCCESS:
+      return "CURAND_STATUS_SUCCESS";
+    case CURAND_STATUS_VERSION_MISMATCH:
+      return "CURAND_STATUS_VERSION_MISMATCH";
+    case CURAND_STATUS_NOT_INITIALIZED:
+      return "CURAND_STATUS_NOT_INITIALIZED";
+    case CURAND_STATUS_ALLOCATION_FAILED:
+      return "CURAND_STATUS_ALLOCATION_FAILED";
+    case CURAND_STATUS_TYPE_ERROR:
+      return "CURAND_STATUS_TYPE_ERROR";
+    case CURAND_STATUS_OUT_OF_RANGE:
+      return "CURAND_STATUS_OUT_OF_RANGE";
+    case CURAND_STATUS_LENGTH_NOT_MULTIPLE:
+      return "CURAND_STATUS_LENGTH_NOT_MULTIPLE";
+    case CURAND_STATUS_DOUBLE_PRECISION_REQUIRED:
+      return "CURAND_STATUS_DOUBLE_PRECISION_REQUIRED";
+    case CURAND_STATUS_LAUNCH_FAILURE:
+      return "CURAND_STATUS_LAUNCH_FAILURE";
+    case CURAND_STATUS_PREEXISTING_FAILURE:
+      return "CURAND_STATUS_PREEXISTING_FAILURE";
+    case CURAND_STATUS_INITIALIZATION_FAILED:
+      return "CURAND_STATUS_INITIALIZATION_FAILED";
+    case CURAND_STATUS_ARCH_MISMATCH:
+      return "CURAND_STATUS_ARCH_MISMATCH";
+    case CURAND_STATUS_INTERNAL_ERROR:
+      return "CURAND_STATUS_INTERNAL_ERROR";
+  }
+  return "Unknown cuRAND error";
+}
+
+const char* cublasGetErrorString(cublasStatus_t status) {
+  switch (status) {
+    case CUBLAS_STATUS_SUCCESS:
+      return "CUBLAS_STATUS_SUCCESS";
+    case CUBLAS_STATUS_NOT_INITIALIZED:
+      return "CUBLAS_STATUS_NOT_INITIALIZED";
+    case CUBLAS_STATUS_ALLOC_FAILED:
+      return "CUBLAS_STATUS_ALLOC_FAILED";
+    case CUBLAS_STATUS_INVALID_VALUE:
+      return "CUBLAS_STATUS_INVALID_VALUE";
+    case CUBLAS_STATUS_ARCH_MISMATCH:
+      return "CUBLAS_STATUS_ARCH_MISMATCH";
+    case CUBLAS_STATUS_MAPPING_ERROR:
+      return "CUBLAS_STATUS_MAPPING_ERROR";
+    case CUBLAS_STATUS_EXECUTION_FAILED:
+      return "CUBLAS_STATUS_EXECUTION_FAILED";
+    case CUBLAS_STATUS_INTERNAL_ERROR:
+      return "CUBLAS_STATUS_INTERNAL_ERROR";
+    case CUBLAS_STATUS_NOT_SUPPORTED:
+      return "CUBLAS_STATUS_NOT_SUPPORTED";
+    case CUBLAS_STATUS_LICENSE_ERROR:
+      return "CUBLAS_STATUS_LICENSE_ERROR";
+  }
+  return "Unknown cuBLAS error";
 }
 
 }  // namespace TinyTorch
