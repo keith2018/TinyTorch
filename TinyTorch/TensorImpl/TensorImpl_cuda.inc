@@ -652,16 +652,27 @@ __global__ void kReduceDim(TensorCudaCtx values, float* indices,
 }
 
 __global__ void kReduceSumFirstDim(float* retPtr, const float* t,
-                                   int32_t dimSize, int32_t stride, int n) {
+                                   int32_t dimSize, int32_t stride) {
+  extern __shared__ float sharedData[];
+
   unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (index < n) {
-    auto srcIdx = index;
-    float val = 0.f;
-    for (int32_t j = 0; j < dimSize; j++) {
-      val += t[srcIdx];
-      srcIdx += stride;
+  unsigned int tid = threadIdx.x;
+
+  for (auto i = tid; i < stride; i += blockDim.x) {
+    sharedData[i] = 0.f;
+  }
+  __syncthreads();
+
+  if (index < dimSize) {
+    auto srcIdx = index * stride;
+    for (auto i = 0; i < stride; i++) {
+      atomicAdd(&sharedData[i], t[srcIdx++]);
     }
-    retPtr[index] = val;
+  }
+  __syncthreads();
+
+  for (auto i = tid; i < stride; i += blockDim.x) {
+    retPtr[i] = sharedData[i];
   }
 }
 
