@@ -37,8 +37,26 @@ void TensorOperations::reorderIndices(int32_t *indices,
 }
 
 bool TensorOperations::isLeadingOnes(const Shape &shape) {
+  if (shape.size() == 1) {
+    return true;
+  }
+
   int32_t notOneIdx = -1;
-  for (int32_t i = 0; i < shape.size(); i++) {
+  for (auto i = 0; i < shape.size(); i++) {
+    if (shape[i] != 1) {
+      notOneIdx = i;
+    } else {
+      if (notOneIdx != -1) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+bool TensorOperations::isTrailingOnes(const Shape &shape) {
+  int32_t notOneIdx = -1;
+  for (auto i = static_cast<int32_t>(shape.size()) - 1; i >= 0; i--) {
     if (shape[i] != 1) {
       notOneIdx = i;
     } else {

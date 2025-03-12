@@ -146,11 +146,24 @@ struct OpCudaGreater {
   __device__ bool operator()(const float& a, const float& b) { return a > b; }
 };
 
-template <typename T>
-__device__ void cuSwap(T& a, T& b) {
-  T c(a);
-  a = b;
-  b = c;
+__device__ int32_t cuIndicesToOffset(const int32_t* __restrict__ strides,
+                                     const int32_t* __restrict__ indices,
+                                     const int32_t dimCount) {
+  int32_t offset = 0;
+  for (int32_t i = 0; i < dimCount; i++) {
+    offset += indices[i] * strides[i];
+  }
+  return offset;
+}
+
+__device__ void cuOffsetToIndices(int32_t* __restrict__ indices,
+                                  const int32_t* __restrict__ shape,
+                                  const int32_t index, const int32_t dimCount) {
+  int32_t offset = index;
+  for (int32_t i = dimCount - 1; i >= 0; i--) {
+    indices[i] = offset % shape[i];
+    offset /= shape[i];
+  }
 }
 
 __device__ int32_t cuGetReduceSrcIndex(const TensorCudaCtx ret,
@@ -216,23 +229,6 @@ __device__ float cuAtomicMaxFloat(float* address, float val) {
                     __float_as_int(fmaxf(val, __int_as_float(assumed))));
   } while (assumed != old);
   return __int_as_float(old);
-}
-
-__device__ int32_t cuIndicesToOffset(const int32_t* strides,
-                                     const int32_t* indices, int32_t dimCount) {
-  int32_t offset = 0;
-  for (int32_t i = 0; i < dimCount; i++) {
-    offset += indices[i] * strides[i];
-  }
-  return offset;
-}
-
-__device__ void cuOffsetToIndices(int32_t* indices, const int32_t* shape,
-                                  int32_t offset, int32_t dimCount) {
-  for (int32_t i = dimCount - 1; i >= 0; i--) {
-    indices[i] = offset % shape[i];
-    offset /= shape[i];
-  }
 }
 
 __device__ void cuReorderIndices(int32_t* indices, const int32_t* order,
@@ -448,80 +444,66 @@ __global__ void kPairScalarSecondOp_(float* __restrict__ a,
   }
 }
 
-template <typename OP>
-__global__ void kBroadcastFastPassOp(TensorCudaCtx result,
-                                     const TensorCudaCtx larger,
-                                     const TensorCudaCtx smaller, bool reverse,
-                                     int n) {
-  OP opFunc;
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (index < n) {
-    auto& dataA = larger.data_[index];
-    auto& dataB = smaller.data_[index % smaller.elemCount_];
-    auto& dataRet = result.data_[index];
-    dataRet = reverse ? opFunc(dataB, dataA) : opFunc(dataA, dataB);
-  }
-}
-
-template <typename OP>
-__global__ void kBroadcastOp(TensorCudaCtx c, const TensorCudaCtx a,
-                             const TensorCudaCtx b, int n) {
-  OP opFunc;
-  int32_t cIndices[TENSOR_MAX_DIMS];
-  int32_t aIndices[TENSOR_MAX_DIMS];
-  int32_t bIndices[TENSOR_MAX_DIMS];
-
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (index < n) {
-    memset(aIndices, 0, TENSOR_MAX_DIMS * sizeof(int32_t));
-    memset(bIndices, 0, TENSOR_MAX_DIMS * sizeof(int32_t));
-
-    int offset = index;
-    for (int32_t i = c.dimCount_ - 1; i >= 0; i--) {
-      cIndices[i] = offset % c.shape_[i];
-      offset /= c.shape_[i];
-    }
-
-    for (int32_t j = 0; j < c.dimCount_; j++) {
-      if (j >= c.dimCount_ - a.dimCount_) {
-        int32_t aIndex = j - (c.dimCount_ - a.dimCount_);
-        if (a.shape_[aIndex] != 1) {
-          aIndices[aIndex] = cIndices[j];
-        }
-      }
-      if (j >= c.dimCount_ - b.dimCount_) {
-        int32_t bIndex = j - (c.dimCount_ - b.dimCount_);
-        if (b.shape_[bIndex] != 1) {
-          bIndices[bIndex] = cIndices[j];
-        }
-      }
-    }
-
-    int32_t aIdx = 0;
-    for (int32_t i = 0; i < a.dimCount_; i++) {
-      aIdx += aIndices[i] * a.strides_[i];
-    }
-
-    int32_t bIdx = 0;
-    for (int32_t i = 0; i < b.dimCount_; i++) {
-      bIdx += bIndices[i] * b.strides_[i];
-    }
-    c.data_[index] = opFunc(a.data_[aIdx], b.data_[bIdx]);
-  }
-}
-
-__global__ void kClamp(float* ret, const float* t, float minVal, float maxVal,
-                       int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void kClamp(float* __restrict__ ret, const float* __restrict__ t,
+                       const float minVal, const float maxVal, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
     ret[index] = max(minVal, min(t[index], maxVal));
   }
 }
 
-__global__ void kClamp_(float* t, float minVal, float maxVal, int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void kClamp_(float* __restrict__ t, const float minVal,
+                        const float maxVal, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
     t[index] = max(minVal, min(t[index], maxVal));
+  }
+}
+
+template <typename OP, bool Leading, bool First>
+__global__ void kBroadcastOpFast(float* __restrict__ ret,
+                                 const float* __restrict__ a,
+                                 const float* __restrict__ b,
+                                 const int32_t stride, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  const OP opFunc;
+  if (index < n) {
+    if (First) {
+      ret[index] =
+          opFunc(a[Leading ? index % stride : index / stride], b[index]);
+    } else {
+      ret[index] =
+          opFunc(a[index], b[Leading ? index % stride : index / stride]);
+    }
+  }
+}
+
+template <typename OP>
+__global__ void kBroadcastOpCommon(TensorCudaCtx c, const TensorCudaCtx a,
+                                   const TensorCudaCtx b, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  const OP opFunc;
+
+  if (index < n) {
+    int32_t cIndices[TENSOR_MAX_DIMS];
+    int32_t aIndices[TENSOR_MAX_DIMS] = {};
+    int32_t bIndices[TENSOR_MAX_DIMS] = {};
+
+    cuOffsetToIndices(cIndices, c.shape_, static_cast<int32_t>(index),
+                      c.dimCount_);
+    for (auto j = 0; j < c.dimCount_; j++) {
+      if (j >= c.dimCount_ - a.dimCount_) {
+        const int32_t aIndex = j - (c.dimCount_ - a.dimCount_);
+        aIndices[aIndex] = (a.shape_[aIndex] != 1) ? cIndices[j] : 0;
+      }
+      if (j >= c.dimCount_ - b.dimCount_) {
+        const int32_t bIndex = j - (c.dimCount_ - b.dimCount_);
+        bIndices[bIndex] = (b.shape_[bIndex] != 1) ? cIndices[j] : 0;
+      }
+    }
+    const auto aIdx = cuIndicesToOffset(a.strides_, aIndices, a.dimCount_);
+    const auto bIdx = cuIndicesToOffset(b.strides_, bIndices, b.dimCount_);
+    c.data_[index] = opFunc(a.data_[aIdx], b.data_[bIdx]);
   }
 }
 
