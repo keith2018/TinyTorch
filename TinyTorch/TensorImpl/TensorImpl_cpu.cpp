@@ -63,7 +63,7 @@ TensorOpsCPU::~TensorOpsCPU() { allocator_.clear(); }
 
 template <typename OP>
 void TensorOpsCPU::opSingle_(TensorImpl& t) {
-  OP opFunc;
+  const OP opFunc;
   for (int32_t i = 0; i < t.elemCount_; i++) {
     opFunc(t.data_[i]);
   }
@@ -71,7 +71,7 @@ void TensorOpsCPU::opSingle_(TensorImpl& t) {
 
 template <typename OP>
 TensorImpl TensorOpsCPU::opSingle(const TensorImpl& t) {
-  OP opFunc;
+  const OP opFunc;
   auto result = TensorImpl::shape(t.shape(), t.device_);
   for (int32_t i = 0; i < t.elemCount_; i++) {
     result.data_[i] = opFunc(t.data_[i]);
@@ -81,7 +81,7 @@ TensorImpl TensorOpsCPU::opSingle(const TensorImpl& t) {
 
 template <typename OP>
 TensorImpl TensorOpsCPU::opPair(const TensorImpl& a, const TensorImpl& b) {
-  OP opFunc;
+  const OP opFunc;
   auto result = TensorImpl::shape(a.shape(), a.device_);
   for (int32_t i = 0; i < a.elemCount_; i++) {
     result.data_[i] = opFunc(a.data_[i], b.data_[i]);
@@ -91,7 +91,7 @@ TensorImpl TensorOpsCPU::opPair(const TensorImpl& a, const TensorImpl& b) {
 
 template <typename OP>
 TensorImpl TensorOpsCPU::opPair(const TensorImpl& a, float b) {
-  OP opFunc;
+  const OP opFunc;
   auto result = TensorImpl::shape(a.shape(), a.device_);
   for (int32_t i = 0; i < a.elemCount_; i++) {
     result.data_[i] = opFunc(a.data_[i], b);
@@ -101,7 +101,7 @@ TensorImpl TensorOpsCPU::opPair(const TensorImpl& a, float b) {
 
 template <typename OP>
 TensorImpl TensorOpsCPU::opPair(float a, const TensorImpl& b) {
-  OP opFunc;
+  const OP opFunc;
   auto result = TensorImpl::shape(b.shape(), b.device_);
   for (int32_t i = 0; i < b.elemCount_; i++) {
     result.data_[i] = opFunc(a, b.data_[i]);
@@ -111,7 +111,7 @@ TensorImpl TensorOpsCPU::opPair(float a, const TensorImpl& b) {
 
 template <typename OP>
 void TensorOpsCPU::opPair_(TensorImpl& t, float b) {
-  OP opFunc;
+  const OP opFunc;
   for (int32_t i = 0; i < t.elemCount_; i++) {
     t.data_[i] = opFunc(t.data_[i], b);
   }
@@ -119,71 +119,99 @@ void TensorOpsCPU::opPair_(TensorImpl& t, float b) {
 
 template <typename OP>
 void TensorOpsCPU::opPair_(TensorImpl& t, const TensorImpl& b) {
-  OP opFunc;
+  const OP opFunc;
   for (int32_t i = 0; i < t.elemCount_; i++) {
     t.data_[i] = opFunc(t.data_[i], b.data_[i]);
   }
 }
 
-template <typename OP>
-void TensorOpsCPU::broadcastFastPass(TensorImpl& result,
-                                     const TensorImpl& larger,
-                                     const TensorImpl& smaller, bool reverse) {
-  OP opFunc;
-  int32_t n = result.elemCount_ / smaller.elemCount_;
-  for (int32_t idx = 0; idx < n; idx++) {
-    for (int32_t i = 0; i < smaller.elemCount_; i++) {
-      auto& dataA = larger.data_[i + idx * smaller.elemCount_];
-      auto& dataB = smaller.data_[i];
-      auto& dataRet = result.data_[i + idx * smaller.elemCount_];
-      dataRet = reverse ? opFunc(dataB, dataA) : opFunc(dataA, dataB);
-    }
+template <typename OP, bool REVERSE>
+void TensorOpsCPU::broadcastImplLeadingOnes(TensorImpl& result,
+                                            const TensorImpl& larger,
+                                            const TensorImpl& smaller) {
+  const OP opFunc;
+  const int32_t n = smaller.elemCount_;
+  for (int32_t idx = 0; idx < result.elemCount_; idx++) {
+    auto& dataA = larger.data_[idx];
+    auto& dataB = smaller.data_[idx % n];
+    auto& dataRet = result.data_[idx];
+    dataRet = REVERSE ? opFunc(dataB, dataA) : opFunc(dataA, dataB);
+  }
+}
+
+template <typename OP, bool REVERSE>
+void TensorOpsCPU::broadcastImplTrailingOnes(TensorImpl& result,
+                                             const TensorImpl& larger,
+                                             const TensorImpl& smaller) {
+  const OP opFunc;
+  const int32_t n = result.elemCount_ / smaller.elemCount_;
+  for (int32_t idx = 0; idx < result.elemCount_; idx++) {
+    auto& dataA = larger.data_[idx];
+    auto& dataB = smaller.data_[idx / n];
+    auto& dataRet = result.data_[idx];
+    dataRet = REVERSE ? opFunc(dataB, dataA) : opFunc(dataA, dataB);
   }
 }
 
 template <typename OP>
-void TensorOpsCPU::broadcastImpl(TensorImpl& result, const TensorImpl& a,
-                                 const TensorImpl& b) {
-  OP opFunc;
+void TensorOpsCPU::broadcastImplCommon(TensorImpl& result, const TensorImpl& a,
+                                       const TensorImpl& b) {
+  const OP opFunc;
 
-  // fast pass 1
-  if (a.elemCount_ == result.elemCount_ && isLeadingOnes(b.shape())) {
-    broadcastFastPass<OP>(result, a, b, false);
-    return;
-  }
-
-  // fast pass 2
-  if (b.elemCount_ == result.elemCount_ && isLeadingOnes(a.shape())) {
-    broadcastFastPass<OP>(result, b, a, true);
-    return;
-  }
-
-  // slow pass
   static int32_t cIndices[TENSOR_MAX_DIMS];
   static int32_t aIndices[TENSOR_MAX_DIMS];
   static int32_t bIndices[TENSOR_MAX_DIMS];
   memset(aIndices, 0, TENSOR_MAX_DIMS * sizeof(int32_t));
   memset(bIndices, 0, TENSOR_MAX_DIMS * sizeof(int32_t));
+
   for (int32_t i = 0; i < result.elemCount_; i++) {
     offsetToIndices(cIndices, result.shape_, i);
     for (int32_t j = 0; j < result.dimCount_; j++) {
       if (j >= result.dimCount_ - a.dimCount_) {
         int32_t aIndex = j - (result.dimCount_ - a.dimCount_);
-        if (a.shape()[aIndex] != 1) {
-          aIndices[aIndex] = cIndices[j];
-        }
+        aIndices[aIndex] = (a.shape_[aIndex] != 1) ? cIndices[j] : 0;
       }
       if (j >= result.dimCount_ - b.dimCount_) {
         int32_t bIndex = j - (result.dimCount_ - b.dimCount_);
-        if (b.shape()[bIndex] != 1) {
-          bIndices[bIndex] = cIndices[j];
-        }
+        bIndices[bIndex] = (b.shape_[bIndex] != 1) ? cIndices[j] : 0;
       }
     }
     auto aIdx = indicesToOffset(a.strides_, aIndices);
     auto bIdx = indicesToOffset(b.strides_, bIndices);
     result.data_[i] = opFunc(a.data_[aIdx], b.data_[bIdx]);
   }
+}
+
+template <typename OP>
+void TensorOpsCPU::broadcastImpl(TensorImpl& result, const TensorImpl& a,
+                                 const TensorImpl& b) {
+  // fast broadcast with a
+  if (b.elemCount_ == result.elemCount_) {
+    if (isLeadingOnes(a.shape())) {
+      broadcastImplLeadingOnes<OP, true>(result, b, a);
+      return;
+    }
+
+    if (isTrailingOnes(a.shape())) {
+      broadcastImplTrailingOnes<OP, true>(result, b, a);
+      return;
+    }
+  }
+
+  // fast broadcast with b
+  if (a.elemCount_ == result.elemCount_) {
+    if (isLeadingOnes(b.shape())) {
+      broadcastImplLeadingOnes<OP, false>(result, a, b);
+      return;
+    }
+
+    if (isTrailingOnes(b.shape())) {
+      broadcastImplTrailingOnes<OP, false>(result, a, b);
+      return;
+    }
+  }
+
+  broadcastImplCommon<OP>(result, a, b);
 }
 
 template <typename OP>

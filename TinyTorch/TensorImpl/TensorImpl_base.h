@@ -201,6 +201,7 @@ class TensorOperations {
   static void reorderIndices(int32_t* indices,
                              const std::vector<int32_t>& order);
   static bool isLeadingOnes(const Shape& shape);
+  static bool isTrailingOnes(const Shape& shape);
 
   static Shape getReduceShape(const TensorImpl& t, int32_t dim, bool keepDims);
   static Shape getReduceShape(const TensorImpl& t,
