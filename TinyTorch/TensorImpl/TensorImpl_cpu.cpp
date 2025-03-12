@@ -17,6 +17,8 @@
 #endif
 #endif
 
+#define TINY_TORCH_MEM_ALIGN 32
+
 #include "TensorImpl_cpu.inc"
 
 namespace TinyTorch {
@@ -26,14 +28,32 @@ static std::random_device _r;
 std::default_random_engine RandomGeneratorCPU::randomEngine_(_r());
 
 void AllocatorCPU::allocate(void** ptr, size_t size) {
-  *ptr = std::malloc(size);
+  if (pinned_) {
+    *ptr = allocatePinned(size);
+  } else {
+    *ptr = allocateAlign(size, TINY_TORCH_MEM_ALIGN);
+  }
 }
 
 void AllocatorCPU::deallocate(void* ptr) {
-  if (ptr) {
-    std::free(ptr);
+  if (pinned_) {
+    deallocatePinned(ptr);
+  } else {
+    deallocateAlign(ptr);
   }
 }
+
+void* AllocatorCPU::allocateAlign(size_t size, size_t alignment) {
+  return std::aligned_alloc(alignment, size);
+}
+
+void AllocatorCPU::deallocateAlign(void* ptr) { std::free(ptr); }
+
+#ifndef USE_CUDA
+void* AllocatorCPU::allocatePinned(size_t size) { return nullptr; }
+
+void AllocatorCPU::deallocatePinned(void* ptr) {}
+#endif
 
 TensorOpsCPU::TensorOpsCPU() {
   allocator_.setBaseAllocator(std::make_shared<AllocatorCPU>());

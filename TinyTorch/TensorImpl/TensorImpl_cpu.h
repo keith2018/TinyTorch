@@ -17,6 +17,15 @@ class AllocatorCPU : public Allocator {
  public:
   void allocate(void **ptr, size_t size) override;
   void deallocate(void *ptr) override;
+
+ private:
+  static void *allocateAlign(size_t size, size_t alignment);
+  static void deallocateAlign(void *ptr);
+
+  static void *allocatePinned(size_t size);
+  static void deallocatePinned(void *ptr);
+
+  bool pinned_ = false;
 };
 
 class RandomGeneratorCPU {

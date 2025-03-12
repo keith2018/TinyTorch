@@ -17,7 +17,7 @@ namespace TinyTorch {
 
 enum class Device { CPU, CUDA };
 
-struct Size2D {
+struct __attribute__((aligned(16))) Size2D {
   Size2D(int32_t n) : h(n), w(n) {}
   Size2D(int32_t h, int32_t w) : h(h), w(w) {}
 
@@ -26,7 +26,7 @@ struct Size2D {
 };
 
 template <typename T>
-struct FixedVector {
+struct __attribute__((aligned(16))) FixedVector {
   T data[TENSOR_MAX_DIMS]{};
 };
 
