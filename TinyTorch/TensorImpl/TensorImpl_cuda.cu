@@ -224,28 +224,50 @@ void TensorOpsCUDA::opPairScalarSecond_(TensorImpl& a,
 template <typename OP>
 void TensorOpsCUDA::broadcastImpl(TensorImpl& result, const TensorImpl& a,
                                   const TensorImpl& b) const {
-  auto ctxA = getTensorCtx(a);
-  auto ctxB = getTensorCtx(b);
-  auto ctxC = getTensorCtx(result);
+  // fast broadcast with a
+  if (b.elemCount_ == result.elemCount_) {
+    if (isLeadingOnes(a.shape())) {
+      kBroadcastOpFast<OP, true, true>
+          <<<getGridSize(result.elemCount_), getBlockSize()>>>(
+              result.data_, a.data_, b.data_, a.elemCount_, result.elemCount_);
+      CUDA_KERNEL_CHECK();
+      return;
+    }
 
-  // fast pass 1
-  if (a.elemCount_ == result.elemCount_ && isLeadingOnes(b.shape())) {
-    kBroadcastFastPassOp<OP>
-        <<<getGridSize(result.elemCount_), getBlockSize()>>>(
-            ctxC, ctxA, ctxB, false, result.elemCount_);
-    return;
+    if (isTrailingOnes(a.shape())) {
+      kBroadcastOpFast<OP, false, true>
+          <<<getGridSize(result.elemCount_), getBlockSize()>>>(
+              result.data_, a.data_, b.data_, result.elemCount_ / a.elemCount_,
+              result.elemCount_);
+      CUDA_KERNEL_CHECK();
+      return;
+    }
   }
 
-  // fast pass 2
-  if (b.elemCount_ == result.elemCount_ && isLeadingOnes(a.shape())) {
-    kBroadcastFastPassOp<OP>
-        <<<getGridSize(result.elemCount_), getBlockSize()>>>(
-            ctxC, ctxB, ctxA, true, result.elemCount_);
-    return;
+  // fast broadcast with b
+  if (a.elemCount_ == result.elemCount_) {
+    if (isLeadingOnes(b.shape())) {
+      kBroadcastOpFast<OP, true, false>
+          <<<getGridSize(result.elemCount_), getBlockSize()>>>(
+              result.data_, a.data_, b.data_, b.elemCount_, result.elemCount_);
+      CUDA_KERNEL_CHECK();
+      return;
+    }
+
+    if (isTrailingOnes(b.shape())) {
+      kBroadcastOpFast<OP, false, false>
+          <<<getGridSize(result.elemCount_), getBlockSize()>>>(
+              result.data_, a.data_, b.data_, result.elemCount_ / b.elemCount_,
+              result.elemCount_);
+      CUDA_KERNEL_CHECK();
+      return;
+    }
   }
 
-  // slow pass
-  kBroadcastOp<OP><<<getGridSize(result.elemCount_), getBlockSize()>>>(
+  const auto ctxA = getTensorCtx(a);
+  const auto ctxB = getTensorCtx(b);
+  const auto ctxC = getTensorCtx(result);
+  kBroadcastOpCommon<OP><<<getGridSize(result.elemCount_), getBlockSize()>>>(
       ctxC, ctxA, ctxB, result.elemCount_);
   CUDA_KERNEL_CHECK();
 }
