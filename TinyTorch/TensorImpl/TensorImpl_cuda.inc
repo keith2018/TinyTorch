@@ -8,6 +8,10 @@
 
 namespace TinyTorch {
 
+#define FETCH_FLOAT2(pointer) (reinterpret_cast<float2*>(&(pointer))[0])
+#define FETCH_FLOAT3(pointer) (reinterpret_cast<float3*>(&(pointer))[0])
+#define FETCH_FLOAT4(pointer) (reinterpret_cast<float4*>(&(pointer))[0])
+
 struct OpCudaAdd {
   __device__ float operator()(const float a, const float b) const {
     return a + b;
@@ -249,159 +253,196 @@ __device__ void cuGetSubIndices(int32_t* subIndices, const TensorCudaCtx t,
   }
 }
 
-__global__ void kFillConstant(float* t, float val, size_t n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (index < n) {
-    t[index] = val;
+__global__ void kFillConstant(float* __restrict__ t, const float val,
+                              const size_t n) {
+  const auto index = (blockIdx.x * blockDim.x + threadIdx.x) * 4;
+  if (index + 3 < n) {
+    FETCH_FLOAT4(t[index]) = make_float4(val, val, val, val);
+  } else {
+    if (index < n) t[index] = val;
+    if (index + 1 < n) t[index + 1] = val;
+    if (index + 2 < n) t[index + 2] = val;
   }
 }
 
-__global__ void kFillLinSpace(float* dst, float start, float step,
-                              size_t count) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (index < count) {
-    dst[index] = start + (float)index * step;
+__global__ void kFillLinSpace(float* __restrict__ dst, const float start,
+                              const float step, const size_t n) {
+  const auto index = (blockIdx.x * blockDim.x + threadIdx.x) * 4;
+  const auto base = start + static_cast<float>(index) * step;
+  if (index + 3 < n) {
+    FETCH_FLOAT4(dst[index]) =
+        make_float4(base, base + step, base + 2 * step, base + 3 * step);
+  } else {
+    if (index < n) dst[index] = base;
+    if (index + 1 < n) dst[index + 1] = base + step;
+    if (index + 2 < n) dst[index + 2] = base + 2 * step;
   }
 }
 
-__global__ void kFillRandUniform(float* t, float minVal, float maxVal,
-                                 unsigned long seed, unsigned long seq, int n) {
-  unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  auto index = tid * 4;
-  if (index < n) {
-    curandStatePhilox4_32_10_t state;
-    curand_init(seed, seq, index, &state);
-    float4 rand = curand_uniform4(&state);
-
-    float range = maxVal - minVal;
-    if (index < n) t[index] = rand.x * range + minVal;
-    if (index + 1 < n) t[index + 1] = rand.y * range + minVal;
-    if (index + 2 < n) t[index + 2] = rand.z * range + minVal;
-    if (index + 3 < n) t[index + 3] = rand.w * range + minVal;
-  }
-}
-
-__global__ void kFillRandNormal(float* t, float mean, float stddev,
-                                unsigned long seed, unsigned long seq, int n) {
-  unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  auto index = tid * 4;
+__global__ void kFillRandUniform(float* __restrict__ t, const float minVal,
+                                 const float maxVal, const unsigned long seed,
+                                 const unsigned long seq, const int n) {
+  const auto index = (blockIdx.x * blockDim.x + threadIdx.x) * 4;
   if (index < n) {
     curandStatePhilox4_32_10_t state;
     curand_init(seed, seq, index, &state);
-    float4 rand = curand_normal4(&state);
+    const auto rand = curand_uniform4(&state);
+    const auto range = maxVal - minVal;
 
-    if (index < n) t[index] = rand.x * stddev + mean;
-    if (index + 1 < n) t[index + 1] = rand.y * stddev + mean;
-    if (index + 2 < n) t[index + 2] = rand.z * stddev + mean;
-    if (index + 3 < n) t[index + 3] = rand.w * stddev + mean;
+    if (index + 3 < n) {
+      FETCH_FLOAT4(t[index]) =
+          make_float4(rand.x * range + minVal, rand.y * range + minVal,
+                      rand.z * range + minVal, rand.w * range + minVal);
+    } else {
+      if (index < n) t[index] = rand.x * range + minVal;
+      if (index + 1 < n) t[index + 1] = rand.y * range + minVal;
+      if (index + 2 < n) t[index + 2] = rand.z * range + minVal;
+    }
   }
 }
 
-__global__ void kFillRandBernoulli(float* t, float p, unsigned long seed,
-                                   unsigned long seq, int n) {
-  unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  auto index = tid * 4;
+__global__ void kFillRandNormal(float* __restrict__ t, const float mean,
+                                const float stddev, const unsigned long seed,
+                                const unsigned long seq, const int n) {
+  const auto index = (blockIdx.x * blockDim.x + threadIdx.x) * 4;
   if (index < n) {
     curandStatePhilox4_32_10_t state;
     curand_init(seed, seq, index, &state);
-    float4 rand = curand_uniform4(&state);
+    const auto rand = curand_normal4(&state);
 
-    if (index < n) t[index] = rand.x < p ? 1.f : 0.f;
-    if (index + 1 < n) t[index + 1] = rand.y < p ? 1.f : 0.f;
-    if (index + 2 < n) t[index + 2] = rand.z < p ? 1.f : 0.f;
-    if (index + 3 < n) t[index + 3] = rand.w < p ? 1.f : 0.f;
+    if (index + 3 < n) {
+      FETCH_FLOAT4(t[index]) =
+          make_float4(rand.x * stddev + mean, rand.y * stddev + mean,
+                      rand.z * stddev + mean, rand.w * stddev + mean);
+    } else {
+      if (index < n) t[index] = rand.x * stddev + mean;
+      if (index + 1 < n) t[index + 1] = rand.y * stddev + mean;
+      if (index + 2 < n) t[index + 2] = rand.z * stddev + mean;
+    }
+  }
+}
+
+__global__ void kFillRandBernoulli(float* __restrict__ t, const float p,
+                                   const unsigned long seed,
+                                   const unsigned long seq, const int n) {
+  const auto index = (blockIdx.x * blockDim.x + threadIdx.x) * 4;
+  if (index < n) {
+    curandStatePhilox4_32_10_t state;
+    curand_init(seed, seq, index, &state);
+    const auto rand = curand_uniform4(&state);
+
+    if (index + 3 < n) {
+      FETCH_FLOAT4(t[index]) =
+          make_float4(rand.x < p ? 1.f : 0.f, rand.y < p ? 1.f : 0.f,
+                      rand.z < p ? 1.f : 0.f, rand.w < p ? 1.f : 0.f);
+    } else {
+      if (index < n) t[index] = rand.x < p ? 1.f : 0.f;
+      if (index + 1 < n) t[index + 1] = rand.y < p ? 1.f : 0.f;
+      if (index + 2 < n) t[index + 2] = rand.z < p ? 1.f : 0.f;
+    }
   }
 }
 
 template <typename OP>
-__global__ void kSingleOp_(float* t, int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
-  OP opFunc;
+__global__ void kSingleOp_(float* __restrict__ t, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  const OP opFunc;
   if (index < n) {
     opFunc(t[index]);
   }
 }
 
 template <typename OP>
-__global__ void kSingleOp(float* ret, const float* t, int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
-  OP opFunc;
+__global__ void kSingleOp(float* __restrict__ ret, const float* __restrict__ t,
+                          const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  const OP opFunc;
   if (index < n) {
     ret[index] = opFunc(t[index]);
   }
 }
 
 template <typename OP>
-__global__ void kPairOp(const float* a, const float* b, float* c, int n) {
-  OP opFunc;
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void kPairOp(float* __restrict__ c, const float* __restrict__ a,
+                        const float* __restrict__ b, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  const OP opFunc;
   if (index < n) {
     c[index] = opFunc(a[index], b[index]);
   }
 }
 
 template <typename OP>
-__global__ void kPairScalarFirstOp(const float a, const float* b, float* c,
-                                   int n) {
-  OP opFunc;
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void kPairScalarFirstOp(float* __restrict__ c, const float a,
+                                   const float* __restrict__ b, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  const OP opFunc;
   if (index < n) {
     c[index] = opFunc(a, b[index]);
   }
 }
 
 template <typename OP>
-__global__ void kPairScalarFirstOp(const float* a, const float* b, float* c,
-                                   int n) {
-  OP opFunc;
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void kPairScalarFirstOp(float* __restrict__ c,
+                                   const float* __restrict__ a,
+                                   const float* __restrict__ b, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  const OP opFunc;
+
   if (index < n) {
     c[index] = opFunc(a[0], b[index]);
   }
 }
 
 template <typename OP>
-__global__ void kPairScalarSecondOp(const float* a, const float b, float* c,
-                                    int n) {
-  OP opFunc;
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void kPairScalarSecondOp(float* __restrict__ c,
+                                    const float* __restrict__ a, const float b,
+                                    const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  const OP opFunc;
   if (index < n) {
     c[index] = opFunc(a[index], b);
   }
 }
 
 template <typename OP>
-__global__ void kPairScalarSecondOp(const float* a, const float* b, float* c,
-                                    int n) {
-  OP opFunc;
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void kPairScalarSecondOp(float* __restrict__ c,
+                                    const float* __restrict__ a,
+                                    const float* __restrict__ b, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  const OP opFunc;
+
   if (index < n) {
     c[index] = opFunc(a[index], b[0]);
   }
 }
 
 template <typename OP>
-__global__ void kPairOp_(float* a, const float* b, int n) {
-  OP opFunc;
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void kPairOp_(float* __restrict__ a, const float* __restrict__ b,
+                         const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  const OP opFunc;
   if (index < n) {
     a[index] = opFunc(a[index], b[index]);
   }
 }
 
 template <typename OP>
-__global__ void kPairScalarSecondOp_(float* a, const float b, int n) {
-  OP opFunc;
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void kPairScalarSecondOp_(float* __restrict__ a, const float b,
+                                     const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  const OP opFunc;
   if (index < n) {
     a[index] = opFunc(a[index], b);
   }
 }
 
 template <typename OP>
-__global__ void kPairScalarSecondOp_(float* a, const float* b, int n) {
-  OP opFunc;
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void kPairScalarSecondOp_(float* __restrict__ a,
+                                     const float* __restrict__ b, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  const OP opFunc;
+
   if (index < n) {
     a[index] = opFunc(a[index], b[0]);
   }
