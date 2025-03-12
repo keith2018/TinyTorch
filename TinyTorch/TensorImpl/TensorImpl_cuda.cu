@@ -146,7 +146,7 @@ TensorImpl TensorOpsCUDA::opPair(const TensorImpl& a,
                                  const TensorImpl& b) const {
   auto result = TensorImpl::shape(a.shape(), a.device_);
   kPairOp<OP><<<getGridSize(result.elemCount_), getBlockSize()>>>(
-      a.data_, b.data_, result.data_, result.elemCount_);
+      result.data_, a.data_, b.data_, result.elemCount_);
   CUDA_KERNEL_CHECK();
   return result;
 }
@@ -155,7 +155,7 @@ template <typename OP>
 TensorImpl TensorOpsCUDA::opPair(const TensorImpl& a, float b) const {
   auto result = TensorImpl::shape(a.shape(), a.device_);
   kPairScalarSecondOp<OP><<<getGridSize(a.elemCount_), getBlockSize()>>>(
-      a.data_, b, result.data_, a.elemCount_);
+      result.data_, a.data_, b, a.elemCount_);
   CUDA_KERNEL_CHECK();
   return result;
 }
@@ -164,7 +164,7 @@ template <typename OP>
 TensorImpl TensorOpsCUDA::opPair(float a, const TensorImpl& b) const {
   auto result = TensorImpl::shape(b.shape(), b.device_);
   kPairScalarFirstOp<OP><<<getGridSize(b.elemCount_), getBlockSize()>>>(
-      a, b.data_, result.data_, b.elemCount_);
+      result.data_, a, b.data_, b.elemCount_);
   CUDA_KERNEL_CHECK();
   return result;
 }
@@ -174,7 +174,7 @@ TensorImpl TensorOpsCUDA::opPairScalarFirst(const TensorImpl& a,
                                             const TensorImpl& b) const {
   auto result = TensorImpl::shape(b.shape(), b.device_);
   kPairScalarFirstOp<OP><<<getGridSize(result.elemCount_), getBlockSize()>>>(
-      a.data_, b.data_, result.data_, result.elemCount_);
+      result.data_, a.data_, b.data_, result.elemCount_);
   CUDA_KERNEL_CHECK();
   return result;
 }
@@ -184,7 +184,7 @@ TensorImpl TensorOpsCUDA::opPairScalarSecond(const TensorImpl& a,
                                              const TensorImpl& b) const {
   auto result = TensorImpl::shape(a.shape(), a.device_);
   kPairScalarSecondOp<OP><<<getGridSize(result.elemCount_), getBlockSize()>>>(
-      a.data_, b.data_, result.data_, result.elemCount_);
+      result.data_, a.data_, b.data_, result.elemCount_);
   CUDA_KERNEL_CHECK();
   return result;
 }
@@ -208,7 +208,7 @@ void TensorOpsCUDA::opPairScalarFirst_(TensorImpl& a,
                                        const TensorImpl& b) const {
   auto result = TensorImpl::shape(b.shape_, b.device_);
   kPairScalarFirstOp<OP><<<getGridSize(result.elemCount_), getBlockSize()>>>(
-      a.data_, b.data_, result.data_, result.elemCount_);
+      result.data_, a.data_, b.data_, result.elemCount_);
   CUDA_KERNEL_CHECK();
   a = std::move(result);
 }
@@ -339,20 +339,20 @@ void TensorOpsCUDA::copyDeviceToHost(void* dst, const void* src, size_t count) {
 }
 
 void TensorOpsCUDA::fillConstant_(float* dst, float val, size_t count) {
-  kFillConstant<<<getGridSize(count), getBlockSize()>>>(dst, val, count);
+  kFillConstant<<<getGridSize(count, 4), getBlockSize()>>>(dst, val, count);
   CUDA_KERNEL_CHECK();
 }
 
 void TensorOpsCUDA::fillConstant_(TensorImpl& t, float val) {
-  kFillConstant<<<getGridSize(t.elemCount_), getBlockSize()>>>(t.data_, val,
-                                                               t.elemCount_);
+  kFillConstant<<<getGridSize(t.elemCount_, 4), getBlockSize()>>>(t.data_, val,
+                                                                  t.elemCount_);
   CUDA_KERNEL_CHECK();
 }
 
 void TensorOpsCUDA::fillLinSpace_(float* dst, float start, float step,
                                   size_t count) {
-  kFillLinSpace<<<getGridSize(count), getBlockSize()>>>(dst, start, step,
-                                                        count);
+  kFillLinSpace<<<getGridSize(count, 4), getBlockSize()>>>(dst, start, step,
+                                                           count);
   CUDA_KERNEL_CHECK();
 }
 
