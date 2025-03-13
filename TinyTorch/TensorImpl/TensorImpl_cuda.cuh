@@ -92,6 +92,18 @@ class TensorOpsCUDA : public TensorOperations {
   void opPairBroadcast_(TensorImpl &a, const TensorImpl &b) const;
 
   // reduce
+  template <typename OP>
+  using KernelFunc = void (*)(float *, const float *, int32_t);
+  template <typename OP>
+  void reduceAllImpl(float *dOutput, const float *dInput, int32_t n,
+                     float *dTmp, KernelFunc<OP> kernel);
+  template <typename OP>
+  void reduceAll(float *dOutput, const float *dInput, int32_t n,
+                 float *dTmp = nullptr);
+  template <typename OP>
+  void reduceAllIdx(float *dOutput, const float *dInput, int32_t n,
+                    float *dTmp = nullptr);
+
   template <typename Compare>
   std::pair<TensorImpl, TensorImpl> reduceDim(const TensorImpl &t, int32_t dim,
                                               bool keepDims, float initVal,
