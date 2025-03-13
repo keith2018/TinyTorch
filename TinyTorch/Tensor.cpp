@@ -233,8 +233,7 @@ void Tensor::setGrad(const Tensor &grad) {
 
 void Tensor::zeroGrad() {
   if (requiresGrad_) {
-    *gradMeta_->grad_.data_ =
-        TensorImpl::zeros(data_->shape(), data_->device());
+    gradMeta_->grad_.data_->fill_(0.f);
   }
 }
 
@@ -245,7 +244,7 @@ void Tensor::initAutograd(bool requiresGrad,
     gradMeta_ = std::make_shared<AutogradMeta>();
     gradMeta_->setGradFunc(gradFunc);
     *gradMeta_->grad_.data_ =
-        TensorImpl::zeros(data_->shape(), data_->device());
+        TensorImpl::shape(data_->shape(), data_->device());
 
     if (isLeaf()) {
       gradMeta_->gradLeaf_ = std::make_shared<FuncLeaf>();
