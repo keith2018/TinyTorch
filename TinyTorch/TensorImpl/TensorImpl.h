@@ -27,8 +27,6 @@ static Device defaultDevice = Device::CPU;
 
 class TensorOperations;
 class TensorOpsCPU;
-class TensorOpsCUDA;
-
 #ifdef USE_CUDA
 class TensorOpsCUDA;
 #endif
@@ -48,12 +46,10 @@ struct Storage {
 class TensorImpl {
   friend class TensorOperations;
   friend class TensorOpsCPU;
-  friend class TensorOpsCUDA;
-  friend struct Storage;
-
 #ifdef USE_CUDA
   friend class TensorOpsCUDA;
 #endif
+  friend struct Storage;
 
  public:
   TensorImpl() = default;

@@ -12,7 +12,7 @@
 
 namespace TinyTorch {
 
-struct TensorCudaCtx {
+struct __attribute__((aligned(16))) TensorCudaCtx {
   int32_t dimCount_;
   int32_t elemCount_;
   int32_t shape_[TENSOR_MAX_DIMS];
@@ -39,7 +39,7 @@ class RandomGeneratorCUDA {
 
 class TensorOpsCUDA : public TensorOperations {
  public:
-  explicit TensorOpsCUDA(size_t blockSize = 512);
+  explicit TensorOpsCUDA(int32_t device = 0, size_t blockSize = 512);
   ~TensorOpsCUDA() override;
 
   unsigned int getGridSize(size_t n, int32_t batch = 1) const {
@@ -92,14 +92,27 @@ class TensorOpsCUDA : public TensorOperations {
   void opPairBroadcast_(TensorImpl &a, const TensorImpl &b) const;
 
   // reduce
+  template <typename OP>
+  using KernelFunc = void (*)(float *, const float *, int32_t);
+  template <typename OP>
+  void reduceAllImpl(float *dOutput, const float *dInput, int32_t n,
+                     float *dTmp, KernelFunc<OP> kernel);
+  template <typename OP>
+  void reduceAll(float *dOutput, const float *dInput, int32_t n,
+                 float *dTmp = nullptr);
+  template <typename OP>
+  void reduceAllIdx(float *dOutput, const float *dInput, int32_t n,
+                    float *dTmp = nullptr);
+
   template <typename Compare>
   std::pair<TensorImpl, TensorImpl> reduceDim(const TensorImpl &t, int32_t dim,
                                               bool keepDims, float initVal,
                                               Compare comp);
 
  protected:
-  int32_t cudaDeviceIdx_ = 0;
+  int32_t cudaDeviceIdx_;
   size_t blockSize_;
+  cudaDeviceProp deviceProp_{};
   cublasHandle_t blasHandle_ = nullptr;
 };
 

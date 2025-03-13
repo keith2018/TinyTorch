@@ -23,11 +23,11 @@ CachedAllocator::CachedAllocator(uint64_t maxCacheSize)
 CachedAllocator::~CachedAllocator() { CachedAllocator::clear(); }
 
 void CachedAllocator::allocate(void** ptr, size_t size) {
+  size = ALLOC_ROUND(size);
   if (!cacheEnabled_) {
     base_->allocate(ptr, size);
     return;
   }
-  size = ALLOC_ROUND(size);
   auto it = freedList_.find(size);
   if (it != freedList_.end() && !it->second.empty()) {
     *ptr = it->second.front();
