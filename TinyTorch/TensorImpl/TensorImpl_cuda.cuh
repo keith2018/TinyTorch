@@ -39,7 +39,7 @@ class RandomGeneratorCUDA {
 
 class TensorOpsCUDA : public TensorOperations {
  public:
-  explicit TensorOpsCUDA(size_t blockSize = 512);
+  explicit TensorOpsCUDA(int32_t device = 0, size_t blockSize = 512);
   ~TensorOpsCUDA() override;
 
   unsigned int getGridSize(size_t n, int32_t batch = 1) const {
@@ -98,8 +98,9 @@ class TensorOpsCUDA : public TensorOperations {
                                               Compare comp);
 
  protected:
-  int32_t cudaDeviceIdx_ = 0;
+  int32_t cudaDeviceIdx_;
   size_t blockSize_;
+  cudaDeviceProp deviceProp_{};
   cublasHandle_t blasHandle_ = nullptr;
 };
 
