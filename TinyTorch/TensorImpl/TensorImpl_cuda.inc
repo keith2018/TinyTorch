@@ -7,52 +7,11 @@
 #pragma once
 
 namespace TinyTorch {
-const char* curandGetErrorString(curandStatus_t status);
-const char* cublasGetErrorString(cublasStatus_t status);
 
-#define CUDA_CHECK(call)                                                      \
-  do {                                                                        \
-    cudaError_t err = call;                                                   \
-    if (err != cudaSuccess) {                                                 \
-      std::cerr << "CUDA error in file '" << __FILE__ << "' in line "         \
-                << __LINE__ << ": " << cudaGetErrorString(err) << " (" << err \
-                << ")" << std::endl;                                          \
-      abort();                                                                \
-    }                                                                         \
-  } while (0)
-
-#define CURAND_CHECK(call)                                               \
-  do {                                                                   \
-    curandStatus_t err = call;                                           \
-    if (err != CURAND_STATUS_SUCCESS) {                                  \
-      std::cerr << "CURAND error in file '" << __FILE__ << "' in line "  \
-                << __LINE__ << ": " << curandGetErrorString(err) << " (" \
-                << err << ")" << std::endl;                              \
-      abort();                                                           \
-    }                                                                    \
-  } while (0)
-
-#define CUBLAS_CHECK(call)                                               \
-  do {                                                                   \
-    cublasStatus_t err = call;                                           \
-    if (err != CUBLAS_STATUS_SUCCESS) {                                  \
-      std::cerr << "CUBLAS error in file '" << __FILE__ << "' in line "  \
-                << __LINE__ << ": " << cublasGetErrorString(err) << " (" \
-                << err << ")" << std::endl;                              \
-      abort();                                                           \
-    }                                                                    \
-  } while (0)
-
-#define CUDA_KERNEL_CHECK()                                                   \
-  do {                                                                        \
-    cudaError_t err = cudaGetLastError();                                     \
-    if (err != cudaSuccess) {                                                 \
-      std::cerr << "CUDA kernel error in file '" << __FILE__ << "' in line "  \
-                << __LINE__ << ": " << cudaGetErrorString(err) << " (" << err \
-                << ")" << std::endl;                                          \
-      abort();                                                                \
-    }                                                                         \
-  } while (0)
+#define WARP_SIZE 32
+#define FETCH_FLOAT2(pointer) (reinterpret_cast<float2*>(&(pointer))[0])
+#define FETCH_FLOAT3(pointer) (reinterpret_cast<float3*>(&(pointer))[0])
+#define FETCH_FLOAT4(pointer) (reinterpret_cast<float4*>(&(pointer))[0])
 
 struct OpCudaAdd {
   __device__ float operator()(const float a, const float b) const {
@@ -188,13 +147,6 @@ struct OpCudaGreater {
   __device__ bool operator()(const float& a, const float& b) { return a > b; }
 };
 
-template <typename T>
-__device__ void cuSwap(T& a, T& b) {
-  T c(a);
-  a = b;
-  b = c;
-}
-
 __device__ int32_t cuGetReduceSrcIndex(const TensorCudaCtx ret,
                                        const TensorCudaCtx t, int32_t idx,
                                        int32_t dim, bool keepDims) {
@@ -260,23 +212,6 @@ __device__ float cuAtomicMaxFloat(float* address, float val) {
   return __int_as_float(old);
 }
 
-__device__ int32_t cuIndicesToOffset(const int32_t* strides,
-                                     const int32_t* indices, int32_t dimCount) {
-  int32_t offset = 0;
-  for (int32_t i = 0; i < dimCount; i++) {
-    offset += indices[i] * strides[i];
-  }
-  return offset;
-}
-
-__device__ void cuOffsetToIndices(int32_t* indices, const int32_t* shape,
-                                  int32_t offset, int32_t dimCount) {
-  for (int32_t i = dimCount - 1; i >= 0; i--) {
-    indices[i] = offset % shape[i];
-    offset /= shape[i];
-  }
-}
-
 __device__ void cuReorderIndices(int32_t* indices, const int32_t* order,
                                  int32_t dimCount) {
   int32_t temp[TENSOR_MAX_DIMS];
@@ -295,312 +230,431 @@ __device__ void cuGetSubIndices(int32_t* subIndices, const TensorCudaCtx t,
   }
 }
 
-__global__ void kFillConstant(float* t, float val, size_t n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (index < n) {
-    t[index] = val;
+__global__ void kFillConstant(float* __restrict__ t, const float val,
+                              const size_t n) {
+  const auto index = (blockIdx.x * blockDim.x + threadIdx.x) * 4;
+  if (index + 3 < n) {
+    FETCH_FLOAT4(t[index]) = make_float4(val, val, val, val);
+  } else {
+    if (index < n) t[index] = val;
+    if (index + 1 < n) t[index + 1] = val;
+    if (index + 2 < n) t[index + 2] = val;
   }
 }
 
-__global__ void kFillLinSpace(float* dst, float start, float step,
-                              size_t count) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (index < count) {
-    dst[index] = start + (float)index * step;
+__global__ void kFillLinSpace(float* __restrict__ dst, const float start,
+                              const float step, const size_t n) {
+  const auto index = (blockIdx.x * blockDim.x + threadIdx.x) * 4;
+  const auto base = start + static_cast<float>(index) * step;
+  if (index + 3 < n) {
+    FETCH_FLOAT4(dst[index]) =
+        make_float4(base, base + step, base + 2 * step, base + 3 * step);
+  } else {
+    if (index < n) dst[index] = base;
+    if (index + 1 < n) dst[index + 1] = base + step;
+    if (index + 2 < n) dst[index + 2] = base + 2 * step;
   }
 }
 
-__global__ void kFillRandUniform(float* t, float minVal, float maxVal,
-                                 unsigned long seed, unsigned long seq, int n) {
-  unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  auto index = tid * 4;
-  if (index < n) {
-    curandStatePhilox4_32_10_t state;
-    curand_init(seed, seq, index, &state);
-    float4 rand = curand_uniform4(&state);
-
-    float range = maxVal - minVal;
-    if (index < n) t[index] = rand.x * range + minVal;
-    if (index + 1 < n) t[index + 1] = rand.y * range + minVal;
-    if (index + 2 < n) t[index + 2] = rand.z * range + minVal;
-    if (index + 3 < n) t[index + 3] = rand.w * range + minVal;
-  }
-}
-
-__global__ void kFillRandNormal(float* t, float mean, float stddev,
-                                unsigned long seed, unsigned long seq, int n) {
-  unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  auto index = tid * 4;
+__global__ void kFillRandUniform(float* __restrict__ t, const float minVal,
+                                 const float maxVal, const unsigned long seed,
+                                 const unsigned long seq, const int n) {
+  const auto index = (blockIdx.x * blockDim.x + threadIdx.x) * 4;
   if (index < n) {
     curandStatePhilox4_32_10_t state;
     curand_init(seed, seq, index, &state);
-    float4 rand = curand_normal4(&state);
+    const auto rand = curand_uniform4(&state);
+    const auto range = maxVal - minVal;
 
-    if (index < n) t[index] = rand.x * stddev + mean;
-    if (index + 1 < n) t[index + 1] = rand.y * stddev + mean;
-    if (index + 2 < n) t[index + 2] = rand.z * stddev + mean;
-    if (index + 3 < n) t[index + 3] = rand.w * stddev + mean;
+    if (index + 3 < n) {
+      FETCH_FLOAT4(t[index]) =
+          make_float4(rand.x * range + minVal, rand.y * range + minVal,
+                      rand.z * range + minVal, rand.w * range + minVal);
+    } else {
+      if (index < n) t[index] = rand.x * range + minVal;
+      if (index + 1 < n) t[index + 1] = rand.y * range + minVal;
+      if (index + 2 < n) t[index + 2] = rand.z * range + minVal;
+    }
   }
 }
 
-__global__ void kFillRandBernoulli(float* t, float p, unsigned long seed,
-                                   unsigned long seq, int n) {
-  unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  auto index = tid * 4;
+__global__ void kFillRandNormal(float* __restrict__ t, const float mean,
+                                const float stddev, const unsigned long seed,
+                                const unsigned long seq, const int n) {
+  const auto index = (blockIdx.x * blockDim.x + threadIdx.x) * 4;
   if (index < n) {
     curandStatePhilox4_32_10_t state;
     curand_init(seed, seq, index, &state);
-    float4 rand = curand_uniform4(&state);
+    const auto rand = curand_normal4(&state);
 
-    if (index < n) t[index] = rand.x < p ? 1.f : 0.f;
-    if (index + 1 < n) t[index + 1] = rand.y < p ? 1.f : 0.f;
-    if (index + 2 < n) t[index + 2] = rand.z < p ? 1.f : 0.f;
-    if (index + 3 < n) t[index + 3] = rand.w < p ? 1.f : 0.f;
+    if (index + 3 < n) {
+      FETCH_FLOAT4(t[index]) =
+          make_float4(rand.x * stddev + mean, rand.y * stddev + mean,
+                      rand.z * stddev + mean, rand.w * stddev + mean);
+    } else {
+      if (index < n) t[index] = rand.x * stddev + mean;
+      if (index + 1 < n) t[index + 1] = rand.y * stddev + mean;
+      if (index + 2 < n) t[index + 2] = rand.z * stddev + mean;
+    }
+  }
+}
+
+__global__ void kFillRandBernoulli(float* __restrict__ t, const float p,
+                                   const unsigned long seed,
+                                   const unsigned long seq, const int n) {
+  const auto index = (blockIdx.x * blockDim.x + threadIdx.x) * 4;
+  if (index < n) {
+    curandStatePhilox4_32_10_t state;
+    curand_init(seed, seq, index, &state);
+    const auto rand = curand_uniform4(&state);
+
+    if (index + 3 < n) {
+      FETCH_FLOAT4(t[index]) =
+          make_float4(rand.x < p ? 1.f : 0.f, rand.y < p ? 1.f : 0.f,
+                      rand.z < p ? 1.f : 0.f, rand.w < p ? 1.f : 0.f);
+    } else {
+      if (index < n) t[index] = rand.x < p ? 1.f : 0.f;
+      if (index + 1 < n) t[index + 1] = rand.y < p ? 1.f : 0.f;
+      if (index + 2 < n) t[index + 2] = rand.z < p ? 1.f : 0.f;
+    }
   }
 }
 
 template <typename OP>
-__global__ void kSingleOp_(float* t, int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
-  OP opFunc;
+__global__ void kSingleOp_(float* __restrict__ t, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  const OP opFunc;
   if (index < n) {
     opFunc(t[index]);
   }
 }
 
 template <typename OP>
-__global__ void kSingleOp(float* ret, const float* t, int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
-  OP opFunc;
+__global__ void kSingleOp(float* __restrict__ ret, const float* __restrict__ t,
+                          const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  const OP opFunc;
   if (index < n) {
     ret[index] = opFunc(t[index]);
   }
 }
 
 template <typename OP>
-__global__ void kPairOp(const float* a, const float* b, float* c, int n) {
-  OP opFunc;
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void kPairOp(float* __restrict__ c, const float* __restrict__ a,
+                        const float* __restrict__ b, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  const OP opFunc;
   if (index < n) {
     c[index] = opFunc(a[index], b[index]);
   }
 }
 
 template <typename OP>
-__global__ void kPairScalarFirstOp(const float a, const float* b, float* c,
-                                   int n) {
-  OP opFunc;
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void kPairScalarFirstOp(float* __restrict__ c, const float a,
+                                   const float* __restrict__ b, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  const OP opFunc;
   if (index < n) {
     c[index] = opFunc(a, b[index]);
   }
 }
 
 template <typename OP>
-__global__ void kPairScalarFirstOp(const float* a, const float* b, float* c,
-                                   int n) {
-  OP opFunc;
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void kPairScalarFirstOp(float* __restrict__ c,
+                                   const float* __restrict__ a,
+                                   const float* __restrict__ b, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  const OP opFunc;
+
   if (index < n) {
     c[index] = opFunc(a[0], b[index]);
   }
 }
 
 template <typename OP>
-__global__ void kPairScalarSecondOp(const float* a, const float b, float* c,
-                                    int n) {
-  OP opFunc;
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void kPairScalarSecondOp(float* __restrict__ c,
+                                    const float* __restrict__ a, const float b,
+                                    const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  const OP opFunc;
   if (index < n) {
     c[index] = opFunc(a[index], b);
   }
 }
 
 template <typename OP>
-__global__ void kPairScalarSecondOp(const float* a, const float* b, float* c,
-                                    int n) {
-  OP opFunc;
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void kPairScalarSecondOp(float* __restrict__ c,
+                                    const float* __restrict__ a,
+                                    const float* __restrict__ b, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  const OP opFunc;
+
   if (index < n) {
     c[index] = opFunc(a[index], b[0]);
   }
 }
 
 template <typename OP>
-__global__ void kPairOp_(float* a, const float* b, int n) {
-  OP opFunc;
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void kPairOp_(float* __restrict__ a, const float* __restrict__ b,
+                         const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  const OP opFunc;
   if (index < n) {
     a[index] = opFunc(a[index], b[index]);
   }
 }
 
 template <typename OP>
-__global__ void kPairScalarSecondOp_(float* a, const float b, int n) {
-  OP opFunc;
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void kPairScalarSecondOp_(float* __restrict__ a, const float b,
+                                     const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  const OP opFunc;
   if (index < n) {
     a[index] = opFunc(a[index], b);
   }
 }
 
 template <typename OP>
-__global__ void kPairScalarSecondOp_(float* a, const float* b, int n) {
-  OP opFunc;
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void kPairScalarSecondOp_(float* __restrict__ a,
+                                     const float* __restrict__ b, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  const OP opFunc;
+
   if (index < n) {
     a[index] = opFunc(a[index], b[0]);
   }
 }
 
-template <typename OP>
-__global__ void kBroadcastFastPassOp(TensorCudaCtx result,
-                                     const TensorCudaCtx larger,
-                                     const TensorCudaCtx smaller, bool reverse,
-                                     int n) {
-  OP opFunc;
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (index < n) {
-    auto& dataA = larger.data_[index];
-    auto& dataB = smaller.data_[index % smaller.elemCount_];
-    auto& dataRet = result.data_[index];
-    dataRet = reverse ? opFunc(dataB, dataA) : opFunc(dataA, dataB);
-  }
-}
-
-template <typename OP>
-__global__ void kBroadcastOp(TensorCudaCtx c, const TensorCudaCtx a,
-                             const TensorCudaCtx b, int n) {
-  OP opFunc;
-  int32_t cIndices[TENSOR_MAX_DIMS];
-  int32_t aIndices[TENSOR_MAX_DIMS];
-  int32_t bIndices[TENSOR_MAX_DIMS];
-
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (index < n) {
-    memset(aIndices, 0, TENSOR_MAX_DIMS * sizeof(int32_t));
-    memset(bIndices, 0, TENSOR_MAX_DIMS * sizeof(int32_t));
-
-    int offset = index;
-    for (int32_t i = c.dimCount_ - 1; i >= 0; i--) {
-      cIndices[i] = offset % c.shape_[i];
-      offset /= c.shape_[i];
-    }
-
-    for (int32_t j = 0; j < c.dimCount_; j++) {
-      if (j >= c.dimCount_ - a.dimCount_) {
-        int32_t aIndex = j - (c.dimCount_ - a.dimCount_);
-        if (a.shape_[aIndex] != 1) {
-          aIndices[aIndex] = cIndices[j];
-        }
-      }
-      if (j >= c.dimCount_ - b.dimCount_) {
-        int32_t bIndex = j - (c.dimCount_ - b.dimCount_);
-        if (b.shape_[bIndex] != 1) {
-          bIndices[bIndex] = cIndices[j];
-        }
-      }
-    }
-
-    int32_t aIdx = 0;
-    for (int32_t i = 0; i < a.dimCount_; i++) {
-      aIdx += aIndices[i] * a.strides_[i];
-    }
-
-    int32_t bIdx = 0;
-    for (int32_t i = 0; i < b.dimCount_; i++) {
-      bIdx += bIndices[i] * b.strides_[i];
-    }
-    c.data_[index] = opFunc(a.data_[aIdx], b.data_[bIdx]);
-  }
-}
-
-__global__ void kClamp(float* ret, const float* t, float minVal, float maxVal,
-                       int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void kClamp(float* __restrict__ ret, const float* __restrict__ t,
+                       const float minVal, const float maxVal, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
     ret[index] = max(minVal, min(t[index], maxVal));
   }
 }
 
-__global__ void kClamp_(float* t, float minVal, float maxVal, int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void kClamp_(float* __restrict__ t, const float minVal,
+                        const float maxVal, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
     t[index] = max(minVal, min(t[index], maxVal));
   }
 }
 
-// TODO opt
-__global__ void kReduceAllMin(float* retPtr, const float* data, int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+template <typename OP, bool Leading, bool First>
+__global__ void kBroadcastOpFast(float* __restrict__ ret,
+                                 const float* __restrict__ a,
+                                 const float* __restrict__ b,
+                                 const int32_t stride, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  const OP opFunc;
   if (index < n) {
-    cuAtomicMinFloat(retPtr, data[index]);
+    if (First) {
+      ret[index] =
+          opFunc(a[Leading ? index % stride : index / stride], b[index]);
+    } else {
+      ret[index] =
+          opFunc(a[index], b[Leading ? index % stride : index / stride]);
+    }
   }
 }
 
-// TODO opt
-__global__ void kReduceAllMax(float* retPtr, const float* data, int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (index < n) {
-    cuAtomicMaxFloat(retPtr, data[index]);
+__device__ int32_t cuIndicesToOffset(const int32_t* __restrict__ strides,
+                                     const int32_t* __restrict__ indices,
+                                     const int32_t dimCount) {
+  int32_t offset = 0;
+  for (int32_t i = 0; i < dimCount; i++) {
+    offset += indices[i] * strides[i];
+  }
+  return offset;
+}
+
+__device__ void cuOffsetToIndices(int32_t* __restrict__ indices,
+                                  const int32_t* __restrict__ shape,
+                                  const int32_t index, const int32_t dimCount) {
+  int32_t offset = index;
+  for (int32_t i = dimCount - 1; i >= 0; i--) {
+    indices[i] = offset % shape[i];
+    offset /= shape[i];
   }
 }
 
-// TODO opt
-__global__ void kReduceAllSum(float* retPtr, const float* data, int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+template <typename OP>
+__global__ void kBroadcastOpCommon(TensorCudaCtx c, const TensorCudaCtx a,
+                                   const TensorCudaCtx b, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  const OP opFunc;
+
   if (index < n) {
-    atomicAdd(retPtr, data[index]);
+    int32_t cIndices[TENSOR_MAX_DIMS];
+    int32_t aIndices[TENSOR_MAX_DIMS] = {};
+    int32_t bIndices[TENSOR_MAX_DIMS] = {};
+
+    cuOffsetToIndices(cIndices, c.shape_, static_cast<int32_t>(index),
+                      c.dimCount_);
+    for (auto j = 0; j < c.dimCount_; j++) {
+      if (j >= c.dimCount_ - a.dimCount_) {
+        const int32_t aIndex = j - (c.dimCount_ - a.dimCount_);
+        aIndices[aIndex] = (a.shape_[aIndex] != 1) ? cIndices[j] : 0;
+      }
+      if (j >= c.dimCount_ - b.dimCount_) {
+        const int32_t bIndex = j - (c.dimCount_ - b.dimCount_);
+        bIndices[bIndex] = (b.shape_[bIndex] != 1) ? cIndices[j] : 0;
+      }
+    }
+    const auto aIdx = cuIndicesToOffset(a.strides_, aIndices, a.dimCount_);
+    const auto bIdx = cuIndicesToOffset(b.strides_, bIndices, b.dimCount_);
+    c.data_[index] = opFunc(a.data_[aIdx], b.data_[bIdx]);
   }
 }
 
-// TODO opt
-__global__ void kReduceAllVar(float* retPtr, const float* data,
-                              const float* meanVal, int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (index < n) {
-    float diff = data[index] - *meanVal;
-    atomicAdd(retPtr, diff * diff);
+struct OpCudaReduceMax {
+  __device__ float operator()(const float a, const float b) const {
+    return max(a, b);
   }
+
+  static __device__ float defaultVal() { return -FLT_MAX; }
+};
+
+struct OpCudaReduceMin {
+  __device__ float operator()(const float a, const float b) const {
+    return min(a, b);
+  }
+
+  static __device__ float defaultVal() { return FLT_MAX; }
+};
+
+struct OpCudaReduceSum {
+  __device__ float operator()(const float a, const float b) const {
+    return a + b;
+  }
+
+  static __device__ float defaultVal() { return 0.f; }
+};
+
+template <typename OP>
+__inline__ __device__ float cuWarpReduce(float val) {
+  const OP op;
+  val = op(val, __shfl_down_sync(0xFFFFFFFF, val, 16));
+  val = op(val, __shfl_down_sync(0xFFFFFFFF, val, 8));
+  val = op(val, __shfl_down_sync(0xFFFFFFFF, val, 4));
+  val = op(val, __shfl_down_sync(0xFFFFFFFF, val, 2));
+  val = op(val, __shfl_down_sync(0xFFFFFFFF, val, 1));
+  return val;
 }
 
-// TODO opt
-template <bool FindMax>
-__global__ void kReduceAllArg(float* retPtr, const float* input, int n) {
-  extern __shared__ float sharedData[];
-  auto* sharedIndex = (int32_t*)&sharedData[blockDim.x];
+template <typename OP>
+__inline__ __device__ int cuWarpReduceIdx(float val, int idx) {
+  const OP op;
 
-  auto tid = threadIdx.x;
-  auto globalIndex = (int32_t)(blockIdx.x * blockDim.x + tid);
+  float otherVal = __shfl_down_sync(0xFFFFFFFF, val, 16);
+  int32_t otherIdx = __shfl_down_sync(0xFFFFFFFF, idx, 16);
+  if (op(otherVal, val) == otherVal) {
+    val = otherVal;
+    idx = otherIdx;
+  }
 
-  if (globalIndex < n) {
-    sharedData[tid] = input[globalIndex];
-    sharedIndex[tid] = globalIndex;
-  } else {
-    sharedData[tid] = FindMax ? -FLT_MAX : FLT_MAX;
-    sharedIndex[tid] = -1;
+  otherVal = __shfl_down_sync(0xFFFFFFFF, val, 8);
+  otherIdx = __shfl_down_sync(0xFFFFFFFF, idx, 8);
+  if (op(otherVal, val) == otherVal) {
+    val = otherVal;
+    idx = otherIdx;
+  }
+
+  otherVal = __shfl_down_sync(0xFFFFFFFF, val, 4);
+  otherIdx = __shfl_down_sync(0xFFFFFFFF, idx, 4);
+  if (op(otherVal, val) == otherVal) {
+    val = otherVal;
+    idx = otherIdx;
+  }
+
+  otherVal = __shfl_down_sync(0xFFFFFFFF, val, 2);
+  otherIdx = __shfl_down_sync(0xFFFFFFFF, idx, 2);
+  if (op(otherVal, val) == otherVal) {
+    val = otherVal;
+    idx = otherIdx;
+  }
+
+  otherVal = __shfl_down_sync(0xFFFFFFFF, val, 1);
+  otherIdx = __shfl_down_sync(0xFFFFFFFF, idx, 1);
+  if (op(otherVal, val) == otherVal) {
+    val = otherVal;
+    idx = otherIdx;
+  }
+
+  return idx;
+}
+
+template <typename OP>
+__global__ void kReduceAll(float* __restrict__ output,
+                           const float* __restrict__ input, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  __shared__ float shared[WARP_SIZE];
+  float val = OP::defaultVal();
+
+  if (index < n) {
+    val = input[index];
+  }
+  val = cuWarpReduce<OP>(val);
+
+  if (threadIdx.x % warpSize == 0) {
+    shared[threadIdx.x / warpSize] = val;
   }
   __syncthreads();
 
-  for (auto s = blockDim.x / 2; s > 0; s >>= 1) {
-    if (tid < s) {
-      if (FindMax) {
-        if (sharedData[tid + s] > sharedData[tid]) {
-          sharedData[tid] = sharedData[tid + s];
-          sharedIndex[tid] = sharedIndex[tid + s];
-        }
-      } else {
-        if (sharedData[tid + s] < sharedData[tid]) {
-          sharedData[tid] = sharedData[tid + s];
-          sharedIndex[tid] = sharedIndex[tid + s];
-        }
-      }
-    }
-    __syncthreads();
+  if (threadIdx.x < warpSize) {
+    val = (threadIdx.x < blockDim.x / warpSize) ? shared[threadIdx.x]
+                                                : OP::defaultVal();
+    val = cuWarpReduce<OP>(val);
   }
 
-  if (tid == 0) {
-    atomicExch(retPtr, (float)sharedIndex[0]);
+  if (threadIdx.x == 0) {
+    output[blockIdx.x] = val;
+  }
+}
+
+template <typename OP>
+__global__ void kReduceAllIdx(float* output, const float* __restrict__ input,
+                              const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  __shared__ float sharedVal[WARP_SIZE];
+  __shared__ int sharedIdx[WARP_SIZE];
+
+  float val = OP::defaultVal();
+  int idx = -1;
+
+  if (index < n) {
+    val = input[index];
+    idx = index;
+  }
+  idx = cuWarpReduceIdx<OP>(val, idx);
+
+  if (threadIdx.x % warpSize == 0) {
+    sharedVal[threadIdx.x / warpSize] = val;
+    sharedIdx[threadIdx.x / warpSize] = idx;
+  }
+  __syncthreads();
+
+  if (threadIdx.x < warpSize) {
+    val = (threadIdx.x < blockDim.x / warpSize) ? sharedVal[threadIdx.x]
+                                                : OP::defaultVal();
+    idx = (threadIdx.x < blockDim.x / warpSize) ? sharedIdx[threadIdx.x] : -1;
+
+    idx = cuWarpReduceIdx<OP>(val, idx);
+  }
+
+  if (threadIdx.x == 0) {
+    output[blockIdx.x] = static_cast<float>(idx);
+  }
+}
+
+__global__ void kSquaredDiff(float* __restrict__ output,
+                             const float* __restrict__ input,
+                             const float* __restrict__ mean, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  if (index < n) {
+    const float diff = input[index] - *mean;
+    output[index] = diff * diff;
   }
 }
 
@@ -652,16 +706,27 @@ __global__ void kReduceDim(TensorCudaCtx values, float* indices,
 }
 
 __global__ void kReduceSumFirstDim(float* retPtr, const float* t,
-                                   int32_t dimSize, int32_t stride, int n) {
+                                   int32_t dimSize, int32_t stride) {
+  extern __shared__ float sharedData[];
+
   unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (index < n) {
-    auto srcIdx = index;
-    float val = 0.f;
-    for (int32_t j = 0; j < dimSize; j++) {
-      val += t[srcIdx];
-      srcIdx += stride;
+  unsigned int tid = threadIdx.x;
+
+  for (auto i = tid; i < stride; i += blockDim.x) {
+    sharedData[i] = 0.f;
+  }
+  __syncthreads();
+
+  if (index < dimSize) {
+    auto srcIdx = index * stride;
+    for (auto i = 0; i < stride; i++) {
+      atomicAdd(&sharedData[i], t[srcIdx++]);
     }
-    retPtr[index] = val;
+  }
+  __syncthreads();
+
+  for (auto i = tid; i < stride; i += blockDim.x) {
+    retPtr[i] = sharedData[i];
   }
 }
 
@@ -844,64 +909,6 @@ __global__ void kDot(float* ret, const float* a, const float* b, int n) {
   if (threadId == 0) {
     atomicAdd(ret, sharedData[0]);
   }
-}
-
-const char* curandGetErrorString(curandStatus_t status) {
-  switch (status) {
-    case CURAND_STATUS_SUCCESS:
-      return "CURAND_STATUS_SUCCESS";
-    case CURAND_STATUS_VERSION_MISMATCH:
-      return "CURAND_STATUS_VERSION_MISMATCH";
-    case CURAND_STATUS_NOT_INITIALIZED:
-      return "CURAND_STATUS_NOT_INITIALIZED";
-    case CURAND_STATUS_ALLOCATION_FAILED:
-      return "CURAND_STATUS_ALLOCATION_FAILED";
-    case CURAND_STATUS_TYPE_ERROR:
-      return "CURAND_STATUS_TYPE_ERROR";
-    case CURAND_STATUS_OUT_OF_RANGE:
-      return "CURAND_STATUS_OUT_OF_RANGE";
-    case CURAND_STATUS_LENGTH_NOT_MULTIPLE:
-      return "CURAND_STATUS_LENGTH_NOT_MULTIPLE";
-    case CURAND_STATUS_DOUBLE_PRECISION_REQUIRED:
-      return "CURAND_STATUS_DOUBLE_PRECISION_REQUIRED";
-    case CURAND_STATUS_LAUNCH_FAILURE:
-      return "CURAND_STATUS_LAUNCH_FAILURE";
-    case CURAND_STATUS_PREEXISTING_FAILURE:
-      return "CURAND_STATUS_PREEXISTING_FAILURE";
-    case CURAND_STATUS_INITIALIZATION_FAILED:
-      return "CURAND_STATUS_INITIALIZATION_FAILED";
-    case CURAND_STATUS_ARCH_MISMATCH:
-      return "CURAND_STATUS_ARCH_MISMATCH";
-    case CURAND_STATUS_INTERNAL_ERROR:
-      return "CURAND_STATUS_INTERNAL_ERROR";
-  }
-  return "Unknown cuRAND error";
-}
-
-const char* cublasGetErrorString(cublasStatus_t status) {
-  switch (status) {
-    case CUBLAS_STATUS_SUCCESS:
-      return "CUBLAS_STATUS_SUCCESS";
-    case CUBLAS_STATUS_NOT_INITIALIZED:
-      return "CUBLAS_STATUS_NOT_INITIALIZED";
-    case CUBLAS_STATUS_ALLOC_FAILED:
-      return "CUBLAS_STATUS_ALLOC_FAILED";
-    case CUBLAS_STATUS_INVALID_VALUE:
-      return "CUBLAS_STATUS_INVALID_VALUE";
-    case CUBLAS_STATUS_ARCH_MISMATCH:
-      return "CUBLAS_STATUS_ARCH_MISMATCH";
-    case CUBLAS_STATUS_MAPPING_ERROR:
-      return "CUBLAS_STATUS_MAPPING_ERROR";
-    case CUBLAS_STATUS_EXECUTION_FAILED:
-      return "CUBLAS_STATUS_EXECUTION_FAILED";
-    case CUBLAS_STATUS_INTERNAL_ERROR:
-      return "CUBLAS_STATUS_INTERNAL_ERROR";
-    case CUBLAS_STATUS_NOT_SUPPORTED:
-      return "CUBLAS_STATUS_NOT_SUPPORTED";
-    case CUBLAS_STATUS_LICENSE_ERROR:
-      return "CUBLAS_STATUS_LICENSE_ERROR";
-  }
-  return "Unknown cuBLAS error";
 }
 
 }  // namespace TinyTorch

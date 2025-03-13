@@ -17,6 +17,15 @@ class AllocatorCPU : public Allocator {
  public:
   void allocate(void **ptr, size_t size) override;
   void deallocate(void *ptr) override;
+
+ private:
+  static void *allocateAlign(size_t size, size_t alignment);
+  static void deallocateAlign(void *ptr);
+
+  static void *allocatePinned(size_t size);
+  static void deallocatePinned(void *ptr);
+
+  bool pinned_ = false;
 };
 
 class RandomGeneratorCPU {
@@ -68,9 +77,20 @@ class TensorOpsCPU : public TensorOperations {
   static void opPair_(TensorImpl &t, const TensorImpl &b);
 
   // op pair broadcast
+  template <typename OP, bool REVERSE>
+  static void broadcastImplLeadingOnes(TensorImpl &result,
+                                       const TensorImpl &larger,
+                                       const TensorImpl &smaller);
+
+  template <typename OP, bool REVERSE>
+  static void broadcastImplTrailingOnes(TensorImpl &result,
+                                        const TensorImpl &larger,
+                                        const TensorImpl &smaller);
+
   template <typename OP>
-  static void broadcastFastPass(TensorImpl &result, const TensorImpl &larger,
-                                const TensorImpl &smaller, bool reverse);
+  static void broadcastImplCommon(TensorImpl &result, const TensorImpl &a,
+                                  const TensorImpl &b);
+
   template <typename OP>
   static void broadcastImpl(TensorImpl &result, const TensorImpl &a,
                             const TensorImpl &b);
