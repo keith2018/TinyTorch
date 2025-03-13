@@ -8,6 +8,7 @@
 
 namespace TinyTorch {
 
+#define WARP_SIZE 32
 #define FETCH_FLOAT2(pointer) (reinterpret_cast<float2*>(&(pointer))[0])
 #define FETCH_FLOAT3(pointer) (reinterpret_cast<float3*>(&(pointer))[0])
 #define FETCH_FLOAT4(pointer) (reinterpret_cast<float4*>(&(pointer))[0])
@@ -145,26 +146,6 @@ struct OpCudaLess {
 struct OpCudaGreater {
   __device__ bool operator()(const float& a, const float& b) { return a > b; }
 };
-
-__device__ int32_t cuIndicesToOffset(const int32_t* __restrict__ strides,
-                                     const int32_t* __restrict__ indices,
-                                     const int32_t dimCount) {
-  int32_t offset = 0;
-  for (int32_t i = 0; i < dimCount; i++) {
-    offset += indices[i] * strides[i];
-  }
-  return offset;
-}
-
-__device__ void cuOffsetToIndices(int32_t* __restrict__ indices,
-                                  const int32_t* __restrict__ shape,
-                                  const int32_t index, const int32_t dimCount) {
-  int32_t offset = index;
-  for (int32_t i = dimCount - 1; i >= 0; i--) {
-    indices[i] = offset % shape[i];
-    offset /= shape[i];
-  }
-}
 
 __device__ int32_t cuGetReduceSrcIndex(const TensorCudaCtx ret,
                                        const TensorCudaCtx t, int32_t idx,
@@ -478,6 +459,26 @@ __global__ void kBroadcastOpFast(float* __restrict__ ret,
   }
 }
 
+__device__ int32_t cuIndicesToOffset(const int32_t* __restrict__ strides,
+                                     const int32_t* __restrict__ indices,
+                                     const int32_t dimCount) {
+  int32_t offset = 0;
+  for (int32_t i = 0; i < dimCount; i++) {
+    offset += indices[i] * strides[i];
+  }
+  return offset;
+}
+
+__device__ void cuOffsetToIndices(int32_t* __restrict__ indices,
+                                  const int32_t* __restrict__ shape,
+                                  const int32_t index, const int32_t dimCount) {
+  int32_t offset = index;
+  for (int32_t i = dimCount - 1; i >= 0; i--) {
+    indices[i] = offset % shape[i];
+    offset /= shape[i];
+  }
+}
+
 template <typename OP>
 __global__ void kBroadcastOpCommon(TensorCudaCtx c, const TensorCudaCtx a,
                                    const TensorCudaCtx b, const int n) {
@@ -507,77 +508,153 @@ __global__ void kBroadcastOpCommon(TensorCudaCtx c, const TensorCudaCtx a,
   }
 }
 
-// TODO opt
-__global__ void kReduceAllMin(float* retPtr, const float* data, int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (index < n) {
-    cuAtomicMinFloat(retPtr, data[index]);
+struct OpCudaReduceMax {
+  __device__ float operator()(const float a, const float b) const {
+    return max(a, b);
   }
+
+  static __device__ float defaultVal() { return -FLT_MAX; }
+};
+
+struct OpCudaReduceMin {
+  __device__ float operator()(const float a, const float b) const {
+    return min(a, b);
+  }
+
+  static __device__ float defaultVal() { return FLT_MAX; }
+};
+
+struct OpCudaReduceSum {
+  __device__ float operator()(const float a, const float b) const {
+    return a + b;
+  }
+
+  static __device__ float defaultVal() { return 0.f; }
+};
+
+template <typename OP>
+__inline__ __device__ float cuWarpReduce(float val) {
+  const OP op;
+  val = op(val, __shfl_down_sync(0xFFFFFFFF, val, 16));
+  val = op(val, __shfl_down_sync(0xFFFFFFFF, val, 8));
+  val = op(val, __shfl_down_sync(0xFFFFFFFF, val, 4));
+  val = op(val, __shfl_down_sync(0xFFFFFFFF, val, 2));
+  val = op(val, __shfl_down_sync(0xFFFFFFFF, val, 1));
+  return val;
 }
 
-// TODO opt
-__global__ void kReduceAllMax(float* retPtr, const float* data, int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (index < n) {
-    cuAtomicMaxFloat(retPtr, data[index]);
+template <typename OP>
+__inline__ __device__ int cuWarpReduceIdx(float val, int idx) {
+  const OP op;
+
+  float otherVal = __shfl_down_sync(0xFFFFFFFF, val, 16);
+  int32_t otherIdx = __shfl_down_sync(0xFFFFFFFF, idx, 16);
+  if (op(otherVal, val) == otherVal) {
+    val = otherVal;
+    idx = otherIdx;
   }
+
+  otherVal = __shfl_down_sync(0xFFFFFFFF, val, 8);
+  otherIdx = __shfl_down_sync(0xFFFFFFFF, idx, 8);
+  if (op(otherVal, val) == otherVal) {
+    val = otherVal;
+    idx = otherIdx;
+  }
+
+  otherVal = __shfl_down_sync(0xFFFFFFFF, val, 4);
+  otherIdx = __shfl_down_sync(0xFFFFFFFF, idx, 4);
+  if (op(otherVal, val) == otherVal) {
+    val = otherVal;
+    idx = otherIdx;
+  }
+
+  otherVal = __shfl_down_sync(0xFFFFFFFF, val, 2);
+  otherIdx = __shfl_down_sync(0xFFFFFFFF, idx, 2);
+  if (op(otherVal, val) == otherVal) {
+    val = otherVal;
+    idx = otherIdx;
+  }
+
+  otherVal = __shfl_down_sync(0xFFFFFFFF, val, 1);
+  otherIdx = __shfl_down_sync(0xFFFFFFFF, idx, 1);
+  if (op(otherVal, val) == otherVal) {
+    val = otherVal;
+    idx = otherIdx;
+  }
+
+  return idx;
 }
 
-// TODO opt
-__global__ void kReduceAllSum(float* retPtr, const float* data, int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+template <typename OP>
+__global__ void kReduceAll(float* __restrict__ output,
+                           const float* __restrict__ input, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  __shared__ float shared[WARP_SIZE];
+  float val = OP::defaultVal();
+
   if (index < n) {
-    atomicAdd(retPtr, data[index]);
+    val = input[index];
   }
-}
+  val = cuWarpReduce<OP>(val);
 
-// TODO opt
-__global__ void kReduceAllVar(float* retPtr, const float* data,
-                              const float* meanVal, int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (index < n) {
-    float diff = data[index] - *meanVal;
-    atomicAdd(retPtr, diff * diff);
-  }
-}
-
-// TODO opt
-template <bool FindMax>
-__global__ void kReduceAllArg(float* retPtr, const float* input, int n) {
-  extern __shared__ float sharedData[];
-  auto* sharedIndex = (int32_t*)&sharedData[blockDim.x];
-
-  auto tid = threadIdx.x;
-  auto globalIndex = (int32_t)(blockIdx.x * blockDim.x + tid);
-
-  if (globalIndex < n) {
-    sharedData[tid] = input[globalIndex];
-    sharedIndex[tid] = globalIndex;
-  } else {
-    sharedData[tid] = FindMax ? -FLT_MAX : FLT_MAX;
-    sharedIndex[tid] = -1;
+  if (threadIdx.x % warpSize == 0) {
+    shared[threadIdx.x / warpSize] = val;
   }
   __syncthreads();
 
-  for (auto s = blockDim.x / 2; s > 0; s >>= 1) {
-    if (tid < s) {
-      if (FindMax) {
-        if (sharedData[tid + s] > sharedData[tid]) {
-          sharedData[tid] = sharedData[tid + s];
-          sharedIndex[tid] = sharedIndex[tid + s];
-        }
-      } else {
-        if (sharedData[tid + s] < sharedData[tid]) {
-          sharedData[tid] = sharedData[tid + s];
-          sharedIndex[tid] = sharedIndex[tid + s];
-        }
-      }
-    }
-    __syncthreads();
+  if (threadIdx.x < warpSize) {
+    val = (threadIdx.x < blockDim.x / warpSize) ? shared[threadIdx.x]
+                                                : OP::defaultVal();
+    val = cuWarpReduce<OP>(val);
   }
 
-  if (tid == 0) {
-    atomicExch(retPtr, (float)sharedIndex[0]);
+  if (threadIdx.x == 0) {
+    output[blockIdx.x] = val;
+  }
+}
+
+template <typename OP>
+__global__ void kReduceAllIdx(float* output, const float* __restrict__ input,
+                              const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  __shared__ float sharedVal[WARP_SIZE];
+  __shared__ int sharedIdx[WARP_SIZE];
+
+  float val = OP::defaultVal();
+  int idx = -1;
+
+  if (index < n) {
+    val = input[index];
+    idx = index;
+  }
+  idx = cuWarpReduceIdx<OP>(val, idx);
+
+  if (threadIdx.x % warpSize == 0) {
+    sharedVal[threadIdx.x / warpSize] = val;
+    sharedIdx[threadIdx.x / warpSize] = idx;
+  }
+  __syncthreads();
+
+  if (threadIdx.x < warpSize) {
+    val = (threadIdx.x < blockDim.x / warpSize) ? sharedVal[threadIdx.x]
+                                                : OP::defaultVal();
+    idx = (threadIdx.x < blockDim.x / warpSize) ? sharedIdx[threadIdx.x] : -1;
+
+    idx = cuWarpReduceIdx<OP>(val, idx);
+  }
+
+  if (threadIdx.x == 0) {
+    output[blockIdx.x] = static_cast<float>(idx);
+  }
+}
+
+__global__ void kSquaredDiff(float* __restrict__ output,
+                             const float* __restrict__ input,
+                             const float* __restrict__ mean, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  if (index < n) {
+    const float diff = input[index] - *mean;
+    output[index] = diff * diff;
   }
 }
 

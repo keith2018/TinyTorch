@@ -308,6 +308,45 @@ void TensorOpsCUDA::opPairBroadcast_(TensorImpl& a, const TensorImpl& b) const {
   a = std::move(result);
 }
 
+template <typename OP>
+void TensorOpsCUDA::reduceAllImpl(float* dOutput, const float* dInput,
+                                  int32_t n, float* dTmp,
+                                  KernelFunc<OP> kernel) {
+  auto blocks = getGridSize(n);
+
+  bool ownTmp = false;
+  if (dTmp == nullptr) {
+    allocate(reinterpret_cast<void**>(&dTmp), blocks * sizeof(float));
+    ownTmp = true;
+  }
+
+  kernel<<<blocks, getBlockSize()>>>(dTmp, dInput, n);
+  CUDA_KERNEL_CHECK();
+  while (blocks > 1) {
+    auto currBlocks = blocks;
+    blocks = getGridSize(currBlocks);
+    kernel<<<blocks, getBlockSize()>>>(dTmp, dTmp, currBlocks);
+    CUDA_KERNEL_CHECK();
+  }
+  copyOnDevice(dOutput, dTmp, sizeof(float));
+
+  if (ownTmp) {
+    deallocate(dTmp);
+  }
+}
+
+template <typename OP>
+void TensorOpsCUDA::reduceAll(float* dOutput, const float* dInput, int32_t n,
+                              float* dTmp) {
+  reduceAllImpl<OP>(dOutput, dInput, n, dTmp, kReduceAll<OP>);
+}
+
+template <typename OP>
+void TensorOpsCUDA::reduceAllIdx(float* dOutput, const float* dInput, int32_t n,
+                                 float* dTmp) {
+  reduceAllImpl<OP>(dOutput, dInput, n, dTmp, kReduceAllIdx<OP>);
+}
+
 template <typename Compare>
 std::pair<TensorImpl, TensorImpl> TensorOpsCUDA::reduceDim(const TensorImpl& t,
                                                            int32_t dim,
@@ -707,9 +746,7 @@ TensorImpl TensorOpsCUDA::min(const TensorImpl& t) {
     return t;
   }
   auto ret = TensorImpl::scalar(std::numeric_limits<float>::max(), t.device_);
-  kReduceAllMin<<<getGridSize(t.elemCount_), getBlockSize()>>>(
-      ret.data_, t.data_, t.elemCount_);
-  CUDA_KERNEL_CHECK();
+  reduceAll<OpCudaReduceMin>(ret.data_, t.data_, t.elemCount_);
   return ret;
 }
 
@@ -718,9 +755,7 @@ TensorImpl TensorOpsCUDA::max(const TensorImpl& t) {
     return t;
   }
   auto ret = TensorImpl::scalar(-std::numeric_limits<float>::max(), t.device_);
-  kReduceAllMax<<<getGridSize(t.elemCount_), getBlockSize()>>>(
-      ret.data_, t.data_, t.elemCount_);
-  CUDA_KERNEL_CHECK();
+  reduceAll<OpCudaReduceMax>(ret.data_, t.data_, t.elemCount_);
   return ret;
 }
 
@@ -729,10 +764,7 @@ TensorImpl TensorOpsCUDA::sum(const TensorImpl& t) {
     return t;
   }
   auto ret = TensorImpl::scalar(0, t.device_);
-  auto sharedMemSize = getBlockSize() * sizeof(float);
-  kReduceAllSum<<<getGridSize(t.elemCount_), getBlockSize(), sharedMemSize>>>(
-      ret.data_, t.data_, t.elemCount_);
-  CUDA_KERNEL_CHECK();
+  reduceAll<OpCudaReduceSum>(ret.data_, t.data_, t.elemCount_);
   return ret;
 }
 
@@ -741,11 +773,8 @@ TensorImpl TensorOpsCUDA::mean(const TensorImpl& t) {
     return t;
   }
   auto ret = TensorImpl::scalar(0, t.device_);
-  auto sharedMemSize = getBlockSize() * sizeof(float);
-  kReduceAllSum<<<getGridSize(t.elemCount_), getBlockSize(), sharedMemSize>>>(
-      ret.data_, t.data_, t.elemCount_);
-  CUDA_KERNEL_CHECK();
-  auto r = 1.f / (float)t.elemCount_;
+  reduceAll<OpCudaReduceSum>(ret.data_, t.data_, t.elemCount_);
+  const auto r = 1.f / static_cast<float>(t.elemCount_);
   mul_(ret, r);
   return ret;
 }
@@ -754,15 +783,18 @@ TensorImpl TensorOpsCUDA::var(const TensorImpl& t, bool unbiased) {
   if (t.dimCount_ == 0) {
     return TensorImpl::scalar(0, t.device_);
   }
-  auto meanVal = mean(t);
+  const auto meanVal = mean(t);
+  const auto squaredDiff = TensorImpl::shape({t.elemCount_}, t.device_);
+  kSquaredDiff<<<getGridSize(t.elemCount_), getBlockSize()>>>(
+      squaredDiff.data_, t.data_, meanVal.data_, t.elemCount_);
+
   auto ret = TensorImpl::scalar(0, t.device_);
-  auto sharedMemSize = getBlockSize() * sizeof(float);
-  kReduceAllVar<<<getGridSize(t.elemCount_), getBlockSize(), sharedMemSize>>>(
-      ret.data_, t.data_, meanVal.data_, t.elemCount_);
-  CUDA_KERNEL_CHECK();
-  auto r = 1.f / (float)t.elemCount_;
+  reduceAll<OpCudaReduceSum>(ret.data_, squaredDiff.data_, t.elemCount_);
+
+  const auto n = static_cast<float>(t.elemCount_);
+  auto r = 1.f / n;
   if (unbiased) {
-    r *= (float)t.elemCount_ / ((float)t.elemCount_ - 1.f);
+    r *= n / (n - 1.f);
   }
   mul_(ret, r);
   return ret;
@@ -774,11 +806,7 @@ TensorImpl TensorOpsCUDA::argmin(const TensorImpl& t) {
   }
 
   auto ret = TensorImpl::scalar(0, t.device_);
-  auto sharedMemSize = getBlockSize() * (sizeof(float) + sizeof(int));
-  kReduceAllArg<false>
-      <<<getGridSize(t.elemCount_), getBlockSize(), sharedMemSize>>>(
-          ret.data_, t.data_, t.elemCount_);
-  CUDA_KERNEL_CHECK();
+  reduceAllIdx<OpCudaReduceMin>(ret.data_, t.data_, t.elemCount_);
   return ret;
 }
 
@@ -788,11 +816,7 @@ TensorImpl TensorOpsCUDA::argmax(const TensorImpl& t) {
   }
 
   auto ret = TensorImpl::scalar(0, t.device_);
-  auto sharedMemSize = getBlockSize() * (sizeof(float) + sizeof(int));
-  kReduceAllArg<true>
-      <<<getGridSize(t.elemCount_), getBlockSize(), sharedMemSize>>>(
-          ret.data_, t.data_, t.elemCount_);
-  CUDA_KERNEL_CHECK();
+  reduceAllIdx<OpCudaReduceMax>(ret.data_, t.data_, t.elemCount_);
   return ret;
 }
 
