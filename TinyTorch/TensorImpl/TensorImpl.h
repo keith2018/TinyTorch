@@ -67,6 +67,7 @@ class TensorImpl {
   explicit TensorImpl(const Array3d &values3d, Device device = defaultDevice);
 
   static TensorImpl shape(const Shape &shape, Device device = defaultDevice);
+  static TensorImpl scalar(Device device = defaultDevice);
   static TensorImpl scalar(const float &value, Device device = defaultDevice);
 
   static TensorImpl ones(const Shape &shape, Device device = defaultDevice);
