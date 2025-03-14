@@ -12,7 +12,7 @@
 
 namespace TinyTorch {
 
-struct __attribute__((aligned(16))) TensorCudaCtx {
+struct TINYTORCH_ALIGN(16) TensorCudaCtx {
   int32_t dimCount_;
   int32_t elemCount_;
   int32_t shape_[TENSOR_MAX_DIMS];

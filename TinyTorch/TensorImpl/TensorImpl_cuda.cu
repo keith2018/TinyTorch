@@ -745,7 +745,7 @@ TensorImpl TensorOpsCUDA::min(const TensorImpl& t) {
   if (t.dimCount_ == 0) {
     return t;
   }
-  auto ret = TensorImpl::scalar(std::numeric_limits<float>::max(), t.device_);
+  auto ret = TensorImpl::scalar(t.device_);
   reduceAll<OpCudaReduceMin>(ret.data_, t.data_, t.elemCount_);
   return ret;
 }
@@ -754,7 +754,7 @@ TensorImpl TensorOpsCUDA::max(const TensorImpl& t) {
   if (t.dimCount_ == 0) {
     return t;
   }
-  auto ret = TensorImpl::scalar(-std::numeric_limits<float>::max(), t.device_);
+  auto ret = TensorImpl::scalar(t.device_);
   reduceAll<OpCudaReduceMax>(ret.data_, t.data_, t.elemCount_);
   return ret;
 }
@@ -763,7 +763,7 @@ TensorImpl TensorOpsCUDA::sum(const TensorImpl& t) {
   if (t.dimCount_ == 0) {
     return t;
   }
-  auto ret = TensorImpl::scalar(0, t.device_);
+  auto ret = TensorImpl::scalar(t.device_);
   reduceAll<OpCudaReduceSum>(ret.data_, t.data_, t.elemCount_);
   return ret;
 }
@@ -772,7 +772,7 @@ TensorImpl TensorOpsCUDA::mean(const TensorImpl& t) {
   if (t.dimCount_ == 0) {
     return t;
   }
-  auto ret = TensorImpl::scalar(0, t.device_);
+  auto ret = TensorImpl::scalar(t.device_);
   reduceAll<OpCudaReduceSum>(ret.data_, t.data_, t.elemCount_);
   const auto r = 1.f / static_cast<float>(t.elemCount_);
   mul_(ret, r);
@@ -788,7 +788,7 @@ TensorImpl TensorOpsCUDA::var(const TensorImpl& t, bool unbiased) {
   kSquaredDiff<<<getGridSize(t.elemCount_), getBlockSize()>>>(
       squaredDiff.data_, t.data_, meanVal.data_, t.elemCount_);
 
-  auto ret = TensorImpl::scalar(0, t.device_);
+  auto ret = TensorImpl::scalar(t.device_);
   reduceAll<OpCudaReduceSum>(ret.data_, squaredDiff.data_, t.elemCount_);
 
   const auto n = static_cast<float>(t.elemCount_);
@@ -804,8 +804,7 @@ TensorImpl TensorOpsCUDA::argmin(const TensorImpl& t) {
   if (t.dimCount_ == 0) {
     return TensorImpl::scalar(0, t.device_);
   }
-
-  auto ret = TensorImpl::scalar(0, t.device_);
+  auto ret = TensorImpl::scalar(t.device_);
   reduceAllIdx<OpCudaReduceMin>(ret.data_, t.data_, t.elemCount_);
   return ret;
 }
@@ -814,8 +813,7 @@ TensorImpl TensorOpsCUDA::argmax(const TensorImpl& t) {
   if (t.dimCount_ == 0) {
     return TensorImpl::scalar(0, t.device_);
   }
-
-  auto ret = TensorImpl::scalar(0, t.device_);
+  auto ret = TensorImpl::scalar(t.device_);
   reduceAllIdx<OpCudaReduceMax>(ret.data_, t.data_, t.elemCount_);
   return ret;
 }

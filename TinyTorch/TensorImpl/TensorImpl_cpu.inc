@@ -126,4 +126,26 @@ struct OpCpuLog {
   float operator()(const float a) const { return std::log(a); }
 };
 
+struct OpCpuReduceMax {
+  float operator()(const float a, const float b) const {
+    return std::max(a, b);
+  }
+
+  static float defaultVal() { return -std::numeric_limits<float>::max(); }
+};
+
+struct OpCpuReduceMin {
+  float operator()(const float a, const float b) const {
+    return std::min(a, b);
+  }
+
+  static float defaultVal() { return std::numeric_limits<float>::max(); }
+};
+
+struct OpCpuReduceSum {
+  float operator()(const float a, const float b) const { return a + b; }
+
+  static float defaultVal() { return 0.f; }
+};
+
 }  // namespace TinyTorch
