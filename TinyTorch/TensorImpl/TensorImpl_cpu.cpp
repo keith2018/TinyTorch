@@ -44,10 +44,20 @@ void AllocatorCPU::deallocate(void* ptr) {
 }
 
 void* AllocatorCPU::allocateAlign(size_t size, size_t alignment) {
+#if !defined(_MSC_VER)
   return std::aligned_alloc(alignment, size);
+#else
+  return _aligned_malloc(size, alignment);
+#endif
 }
 
-void AllocatorCPU::deallocateAlign(void* ptr) { std::free(ptr); }
+void AllocatorCPU::deallocateAlign(void* ptr) {
+#if !defined(_MSC_VER)
+  std::free(ptr);
+#else
+  _aligned_free(ptr);
+#endif
+}
 
 #ifndef USE_CUDA
 void* AllocatorCPU::allocatePinned(size_t size) { return nullptr; }
