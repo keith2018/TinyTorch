@@ -293,6 +293,30 @@ int32_t TensorOpsCPU::getReduceDstIndex(const TensorImpl& t, int32_t idx,
   return retIdx;
 }
 
+template <typename OP>
+void TensorOpsCPU::reduceAll(float* output, const float* input, int32_t n) {
+  const OP op;
+  float val = OP::defaultVal();
+  for (int32_t i = 0; i < n; i++) {
+    val = op(input[i], val);
+  }
+  *output = val;
+}
+
+template <typename OP>
+void TensorOpsCPU::reduceAllIdx(float* output, const float* input, int32_t n) {
+  const OP op;
+  float val = OP::defaultVal();
+  int32_t valIdx = 0;
+  for (int32_t i = 0; i < n; i++) {
+    if (op(val, input[i]) != val) {
+      val = input[i];
+      valIdx = i;
+    }
+  }
+  *output = static_cast<float>(valIdx);
+}
+
 template <typename Compare, bool IsLastDim>
 void TensorOpsCPU::reduceDimImpl(TensorImpl& values, TensorImpl& indices,
                                  const TensorImpl& t, int32_t dim,
@@ -745,95 +769,76 @@ TensorImpl TensorOpsCPU::min(const TensorImpl& t) {
   if (t.dimCount_ == 0) {
     return t;
   }
-  float min = std::numeric_limits<float>::max();
-  for (int32_t i = 0; i < t.elemCount_; i++) {
-    min = std::min(t.data_[i], min);
-  }
-  return TensorImpl::scalar(min, t.device_);
+  auto ret = TensorImpl::scalar(t.device_);
+  reduceAll<OpCpuReduceMin>(ret.data_, t.data_, t.elemCount_);
+  return ret;
 }
 
 TensorImpl TensorOpsCPU::max(const TensorImpl& t) {
   if (t.dimCount_ == 0) {
     return t;
   }
-  float max = -std::numeric_limits<float>::max();
-  for (int32_t i = 0; i < t.elemCount_; i++) {
-    max = std::max(t.data_[i], max);
-  }
-  return TensorImpl::scalar(max, t.device_);
+  auto ret = TensorImpl::scalar(t.device_);
+  reduceAll<OpCpuReduceMax>(ret.data_, t.data_, t.elemCount_);
+  return ret;
 }
 
 TensorImpl TensorOpsCPU::sum(const TensorImpl& t) {
   if (t.dimCount_ == 0) {
     return t;
   }
-  float sum = 0;
-  for (int32_t i = 0; i < t.elemCount_; i++) {
-    sum += t.data_[i];
-  }
-  return TensorImpl::scalar(sum, t.device_);
+  auto ret = TensorImpl::scalar(t.device_);
+  reduceAll<OpCpuReduceSum>(ret.data_, t.data_, t.elemCount_);
+  return ret;
 }
 
 TensorImpl TensorOpsCPU::mean(const TensorImpl& t) {
   if (t.dimCount_ == 0) {
     return t;
   }
-  float sum = 0;
-  for (int32_t i = 0; i < t.elemCount_; i++) {
-    sum += t.data_[i];
-  }
-  auto mean = sum / (float)t.elemCount_;
-  return TensorImpl::scalar(mean, t.device_);
+  auto ret = TensorImpl::scalar(t.device_);
+  reduceAll<OpCpuReduceSum>(ret.data_, t.data_, t.elemCount_);
+  const auto r = 1.f / static_cast<float>(t.elemCount_);
+  ret.data_[0] *= r;
+  return ret;
 }
 
 TensorImpl TensorOpsCPU::var(const TensorImpl& t, bool unbiased) {
   if (t.dimCount_ == 0) {
     return TensorImpl::scalar(0, t.device_);
   }
-  float sum = 0;
+  const auto meanVal = mean(t);
+  auto squaredDiff = 0.f;
   for (int32_t i = 0; i < t.elemCount_; i++) {
-    sum += t.data_[i];
+    const auto diff = t.data_[i] - meanVal.data_[0];
+    squaredDiff += diff * diff;
   }
-  auto mean = sum / (float)t.elemCount_;
-  auto var = 0.f;
-  for (int32_t i = 0; i < t.elemCount_; i++) {
-    var += std::pow(t.data_[i] - mean, 2.f);
-  }
-  var /= (float)t.elemCount_;
+  auto ret = TensorImpl::scalar(squaredDiff, t.device_);
+  const auto n = static_cast<float>(t.elemCount_);
+  auto r = 1.f / n;
   if (unbiased) {
-    var *= (float)t.elemCount_ / ((float)t.elemCount_ - 1.f);
+    r *= n / (n - 1.f);
   }
-  return TensorImpl::scalar(var, t.device_);
+  ret.data_[0] *= r;
+  return ret;
 }
 
 TensorImpl TensorOpsCPU::argmin(const TensorImpl& t) {
   if (t.dimCount_ == 0) {
     return TensorImpl::scalar(0, t.device_);
   }
-  float min = std::numeric_limits<float>::max();
-  int32_t minIdx = 0;
-  for (int32_t i = 0; i < t.elemCount_; i++) {
-    if (t.data_[i] < min) {
-      min = t.data_[i];
-      minIdx = i;
-    }
-  }
-  return TensorImpl::scalar((float)minIdx, t.device_);
+  auto ret = TensorImpl::scalar(t.device_);
+  reduceAllIdx<OpCpuReduceMin>(ret.data_, t.data_, t.elemCount_);
+  return ret;
 }
 
 TensorImpl TensorOpsCPU::argmax(const TensorImpl& t) {
   if (t.dimCount_ == 0) {
     return TensorImpl::scalar(0, t.device_);
   }
-  float max = -std::numeric_limits<float>::max();
-  int32_t maxIdx = 0;
-  for (int32_t i = 0; i < t.elemCount_; i++) {
-    if (t.data_[i] > max) {
-      max = t.data_[i];
-      maxIdx = i;
-    }
-  }
-  return TensorImpl::scalar((float)maxIdx, t.device_);
+  auto ret = TensorImpl::scalar(t.device_);
+  reduceAllIdx<OpCpuReduceMax>(ret.data_, t.data_, t.elemCount_);
+  return ret;
 }
 
 std::pair<TensorImpl, TensorImpl> TensorOpsCPU::min(const TensorImpl& t,
