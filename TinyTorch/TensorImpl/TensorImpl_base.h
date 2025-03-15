@@ -14,6 +14,7 @@
 namespace TinyTorch {
 
 #define TENSOR_MAX_DIMS 8
+#define TENSOR_MEM_ALIGN 16
 
 #ifdef _MSC_VER
 #define TINYTORCH_ALIGN(N) __declspec(align(N))
@@ -23,7 +24,7 @@ namespace TinyTorch {
 
 enum class Device { CPU, CUDA };
 
-struct TINYTORCH_ALIGN(16) Size2D {
+struct TINYTORCH_ALIGN(TENSOR_MEM_ALIGN) Size2D {
   Size2D(int32_t n) : h(n), w(n) {}
   Size2D(int32_t h, int32_t w) : h(h), w(w) {}
 
@@ -32,7 +33,7 @@ struct TINYTORCH_ALIGN(16) Size2D {
 };
 
 template <typename T>
-struct TINYTORCH_ALIGN(16) FixedVector {
+struct TINYTORCH_ALIGN(TENSOR_MEM_ALIGN) FixedVector {
   T data[TENSOR_MAX_DIMS]{};
 };
 
@@ -167,6 +168,7 @@ typedef enum ShapeCompatible_ {
   /* permute */                                                                \
   _H TensorImpl permute(const TensorImpl& t, const std::vector<int32_t>& dims) \
       _T;                                                                      \
+  _H TensorImpl transpose2D(const TensorImpl& t) _T;                           \
                                                                                \
   /* index */                                                                  \
   _H TensorImpl index(                                                         \
