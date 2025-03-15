@@ -997,7 +997,10 @@ void TensorImpl::t_() {
     TensorOperations::error(__FUNCTION__, TensorError_InvalidShape);
     return;
   }
-  transpose_(0, 1);
+  auto ret = t(*this);
+  if (!ret.empty()) {
+    *this = std::move(ret);
+  }
 }
 
 TensorImpl TensorImpl::t(const TensorImpl &t) {
@@ -1009,7 +1012,7 @@ TensorImpl TensorImpl::t(const TensorImpl &t) {
     TensorOperations::error(__FUNCTION__, TensorError_InvalidShape);
     return {};
   }
-  return transpose(t, 0, 1);
+  return t.ops_->transpose2D(t);
 }
 
 TensorImpl TensorImpl::permute(const std::vector<int32_t> &dims) const {
