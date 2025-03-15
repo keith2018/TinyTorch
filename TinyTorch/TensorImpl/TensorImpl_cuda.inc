@@ -192,28 +192,6 @@ __device__ int32_t cuGetReduceDstIndex(const TensorCudaCtx t, int32_t idx,
   return retIdx;
 }
 
-__device__ float cuAtomicMinFloat(float* address, float val) {
-  int* address_as_i = (int*)address;
-  int old = *address_as_i, assumed;
-  do {
-    assumed = old;
-    old = atomicCAS(address_as_i, assumed,
-                    __float_as_int(fminf(val, __int_as_float(assumed))));
-  } while (assumed != old);
-  return __int_as_float(old);
-}
-
-__device__ float cuAtomicMaxFloat(float* address, float val) {
-  int* address_as_i = (int*)address;
-  int old = *address_as_i, assumed;
-  do {
-    assumed = old;
-    old = atomicCAS(address_as_i, assumed,
-                    __float_as_int(fmaxf(val, __int_as_float(assumed))));
-  } while (assumed != old);
-  return __int_as_float(old);
-}
-
 __device__ void cuReorderIndices(int32_t* indices, const int32_t* order,
                                  int32_t dimCount) {
   int32_t temp[TENSOR_MAX_DIMS];
