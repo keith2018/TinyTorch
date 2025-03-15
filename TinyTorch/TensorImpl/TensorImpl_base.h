@@ -15,9 +15,15 @@ namespace TinyTorch {
 
 #define TENSOR_MAX_DIMS 8
 
+#ifdef _MSC_VER
+#define TINYTORCH_ALIGN(N) __declspec(align(N))
+#else
+#define TINYTORCH_ALIGN(N) __attribute__((aligned(N)))
+#endif
+
 enum class Device { CPU, CUDA };
 
-struct __attribute__((aligned(16))) Size2D {
+struct TINYTORCH_ALIGN(16) Size2D {
   Size2D(int32_t n) : h(n), w(n) {}
   Size2D(int32_t h, int32_t w) : h(h), w(w) {}
 
@@ -26,7 +32,7 @@ struct __attribute__((aligned(16))) Size2D {
 };
 
 template <typename T>
-struct __attribute__((aligned(16))) FixedVector {
+struct TINYTORCH_ALIGN(16) FixedVector {
   T data[TENSOR_MAX_DIMS]{};
 };
 
