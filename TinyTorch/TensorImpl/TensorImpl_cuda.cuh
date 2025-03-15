@@ -12,7 +12,7 @@
 
 namespace TinyTorch {
 
-struct TINYTORCH_ALIGN(16) TensorCudaCtx {
+struct TINYTORCH_ALIGN(TENSOR_MEM_ALIGN) TensorCudaCtx {
   int32_t dimCount_;
   int32_t elemCount_;
   int32_t shape_[TENSOR_MAX_DIMS];
@@ -93,21 +93,26 @@ class TensorOpsCUDA : public TensorOperations {
 
   // reduce
   template <typename OP>
-  using KernelFunc = void (*)(float *, const float *, int32_t);
+  using KernelFunc = void (*)(float *, const float *, int32_t, int32_t);
   template <typename OP>
-  void reduceAllImpl(float *dOutput, const float *dInput, int32_t n,
-                     float *dTmp, KernelFunc<OP> kernel);
+  void reduceAllImpl(float *dOutput, const float *dInput, int32_t n, int32_t m,
+                     KernelFunc<OP> kernel);
   template <typename OP>
-  void reduceAll(float *dOutput, const float *dInput, int32_t n,
-                 float *dTmp = nullptr);
+  void reduceAll(float *dOutput, const float *dInput, int32_t n, int32_t m = 1);
   template <typename OP>
   void reduceAllIdx(float *dOutput, const float *dInput, int32_t n,
-                    float *dTmp = nullptr);
-
+                    int32_t m = 1);
+  template <typename OP>
+  void reduceAllLastDim(float *dOutput, const float *dInput, int32_t n,
+                        int32_t m = 1);
   template <typename Compare>
   std::pair<TensorImpl, TensorImpl> reduceDim(const TensorImpl &t, int32_t dim,
                                               bool keepDims, float initVal,
                                               Compare comp);
+
+  // transpose
+  static void transpose2D(float *out, const float *in, int32_t width,
+                          int32_t height);
 
  protected:
   int32_t cudaDeviceIdx_;

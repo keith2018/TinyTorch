@@ -285,6 +285,18 @@ TEST(TEST_TensorImpl, basic_transpose) {
   EXPECT_THAT(y.toList(), ElementsAre(1, 4, 2, 5, 3, 6));
 }
 
+TEST(TEST_TensorImpl, basic_t) {
+  auto x = TensorImpl(Array2d{{1, 2, 3}, {4, 5, 6}});
+  auto y = x.t();
+  EXPECT_THAT(y.shape(), ElementsAre(3, 2));
+  EXPECT_THAT(y.toList(), ElementsAre(1, 4, 2, 5, 3, 6));
+
+  x = TensorImpl(Array2d{{1, 2}, {3, 4}, {5, 6}});
+  y = x.t();
+  EXPECT_THAT(y.shape(), ElementsAre(2, 3));
+  EXPECT_THAT(y.toList(), ElementsAre(1, 3, 5, 2, 4, 6));
+}
+
 TEST(TEST_TensorImpl, basic_permute) {
   TensorImpl x({1, 2, 3});
   auto y = x.permute();

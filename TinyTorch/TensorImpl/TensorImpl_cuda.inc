@@ -9,6 +9,8 @@
 namespace TinyTorch {
 
 #define WARP_SIZE 32
+#define TRANSPOSE_TILE_DIM 32
+
 #define FETCH_FLOAT2(pointer) (reinterpret_cast<float2*>(&(pointer))[0])
 #define FETCH_FLOAT3(pointer) (reinterpret_cast<float3*>(&(pointer))[0])
 #define FETCH_FLOAT4(pointer) (reinterpret_cast<float4*>(&(pointer))[0])
@@ -513,7 +515,7 @@ struct OpCudaReduceMax {
     return max(a, b);
   }
 
-  static __device__ float defaultVal() { return -FLT_MAX; }
+  static __device__ __forceinline__ float defaultVal() { return -FLT_MAX; }
 };
 
 struct OpCudaReduceMin {
@@ -521,19 +523,20 @@ struct OpCudaReduceMin {
     return min(a, b);
   }
 
-  static __device__ float defaultVal() { return FLT_MAX; }
+  static __device__ __forceinline__ float defaultVal() { return FLT_MAX; }
 };
 
 struct OpCudaReduceSum {
-  __device__ float operator()(const float a, const float b) const {
+  __device__ __forceinline__ float operator()(const float a,
+                                              const float b) const {
     return a + b;
   }
 
-  static __device__ float defaultVal() { return 0.f; }
+  static __device__ __forceinline__ float defaultVal() { return 0.f; }
 };
 
 template <typename OP>
-__inline__ __device__ float cuWarpReduce(float val) {
+__device__ __forceinline__ float cuWarpReduce(float val) {
   const OP op;
   val = op(val, __shfl_down_sync(0xFFFFFFFF, val, 16));
   val = op(val, __shfl_down_sync(0xFFFFFFFF, val, 8));
@@ -544,7 +547,7 @@ __inline__ __device__ float cuWarpReduce(float val) {
 }
 
 template <typename OP>
-__inline__ __device__ int cuWarpReduceIdx(float val, int idx) {
+__device__ __forceinline__ int cuWarpReduceIdx(float val, int idx) {
   const OP op;
 
   float otherVal = __shfl_down_sync(0xFFFFFFFF, val, 16);
@@ -587,7 +590,8 @@ __inline__ __device__ int cuWarpReduceIdx(float val, int idx) {
 
 template <typename OP>
 __global__ void kReduceAll(float* __restrict__ output,
-                           const float* __restrict__ input, const int n) {
+                           const float* __restrict__ input, const int n,
+                           const int m) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   __shared__ float shared[WARP_SIZE];
   float val = OP::defaultVal();
@@ -614,8 +618,72 @@ __global__ void kReduceAll(float* __restrict__ output,
 }
 
 template <typename OP>
+__global__ void kReduceAllFirstDim(float* __restrict__ output,
+                                   const float* __restrict__ input, const int n,
+                                   const int m) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  __shared__ float shared[WARP_SIZE];
+  float val = OP::defaultVal();
+
+  const auto segDim = gridDim.x * blockDim.x / m;
+  const auto segIdx = index / segDim;
+  const auto segTid = index % segDim;
+  if (segTid < n) {
+    val = input[segIdx + segTid * m];
+  }
+  val = cuWarpReduce<OP>(val);
+
+  if (threadIdx.x % warpSize == 0) {
+    shared[threadIdx.x / warpSize] = val;
+  }
+  __syncthreads();
+
+  if (threadIdx.x < warpSize) {
+    val = (threadIdx.x < blockDim.x / warpSize) ? shared[threadIdx.x]
+                                                : OP::defaultVal();
+    val = cuWarpReduce<OP>(val);
+  }
+
+  if (threadIdx.x == 0) {
+    output[blockIdx.x] = val;
+  }
+}
+
+template <typename OP>
+__global__ void kReduceAllLastDim(float* __restrict__ output,
+                                  const float* __restrict__ input, const int n,
+                                  const int m) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  __shared__ float shared[WARP_SIZE];
+  float val = OP::defaultVal();
+
+  const auto segDim = gridDim.x * blockDim.x / m;
+  const auto segIdx = index / segDim;
+  const auto segTid = index % segDim;
+  if (segTid < n) {
+    val = input[segTid + segIdx * n];
+  }
+  val = cuWarpReduce<OP>(val);
+
+  if (threadIdx.x % warpSize == 0) {
+    shared[threadIdx.x / warpSize] = val;
+  }
+  __syncthreads();
+
+  if (threadIdx.x < warpSize) {
+    val = (threadIdx.x < blockDim.x / warpSize) ? shared[threadIdx.x]
+                                                : OP::defaultVal();
+    val = cuWarpReduce<OP>(val);
+  }
+
+  if (threadIdx.x == 0) {
+    output[blockIdx.x] = val;
+  }
+}
+
+template <typename OP>
 __global__ void kReduceAllIdx(float* output, const float* __restrict__ input,
-                              const int n) {
+                              const int n, const int m) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   __shared__ float sharedVal[WARP_SIZE];
   __shared__ int sharedIdx[WARP_SIZE];
@@ -625,7 +693,7 @@ __global__ void kReduceAllIdx(float* output, const float* __restrict__ input,
 
   if (index < n) {
     val = input[index];
-    idx = index;
+    idx = static_cast<int>(index);
   }
   idx = cuWarpReduceIdx<OP>(val, idx);
 
@@ -667,7 +735,6 @@ __global__ void kReduceLastDim(float* values, float* indices, const float* t,
     auto targetVal = initVal;
     int32_t targetIdx = 0;
     int32_t srcIdx = index * dimSize;
-#pragma unroll
     for (int32_t j = 0; j < dimSize; j++) {
       auto val = t[srcIdx++];
       if (comp(val, targetVal)) {
@@ -730,19 +797,6 @@ __global__ void kReduceSumFirstDim(float* retPtr, const float* t,
   }
 }
 
-__global__ void kReduceSumLastDim(float* retPtr, const float* t,
-                                  int32_t dimSize, int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (index < n) {
-    auto srcIdx = index * dimSize;
-    float val = 0.f;
-    for (int32_t j = 0; j < dimSize; j++) {
-      val += t[srcIdx++];
-    }
-    retPtr[index] = val;
-  }
-}
-
 __global__ void kReduceSum(float* retPtr, const TensorCudaCtx t,
                            const FixedVector<uint8_t> inAxis, int n) {
   unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -765,15 +819,37 @@ __global__ void kReduceVar(float* retPtr, const TensorCudaCtx t,
 
 __global__ void kPermute(const TensorCudaCtx ret, const TensorCudaCtx t,
                          const FixedVector<int32_t> dims, int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
-    int32_t originIndex = 0;
-    auto offset = (int32_t)index;
+    unsigned int srcIndex = 0;
+    auto offset = index;
     for (int32_t d = 0; d < t.dimCount_; d++) {
-      originIndex += (offset / ret.strides_[d]) * t.strides_[dims.data[d]];
+      srcIndex += (offset / ret.strides_[d]) * t.strides_[dims.data[d]];
       offset %= ret.strides_[d];
     }
-    ret.data_[index] = t.data_[originIndex];
+    ret.data_[index] = t.data_[srcIndex];
+  }
+}
+
+__global__ void kTranspose(float* __restrict__ out,
+                           const float* __restrict__ in, const int width,
+                           const int height) {
+  __shared__ float tile[TRANSPOSE_TILE_DIM]
+                       [TRANSPOSE_TILE_DIM + 1];  // +1 to avoid bank conflicts
+
+  int x = blockIdx.x * TRANSPOSE_TILE_DIM + threadIdx.x;
+  int y = blockIdx.y * TRANSPOSE_TILE_DIM + threadIdx.y;
+
+  if (x < width && y < height) {
+    tile[threadIdx.y][threadIdx.x] = in[y * width + x];
+  }
+  __syncthreads();
+
+  x = blockIdx.y * TRANSPOSE_TILE_DIM + threadIdx.x;
+  y = blockIdx.x * TRANSPOSE_TILE_DIM + threadIdx.y;
+
+  if (x < height && y < width) {
+    out[y * height + x] = tile[threadIdx.x][threadIdx.y];
   }
 }
 

@@ -310,41 +310,40 @@ void TensorOpsCUDA::opPairBroadcast_(TensorImpl& a, const TensorImpl& b) const {
 
 template <typename OP>
 void TensorOpsCUDA::reduceAllImpl(float* dOutput, const float* dInput,
-                                  int32_t n, float* dTmp,
-                                  KernelFunc<OP> kernel) {
+                                  int32_t n, int32_t m, KernelFunc<OP> kernel) {
   auto blocks = getGridSize(n);
 
-  bool ownTmp = false;
-  if (dTmp == nullptr) {
-    allocate(reinterpret_cast<void**>(&dTmp), blocks * sizeof(float));
-    ownTmp = true;
-  }
+  float* dTmp = nullptr;
+  allocate(reinterpret_cast<void**>(&dTmp), m * blocks * sizeof(float));
 
-  kernel<<<blocks, getBlockSize()>>>(dTmp, dInput, n);
+  kernel<<<m * blocks, getBlockSize()>>>(dTmp, dInput, n, m);
   CUDA_KERNEL_CHECK();
   while (blocks > 1) {
     auto currBlocks = blocks;
     blocks = getGridSize(currBlocks);
-    kernel<<<blocks, getBlockSize()>>>(dTmp, dTmp, currBlocks);
+    kernel<<<m * blocks, getBlockSize()>>>(dTmp, dTmp, currBlocks, m);
     CUDA_KERNEL_CHECK();
   }
-  copyOnDevice(dOutput, dTmp, sizeof(float));
-
-  if (ownTmp) {
-    deallocate(dTmp);
-  }
+  copyOnDevice(dOutput, dTmp, m * sizeof(float));
+  deallocate(dTmp);
 }
 
 template <typename OP>
 void TensorOpsCUDA::reduceAll(float* dOutput, const float* dInput, int32_t n,
-                              float* dTmp) {
-  reduceAllImpl<OP>(dOutput, dInput, n, dTmp, kReduceAll<OP>);
+                              int32_t m) {
+  reduceAllImpl<OP>(dOutput, dInput, n, m, kReduceAll<OP>);
 }
 
 template <typename OP>
 void TensorOpsCUDA::reduceAllIdx(float* dOutput, const float* dInput, int32_t n,
-                                 float* dTmp) {
-  reduceAllImpl<OP>(dOutput, dInput, n, dTmp, kReduceAllIdx<OP>);
+                                 int32_t m) {
+  reduceAllImpl<OP>(dOutput, dInput, n, m, kReduceAllIdx<OP>);
+}
+
+template <typename OP>
+void TensorOpsCUDA::reduceAllLastDim(float* dOutput, const float* dInput,
+                                     int32_t n, int32_t m) {
+  reduceAllImpl<OP>(dOutput, dInput, n, m, kReduceAllLastDim<OP>);
 }
 
 template <typename Compare>
@@ -378,6 +377,15 @@ std::pair<TensorImpl, TensorImpl> TensorOpsCUDA::reduceDim(const TensorImpl& t,
   }
   CUDA_KERNEL_CHECK();
   return {values, indices};
+}
+
+void TensorOpsCUDA::transpose2D(float* out, const float* in, int32_t width,
+                                int32_t height) {
+  dim3 blockSize(TRANSPOSE_TILE_DIM, TRANSPOSE_TILE_DIM);
+  dim3 gridSize((width + TRANSPOSE_TILE_DIM - 1) / TRANSPOSE_TILE_DIM,
+                (height + TRANSPOSE_TILE_DIM - 1) / TRANSPOSE_TILE_DIM);
+  kTranspose<<<gridSize, blockSize>>>(out, in, width, height);
+  CUDA_KERNEL_CHECK();
 }
 
 void TensorOpsCUDA::allocate(void** ptr, size_t size) {
@@ -867,21 +875,18 @@ TensorImpl TensorOpsCUDA::sum(const TensorImpl& t,
     // first dim
     if (d == 0) {
       const auto dimSize = t.shape_.front();
-      const auto stride = ret.elemCount_;
-      auto sharedMemSize = stride * sizeof(float);
-      kReduceSumFirstDim<<<getGridSize(dimSize), getBlockSize(),
-                           sharedMemSize>>>(ret.data_, t.data_, dimSize,
-                                            stride);
-      CUDA_KERNEL_CHECK();
+      const auto tmp = TensorImpl::shape(t.shape_, t.device_);
+      transpose2D(tmp.data_, t.data_, ret.elemCount_, dimSize);
+      reduceAllLastDim<OpCudaReduceSum>(ret.data_, tmp.data_, dimSize,
+                                        ret.elemCount_);
       return ret;
     }
 
     // last dim
     if (d == t.dimCount_ - 1) {
       const auto dimSize = t.shape_.back();
-      kReduceSumLastDim<<<getGridSize(ret.elemCount_), getBlockSize()>>>(
-          ret.data_, t.data_, dimSize, ret.elemCount_);
-      CUDA_KERNEL_CHECK();
+      reduceAllLastDim<OpCudaReduceSum>(ret.data_, t.data_, dimSize,
+                                        ret.elemCount_);
       return ret;
     }
   }
@@ -957,6 +962,12 @@ TensorImpl TensorOpsCUDA::permute(const TensorImpl& t,
   kPermute<<<getGridSize(t.elemCount_), getBlockSize()>>>(
       ctxRet, ctxT, *dimsDataPtr, t.elemCount_);
   CUDA_KERNEL_CHECK();
+  return ret;
+}
+
+TensorImpl TensorOpsCUDA::transpose2D(const TensorImpl& t) {
+  auto ret = TensorImpl::shape({t.shape_[1], t.shape_[0]}, t.device_);
+  transpose2D(ret.data_, t.data_, t.shape_[1], t.shape_[0]);
   return ret;
 }
 

@@ -17,8 +17,6 @@
 #endif
 #endif
 
-#define TINY_TORCH_MEM_ALIGN 32
-
 #include "TensorImpl_cpu.inc"
 
 namespace TinyTorch {
@@ -31,7 +29,7 @@ void AllocatorCPU::allocate(void** ptr, size_t size) {
   if (pinned_) {
     *ptr = allocatePinned(size);
   } else {
-    *ptr = allocateAlign(size, TINY_TORCH_MEM_ALIGN);
+    *ptr = allocateAlign(size, TENSOR_MEM_ALIGN);
   }
 }
 
@@ -938,6 +936,10 @@ TensorImpl TensorOpsCPU::permute(const TensorImpl& t,
     ret.data_[i] = t.data_[originIndex];
   }
   return ret;
+}
+
+TensorImpl TensorOpsCPU::transpose2D(const TensorImpl& t) {
+  return permute(t, {1, 0});
 }
 
 TensorImpl TensorOpsCPU::index(
