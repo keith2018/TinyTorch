@@ -218,6 +218,8 @@ TensorImpl TensorImpl::shape(const Shape &s, Device device) {
   return ret;
 }
 
+TensorImpl TensorImpl::scalar(Device device) { return shape({}, device); }
+
 TensorImpl TensorImpl::scalar(const float &value, Device device) {
   TensorImpl ret = shape({}, device);
   ret.ops_->fillConstant_(ret.data_, value, 1);
