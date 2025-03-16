@@ -105,10 +105,9 @@ class TensorOpsCUDA : public TensorOperations {
   template <typename OP>
   void reduceAllLastDim(float *dOutput, const float *dInput, int32_t n,
                         int32_t m = 1);
-  template <typename Compare>
+  template <typename OP>
   std::pair<TensorImpl, TensorImpl> reduceDim(const TensorImpl &t, int32_t dim,
-                                              bool keepDims, float initVal,
-                                              Compare comp);
+                                              bool keepDims);
 
   // transpose
   static void transpose2D(float *out, const float *in, int32_t width,
