@@ -19,12 +19,6 @@
 
 namespace TinyTorch {
 
-#ifdef DEFAULT_DEVICE_CUDA
-static Device defaultDevice = Device::CUDA;
-#else
-static Device defaultDevice = Device::CPU;
-#endif
-
 class TensorOperations;
 class TensorOpsCPU;
 #ifdef USE_CUDA
@@ -62,39 +56,48 @@ class TensorImpl {
   TensorImpl &operator=(TensorImpl &&other) noexcept;
 
   // create
-  explicit TensorImpl(const Array1d &values1d, Device device = defaultDevice);
-  explicit TensorImpl(const Array2d &values2d, Device device = defaultDevice);
-  explicit TensorImpl(const Array3d &values3d, Device device = defaultDevice);
+  explicit TensorImpl(const Array1d &values1d,
+                      Device device = getDefaultDevice());
+  explicit TensorImpl(const Array2d &values2d,
+                      Device device = getDefaultDevice());
+  explicit TensorImpl(const Array3d &values3d,
+                      Device device = getDefaultDevice());
 
-  static TensorImpl shape(const Shape &shape, Device device = defaultDevice);
-  static TensorImpl scalar(Device device = defaultDevice);
-  static TensorImpl scalar(const float &value, Device device = defaultDevice);
+  static TensorImpl shape(const Shape &shape,
+                          Device device = getDefaultDevice());
+  static TensorImpl scalar(Device device = getDefaultDevice());
+  static TensorImpl scalar(const float &value,
+                           Device device = getDefaultDevice());
 
-  static TensorImpl ones(const Shape &shape, Device device = defaultDevice);
+  static TensorImpl ones(const Shape &shape,
+                         Device device = getDefaultDevice());
 
   static TensorImpl onesLike(const TensorImpl &t,
-                             Device device = defaultDevice);
+                             Device device = getDefaultDevice());
 
-  static TensorImpl zeros(const Shape &shape, Device device = defaultDevice);
+  static TensorImpl zeros(const Shape &shape,
+                          Device device = getDefaultDevice());
 
   static TensorImpl zerosLike(const TensorImpl &t,
-                              Device device = defaultDevice);
+                              Device device = getDefaultDevice());
 
-  static TensorImpl rand(const Shape &shape, Device device = defaultDevice);
+  static TensorImpl rand(const Shape &shape,
+                         Device device = getDefaultDevice());
 
   static TensorImpl uniform(const Shape &shape, float min, float max,
-                            Device device = defaultDevice);
+                            Device device = getDefaultDevice());
 
-  static TensorImpl randn(const Shape &shape, Device device = defaultDevice);
+  static TensorImpl randn(const Shape &shape,
+                          Device device = getDefaultDevice());
 
   static TensorImpl bernoulli(const Shape &shape, float p,
-                              Device device = defaultDevice);
+                              Device device = getDefaultDevice());
 
   static TensorImpl arange(float start, float stop, float step = 1.f,
-                           Device device = defaultDevice);
+                           Device device = getDefaultDevice());
 
   static TensorImpl linspace(float start, float end, int32_t steps,
-                             Device device = defaultDevice);
+                             Device device = getDefaultDevice());
 
   // conversion
   void to_(Device device);
@@ -395,6 +398,10 @@ class TensorImpl {
 
   TensorOperations *ops() const { return ops_; }
 
+  static void setDefaultDevice(Device device) { defaultDevice_ = device; }
+
+  static Device getDefaultDevice() { return defaultDevice_; }
+
   static bool deviceAvailable(Device device) {
     return Storage::getOps(device) != nullptr;
   }
@@ -420,6 +427,8 @@ class TensorImpl {
   Device device_ = Device::CPU;
   TensorOperations *ops_ = nullptr;
   std::shared_ptr<Storage> storage_;
+
+  static Device defaultDevice_;
 };
 
 }  // namespace TinyTorch

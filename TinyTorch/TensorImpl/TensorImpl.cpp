@@ -67,7 +67,6 @@ TensorOperations *Storage::getOps(Device device) {
 #ifdef USE_CUDA
       return opsCUDA_.get();
 #else
-      LOGE("getOps error: cuda not support");
       return nullptr;
 #endif
     default:
@@ -75,6 +74,8 @@ TensorOperations *Storage::getOps(Device device) {
   }
   return opsCPU_.get();
 }
+
+Device TensorImpl::defaultDevice_ = Device::CPU;
 
 TensorImpl::TensorImpl(const TensorImpl &other) { shareFrom(other); }
 
@@ -1039,6 +1040,10 @@ TensorImpl TensorImpl::permute(const std::vector<int32_t> &dims) const {
       }
       retDims.push_back(d);
     }
+  }
+  // 2D transpose
+  if (retDims.size() == 2 && retDims[0] == 1 && retDims[1] == 0) {
+    return ops_->transpose2D(*this);
   }
   return ops_->permute(*this, retDims);
 }
