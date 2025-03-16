@@ -141,72 +141,60 @@ struct OpCudaLog {
   __device__ float operator()(const float a) const { return log(a); }
 };
 
-struct OpCudaLess {
-  __device__ bool operator()(const float& a, const float& b) { return a < b; }
-};
-
-struct OpCudaGreater {
-  __device__ bool operator()(const float& a, const float& b) { return a > b; }
-};
-
-__device__ int32_t cuGetReduceSrcIndex(const TensorCudaCtx ret,
-                                       const TensorCudaCtx t, int32_t idx,
-                                       int32_t dim, bool keepDims) {
+__device__ int32_t cuGetReduceSrcIndex(const int32_t* __restrict__ retShape,
+                                       const int32_t* __restrict__ srcStrides,
+                                       int32_t idx, int32_t dim,
+                                       int32_t retDimCount) {
   int32_t outIndex = idx;
   int32_t inIndex = 0;
-  for (int32_t d = ret.dimCount_ - 1; d >= 0; d--) {
-    int32_t coord = outIndex % ret.shape_[d];
-    outIndex /= ret.shape_[d];
-    if (keepDims || d < dim) {
-      inIndex += coord * t.strides_[d];
-    } else {
-      inIndex += coord * t.strides_[d + 1];
-    }
+#pragma unroll
+  for (int32_t d = retDimCount - 1; d >= 0; d--) {
+    int32_t coord = outIndex % retShape[d];
+    outIndex /= retShape[d];
+    inIndex += coord * srcStrides[d < dim ? d : d + 1];
   }
   return inIndex;
 }
 
-__device__ int32_t cuGetReduceDstIndex(const TensorCudaCtx t, int32_t idx,
-                                       int32_t dim) {
+__device__ int32_t cuGetReduceDstIndex(const int32_t* __restrict__ shape,
+                                       const int32_t* __restrict__ strides,
+                                       int32_t idx, int32_t dim,
+                                       int32_t dimCount) {
   int32_t retIdx = 0;
   int32_t stride = 1;
-  for (int32_t d = t.dimCount_ - 1; d >= 0; d--) {
+#pragma unroll
+  for (int32_t d = dimCount - 1; d >= 0; d--) {
     if (d != dim) {
-      retIdx += (idx / t.strides_[d] % t.shape_[d]) * stride;
-      stride *= t.shape_[d];
+      retIdx += (idx / strides[d] % shape[d]) * stride;
+      stride *= shape[d];
     }
   }
   return retIdx;
 }
 
-__device__ int32_t cuGetReduceDstIndex(const TensorCudaCtx t, int32_t idx,
-                                       const FixedVector<uint8_t> inAxis) {
+__device__ int32_t cuGetReduceDstIndex(const int32_t* __restrict__ shape,
+                                       const int32_t* __restrict__ strides,
+                                       const uint8_t* __restrict__ inAxis,
+                                       int32_t idx, int32_t dimCount) {
   int32_t retIdx = 0;
   int32_t stride = 1;
-  for (int32_t d = t.dimCount_ - 1; d >= 0; d--) {
-    if (0 == inAxis.data[d]) {
-      retIdx += (idx / t.strides_[d] % t.shape_[d]) * stride;
-      stride *= t.shape_[d];
+#pragma unroll
+  for (int32_t d = dimCount - 1; d >= 0; d--) {
+    if (0 == inAxis[d]) {
+      retIdx += (idx / strides[d] % shape[d]) * stride;
+      stride *= shape[d];
     }
   }
   return retIdx;
 }
 
-__device__ void cuReorderIndices(int32_t* indices, const int32_t* order,
-                                 int32_t dimCount) {
-  int32_t temp[TENSOR_MAX_DIMS];
-  for (int i = 0; i < dimCount; i++) {
-    temp[i] = indices[order[i]];
-  }
-  memcpy(indices, temp, sizeof(int32_t) * dimCount);
-}
-
-__device__ void cuGetSubIndices(int32_t* subIndices, const TensorCudaCtx t,
-                                const FixedVector<float*> indices, int32_t idx,
-                                int len) {
+__device__ __forceinline__ void cuGetSubIndices(
+    int32_t* __restrict__ subIndices, const int32_t* __restrict__ shape,
+    const float* const* __restrict__ indices, int32_t idx, int len) {
+#pragma unroll
   for (int32_t i = 0; i < len; i++) {
-    auto ind = (int32_t)((float*)indices.data[i])[idx];
-    subIndices[i] = ind >= 0 ? ind : ind + t.shape_[i];
+    auto ind = (int32_t)((float*)indices[i])[idx];
+    subIndices[i] = ind >= 0 ? ind : ind + shape[i];
   }
 }
 
@@ -443,6 +431,7 @@ __device__ int32_t cuIndicesToOffset(const int32_t* __restrict__ strides,
                                      const int32_t* __restrict__ indices,
                                      const int32_t dimCount) {
   int32_t offset = 0;
+#pragma unroll
   for (int32_t i = 0; i < dimCount; i++) {
     offset += indices[i] * strides[i];
   }
@@ -453,6 +442,7 @@ __device__ void cuOffsetToIndices(int32_t* __restrict__ indices,
                                   const int32_t* __restrict__ shape,
                                   const int32_t index, const int32_t dimCount) {
   int32_t offset = index;
+#pragma unroll
   for (int32_t i = dimCount - 1; i >= 0; i--) {
     indices[i] = offset % shape[i];
     offset /= shape[i];
@@ -472,6 +462,8 @@ __global__ void kBroadcastOpCommon(TensorCudaCtx c, const TensorCudaCtx a,
 
     cuOffsetToIndices(cIndices, c.shape_, static_cast<int32_t>(index),
                       c.dimCount_);
+
+#pragma unroll
     for (auto j = 0; j < c.dimCount_; j++) {
       if (j >= c.dimCount_ - a.dimCount_) {
         const int32_t aIndex = j - (c.dimCount_ - a.dimCount_);
@@ -493,7 +485,7 @@ struct OpCudaReduceMax {
     return max(a, b);
   }
 
-  static __device__ __forceinline__ float defaultVal() { return -FLT_MAX; }
+  static __device__ float defaultVal() { return -FLT_MAX; }
 };
 
 struct OpCudaReduceMin {
@@ -501,16 +493,15 @@ struct OpCudaReduceMin {
     return min(a, b);
   }
 
-  static __device__ __forceinline__ float defaultVal() { return FLT_MAX; }
+  static __device__ float defaultVal() { return FLT_MAX; }
 };
 
 struct OpCudaReduceSum {
-  __device__ __forceinline__ float operator()(const float a,
-                                              const float b) const {
+  __device__ float operator()(const float a, const float b) const {
     return a + b;
   }
 
-  static __device__ __forceinline__ float defaultVal() { return 0.f; }
+  static __device__ float defaultVal() { return 0.f; }
 };
 
 template <typename OP>
@@ -704,18 +695,19 @@ __global__ void kSquaredDiff(float* __restrict__ output,
   }
 }
 
-template <typename Compare>
+template <typename OP>
 __global__ void kReduceLastDim(float* values, float* indices, const float* t,
-                               float initVal, int32_t dimSize, Compare comp,
-                               int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+                               int32_t dimSize, int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  const OP op;
   if (index < n) {
-    auto targetVal = initVal;
+    auto targetVal = OP::defaultVal();
     int32_t targetIdx = 0;
     int32_t srcIdx = index * dimSize;
+#pragma unroll
     for (int32_t j = 0; j < dimSize; j++) {
       auto val = t[srcIdx++];
-      if (comp(val, targetVal)) {
+      if (op(val, targetVal) == val) {
         targetVal = val;
         targetIdx = j;
       }
@@ -725,22 +717,25 @@ __global__ void kReduceLastDim(float* values, float* indices, const float* t,
   }
 }
 
-template <typename Compare>
+template <typename OP>
 __global__ void kReduceDim(TensorCudaCtx values, float* indices,
-                           const TensorCudaCtx t, int32_t dim, bool keepDims,
-                           float initVal, Compare comp, int n) {
+                           const TensorCudaCtx t, int32_t dim, int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  const OP op;
+
   const auto dimSize = t.shape_[dim];
   const auto stride = t.strides_[dim];
 
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
-    auto targetVal = initVal;
+    auto targetVal = OP::defaultVal();
     int32_t targetIdx = 0;
-    int32_t srcIdx = cuGetReduceSrcIndex(values, t, index, dim, keepDims);
+    int32_t srcIdx = cuGetReduceSrcIndex(values.shape_, t.strides_, index, dim,
+                                         values.dimCount_);
+#pragma unroll
     for (int32_t j = 0; j < dimSize; j++) {
       auto val = t.data_[srcIdx];
       srcIdx += stride;
-      if (comp(val, targetVal)) {
+      if (op(val, targetVal) == val) {
         targetVal = val;
         targetIdx = j;
       }
@@ -750,36 +745,12 @@ __global__ void kReduceDim(TensorCudaCtx values, float* indices,
   }
 }
 
-__global__ void kReduceSumFirstDim(float* retPtr, const float* t,
-                                   int32_t dimSize, int32_t stride) {
-  extern __shared__ float sharedData[];
-
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
-  unsigned int tid = threadIdx.x;
-
-  for (auto i = tid; i < stride; i += blockDim.x) {
-    sharedData[i] = 0.f;
-  }
-  __syncthreads();
-
-  if (index < dimSize) {
-    auto srcIdx = index * stride;
-    for (auto i = 0; i < stride; i++) {
-      atomicAdd(&sharedData[i], t[srcIdx++]);
-    }
-  }
-  __syncthreads();
-
-  for (auto i = tid; i < stride; i += blockDim.x) {
-    retPtr[i] = sharedData[i];
-  }
-}
-
 __global__ void kReduceSum(float* retPtr, const TensorCudaCtx t,
                            const FixedVector<uint8_t> inAxis, int n) {
   unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
-    int32_t retIdx = cuGetReduceDstIndex(t, index, inAxis);
+    int32_t retIdx = cuGetReduceDstIndex(t.shape_, t.strides_, inAxis.data,
+                                         index, t.dimCount_);
     atomicAdd(&retPtr[retIdx], t.data_[index]);
   }
 }
@@ -789,7 +760,8 @@ __global__ void kReduceVar(float* retPtr, const TensorCudaCtx t,
                            const FixedVector<uint8_t> inAxis, int n) {
   unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
-    int32_t retIdx = cuGetReduceDstIndex(t, index, inAxis);
+    int32_t retIdx = cuGetReduceDstIndex(t.shape_, t.strides_, inAxis.data,
+                                         index, t.dimCount_);
     float diff = t.data_[index] - meanValues[retIdx];
     atomicAdd(&retPtr[retIdx], diff * diff);
   }
@@ -801,6 +773,7 @@ __global__ void kPermute(const TensorCudaCtx ret, const TensorCudaCtx t,
   if (index < n) {
     unsigned int srcIndex = 0;
     auto offset = index;
+#pragma unroll
     for (int32_t d = 0; d < t.dimCount_; d++) {
       srcIndex += (offset / ret.strides_[d]) * t.strides_[dims.data[d]];
       offset %= ret.strides_[d];
@@ -815,8 +788,8 @@ __global__ void kTranspose(float* __restrict__ out,
   __shared__ float tile[TRANSPOSE_TILE_DIM]
                        [TRANSPOSE_TILE_DIM + 1];  // +1 to avoid bank conflicts
 
-  int x = blockIdx.x * TRANSPOSE_TILE_DIM + threadIdx.x;
-  int y = blockIdx.y * TRANSPOSE_TILE_DIM + threadIdx.y;
+  auto x = blockIdx.x * TRANSPOSE_TILE_DIM + threadIdx.x;
+  auto y = blockIdx.y * TRANSPOSE_TILE_DIM + threadIdx.y;
 
   if (x < width && y < height) {
     tile[threadIdx.y][threadIdx.x] = in[y * width + x];
@@ -837,7 +810,7 @@ __global__ void kIndex(float* retData, const TensorCudaCtx t,
   unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
     int32_t subIndices[TENSOR_MAX_DIMS];
-    cuGetSubIndices(subIndices, t, indices, index, len);
+    cuGetSubIndices(subIndices, t.shape_, indices.data, index, len);
     int32_t dataIdx = cuIndicesToOffset(t.strides_, subIndices, t.dimCount_);
     memcpy(&retData[dimStride * index], &t.data_[dataIdx],
            dimStride * sizeof(float));
@@ -849,8 +822,9 @@ __global__ void kIndexPut(TensorCudaCtx t, FixedVector<float*> indices,
   unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
     int32_t subIndices[TENSOR_MAX_DIMS];
-    cuGetSubIndices(subIndices, t, indices, index, len);
+    cuGetSubIndices(subIndices, t.shape_, indices.data, index, len);
     int32_t dataIdx = cuIndicesToOffset(t.strides_, subIndices, t.dimCount_);
+#pragma unroll
     for (int32_t i = 0; i < dimStride; i++) {
       t.data_[dataIdx + i] = val;
     }
@@ -862,7 +836,7 @@ __global__ void kIndexPut(TensorCudaCtx t, FixedVector<float*> indices,
   unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
     int32_t subIndices[TENSOR_MAX_DIMS];
-    cuGetSubIndices(subIndices, t, indices, index, len);
+    cuGetSubIndices(subIndices, t.shape_, indices.data, index, len);
     int32_t dataIdx = cuIndicesToOffset(t.strides_, subIndices, t.dimCount_);
     memcpy(&t.data_[dataIdx], &val[dimStride * index],
            dimStride * sizeof(float));
