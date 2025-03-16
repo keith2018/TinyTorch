@@ -67,7 +67,6 @@ TensorOperations *Storage::getOps(Device device) {
 #ifdef USE_CUDA
       return opsCUDA_.get();
 #else
-      LOGE("getOps error: cuda not support");
       return nullptr;
 #endif
     default:
