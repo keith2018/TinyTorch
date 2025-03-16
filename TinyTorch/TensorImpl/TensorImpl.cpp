@@ -1040,6 +1040,10 @@ TensorImpl TensorImpl::permute(const std::vector<int32_t> &dims) const {
       retDims.push_back(d);
     }
   }
+  // 2D transpose
+  if (retDims.size() == 2 && retDims[0] == 1 && retDims[1] == 0) {
+    return ops_->transpose2D(*this);
+  }
   return ops_->permute(*this, retDims);
 }
 
