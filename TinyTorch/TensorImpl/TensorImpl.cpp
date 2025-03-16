@@ -76,6 +76,8 @@ TensorOperations *Storage::getOps(Device device) {
   return opsCPU_.get();
 }
 
+Device TensorImpl::defaultDevice_ = Device::CPU;
+
 TensorImpl::TensorImpl(const TensorImpl &other) { shareFrom(other); }
 
 TensorImpl::TensorImpl(TensorImpl &&other) noexcept {
