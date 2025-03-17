@@ -140,6 +140,7 @@ void demo_mnist() {
 
   auto useCuda = (!args.noCuda) && Tensor::deviceAvailable(Device::CUDA);
   Device device = useCuda ? Device::CUDA : Device::CPU;
+  LOGD("Train with device: %s", useCuda ? "CUDA" : "CPU");
 
   auto transform = std::make_shared<data::transforms::Compose>(
       data::transforms::Normalize(0.1307f, 0.3081f));
