@@ -17,7 +17,7 @@ void Init::uniform(Tensor &tensor, float min, float max) {
 void Init::kaimingUniform(Tensor &tensor, float a, FanMode mode) {
   auto fan = calculateFan(tensor, mode);
   auto gain = calculateGain(a);
-  auto std = gain / std::sqrt((float)fan);
+  auto std = gain / std::sqrt(static_cast<float>(fan));
   auto bound = std::sqrt(3.f) * std;
   uniform(tensor, -bound, bound);
 }

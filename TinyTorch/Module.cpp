@@ -127,7 +127,8 @@ void Linear::resetParameters() {
   Init::kaimingUniform(weights_, std::sqrt(5.f));
   if (useBias_) {
     auto fanIn = Init::calculateFan(weights_).first;
-    const auto bound = fanIn > 0 ? 1.f / std::sqrt((float)fanIn) : 0;
+    const auto bound =
+        fanIn > 0 ? 1.f / std::sqrt(static_cast<float>(fanIn)) : 0;
     Init::uniform(bias_, -bound, bound);
   }
 }
@@ -195,7 +196,7 @@ void Conv2D::resetParameters() {
   if (useBias_) {
     auto fanIn = Init::calculateFan(weights_).first;
     if (fanIn != 0) {
-      const auto bound = 1.f / std::sqrt((float)fanIn);
+      const auto bound = 1.f / std::sqrt(static_cast<float>(fanIn));
       Init::uniform(bias_, -bound, bound);
     }
   }

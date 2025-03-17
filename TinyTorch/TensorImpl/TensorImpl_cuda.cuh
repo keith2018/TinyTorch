@@ -43,10 +43,12 @@ class TensorOpsCUDA : public TensorOperations {
   ~TensorOpsCUDA() override;
 
   unsigned int getGridSize(size_t n, int32_t batch = 1) const {
-    return (unsigned int)((n + (blockSize_ * batch) - 1) /
-                          (blockSize_ * batch));
+    return static_cast<unsigned int>((n + (blockSize_ * batch) - 1) /
+                                     (blockSize_ * batch));
   }
-  unsigned int getBlockSize() const { return (unsigned int)blockSize_; }
+  unsigned int getBlockSize() const {
+    return static_cast<unsigned int>(blockSize_);
+  }
 
   cublasHandle_t getCublasHandle();
   static TensorCudaCtx getTensorCtx(const TensorImpl &t);

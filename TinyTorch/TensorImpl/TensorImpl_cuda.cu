@@ -1072,9 +1072,12 @@ TensorImpl TensorOpsCUDA::permute(const TensorImpl& t,
   auto ctxT = getTensorCtx(t);
   auto ctxRet = getTensorCtx(ret);
 
-  auto* dimsDataPtr = (FixedVector<int32_t>*)dims.data();
+  FixedVector<int32_t> dimsData;
+  for (auto i = 0; i < t.dimCount_; i++) {
+    dimsData.data[i] = dims[i];
+  }
   kPermute<<<getGridSize(t.elemCount_), getBlockSize()>>>(
-      ctxRet, ctxT, *dimsDataPtr, t.elemCount_);
+      ctxRet, ctxT, dimsData, t.elemCount_);
   CUDA_KERNEL_CHECK();
   return ret;
 }
@@ -1241,8 +1244,8 @@ void TensorOpsCUDA::gemm(float* c, const float* a, const float* b, int32_t m,
   int ldb = transB ? k : n;
   int ldc = n;
 
-  const float alpha = 1.f;
-  const float beta = 0.f;
+  constexpr float alpha = 1.f;
+  constexpr float beta = 0.f;
 
   CUBLAS_CHECK(cublasSgemm(getCublasHandle(), opB, opA, n, m, k, &alpha, b, ldb,
                            a, lda, &beta, c, ldc));

@@ -574,8 +574,8 @@ std::vector<TensorImpl> FuncMaxPool2D::backward(const TensorImpl& grad) {
   if (savedTensors[0].isRequiresGrad()) {
     auto gradCol = TensorImpl::zeros(
         {grad.numel(), kernelSize_.h * kernelSize_.w}, grad.device());
-    auto gradIdx =
-        TensorImpl::arange(0, (float)grad.numel(), 1.f, grad.device());
+    auto gradIdx = TensorImpl::arange(0, static_cast<float>(grad.numel()), 1.f,
+                                      grad.device());
     gradCol.indexPut_({gradIdx, maxIndices_}, grad);
     gradCol.reshape_(
         {batch * outH * outW, channels * kernelSize_.h * kernelSize_.w});
@@ -724,10 +724,12 @@ std::vector<TensorImpl> FuncBatchNorm::backward(const TensorImpl& grad) {
     }
     auto dVar =
         (dInputNorm * inputCentered * -0.5f * std.pow(-3.f)).sum(dims_, true);
-    auto dMean = (dInputNorm * -1.f / std).sum(dims_, true) +
-                 dVar * (inputCentered * -2.f / (float)N).sum(dims_, true);
-    auto dInput = dInputNorm / std + dVar * 2.f * inputCentered / (float)N +
-                  dMean / (float)N;
+    auto dMean =
+        (dInputNorm * -1.f / std).sum(dims_, true) +
+        dVar * (inputCentered * -2.f / static_cast<float>(N)).sum(dims_, true);
+    auto dInput = dInputNorm / std +
+                  dVar * 2.f * inputCentered / static_cast<float>(N) +
+                  dMean / static_cast<float>(N);
     ret.push_back(std::move(dInput));
   }
   // grad of weight
@@ -763,7 +765,7 @@ std::vector<TensorImpl> FuncMSELoss::backward(const TensorImpl& grad) {
   auto retGrad = grad * 2 * (savedTensors[0].data() - savedTensors[1].data());
   switch (reduction_) {
     case MEAN:
-      retGrad /= (float)savedTensors[0].numel();
+      retGrad /= static_cast<float>(savedTensors[0].numel());
     default:
       break;
   }
@@ -780,8 +782,9 @@ std::vector<TensorImpl> FuncMSELoss::backward(const TensorImpl& grad) {
 TensorImpl FuncNLLLoss::forward(const std::vector<const Tensor*>& inputs) {
   saveForBackward(inputs);
   assert(inputs[1]->dim() == 1);
-  auto batchSize = (int32_t)inputs[0]->shape()[0];
-  auto idx = TensorImpl::arange(0, (float)batchSize, 1.f, inputs[0]->device());
+  auto batchSize = static_cast<int32_t>(inputs[0]->shape()[0]);
+  auto idx = TensorImpl::arange(0, static_cast<float>(batchSize), 1.f,
+                                inputs[0]->device());
   auto ret = -1 * inputs[0]->data().index({idx, inputs[1]->data()});
   switch (reduction_) {
     case MEAN:
@@ -796,14 +799,14 @@ TensorImpl FuncNLLLoss::forward(const std::vector<const Tensor*>& inputs) {
 
 std::vector<TensorImpl> FuncNLLLoss::backward(const TensorImpl& grad) {
   const auto& savedTensors = getSavedTensors();
-  auto batchSize = (int32_t)savedTensors[0].shape()[0];
+  auto batchSize = static_cast<int32_t>(savedTensors[0].shape()[0]);
   auto retGrad = TensorImpl::zeros(savedTensors[0].shape(), grad.device());
-  auto idx =
-      TensorImpl::arange(0, (float)batchSize, 1.f, savedTensors[0].device());
+  auto idx = TensorImpl::arange(0, static_cast<float>(batchSize), 1.f,
+                                savedTensors[0].device());
   retGrad.indexPut_({idx, savedTensors[1].data()}, -1.f);
   switch (reduction_) {
     case MEAN:
-      retGrad /= (float)batchSize;
+      retGrad /= static_cast<float>(batchSize);
     default:
       break;
   }
