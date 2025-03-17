@@ -312,7 +312,7 @@ void TensorOpsCPU::reduceAll(float* output, const float* input, int32_t n) {
 }
 
 template <typename OP>
-void TensorOpsCPU::reduceAllIdx(float* output, const float* input, int32_t n) {
+void TensorOpsCPU::reduceIdxAll(float* output, const float* input, int32_t n) {
   const OP op;
   float val = OP::defaultVal();
   int32_t valIdx = 0;
@@ -326,9 +326,10 @@ void TensorOpsCPU::reduceAllIdx(float* output, const float* input, int32_t n) {
 }
 
 template <typename Compare, bool IsLastDim>
-void TensorOpsCPU::reduceDimImpl(TensorImpl& values, TensorImpl& indices,
-                                 const TensorImpl& t, int32_t dim,
-                                 bool keepDims, float initVal, Compare comp) {
+void TensorOpsCPU::reduceIdxDimImpl(TensorImpl& values, TensorImpl& indices,
+                                    const TensorImpl& t, int32_t dim,
+                                    bool keepDims, float initVal,
+                                    Compare comp) {
   const auto dimSize = t.shape_[dim];
   const auto stride = IsLastDim ? 1 : t.strides_[dim];
 
@@ -351,11 +352,9 @@ void TensorOpsCPU::reduceDimImpl(TensorImpl& values, TensorImpl& indices,
 }
 
 template <typename Compare>
-std::pair<TensorImpl, TensorImpl> TensorOpsCPU::reduceDim(const TensorImpl& t,
-                                                          int32_t dim,
-                                                          bool keepDims,
-                                                          float initVal,
-                                                          Compare comp) {
+std::pair<TensorImpl, TensorImpl> TensorOpsCPU::reduceIdxDim(
+    const TensorImpl& t, int32_t dim, bool keepDims, float initVal,
+    Compare comp) {
   if (dim < 0) {
     dim += t.dimCount_;
   }
@@ -369,11 +368,11 @@ std::pair<TensorImpl, TensorImpl> TensorOpsCPU::reduceDim(const TensorImpl& t,
   auto indices = TensorImpl::shape(retShape, t.device_);
 
   if (dim == t.dimCount_ - 1) {
-    reduceDimImpl<Compare, true>(values, indices, t, dim, keepDims, initVal,
-                                 comp);
+    reduceIdxDimImpl<Compare, true>(values, indices, t, dim, keepDims, initVal,
+                                    comp);
   } else {
-    reduceDimImpl<Compare, false>(values, indices, t, dim, keepDims, initVal,
-                                  comp);
+    reduceIdxDimImpl<Compare, false>(values, indices, t, dim, keepDims, initVal,
+                                     comp);
   }
   return {values, indices};
 }
@@ -796,7 +795,7 @@ TensorImpl TensorOpsCPU::argmin(const TensorImpl& t) {
     return TensorImpl::scalar(0, t.device_);
   }
   auto ret = TensorImpl::scalar(t.device_);
-  reduceAllIdx<OpCpuReduceMin>(ret.data_, t.data_, t.elemCount_);
+  reduceIdxAll<OpCpuReduceMin>(ret.data_, t.data_, t.elemCount_);
   return ret;
 }
 
@@ -805,7 +804,7 @@ TensorImpl TensorOpsCPU::argmax(const TensorImpl& t) {
     return TensorImpl::scalar(0, t.device_);
   }
   auto ret = TensorImpl::scalar(t.device_);
-  reduceAllIdx<OpCpuReduceMax>(ret.data_, t.data_, t.elemCount_);
+  reduceIdxAll<OpCpuReduceMax>(ret.data_, t.data_, t.elemCount_);
   return ret;
 }
 
@@ -856,8 +855,8 @@ std::pair<TensorImpl, TensorImpl> TensorOpsCPU::min(const TensorImpl& t,
   if (t.dimCount_ == 0) {
     return {t, TensorImpl::scalar(0, t.device_)};
   }
-  return reduceDim(t, dim, keepDims, std::numeric_limits<float>::max(),
-                   std::less<>());
+  return reduceIdxDim(t, dim, keepDims, std::numeric_limits<float>::max(),
+                      std::less<>());
 }
 
 std::pair<TensorImpl, TensorImpl> TensorOpsCPU::max(const TensorImpl& t,
@@ -866,8 +865,8 @@ std::pair<TensorImpl, TensorImpl> TensorOpsCPU::max(const TensorImpl& t,
   if (t.dimCount_ == 0) {
     return {t, TensorImpl::scalar(0, t.device_)};
   }
-  return reduceDim(t, dim, keepDims, -std::numeric_limits<float>::max(),
-                   std::greater<>());
+  return reduceIdxDim(t, dim, keepDims, -std::numeric_limits<float>::max(),
+                      std::greater<>());
 }
 
 TensorImpl TensorOpsCPU::sum(const TensorImpl& t,
@@ -946,8 +945,8 @@ TensorImpl TensorOpsCPU::transpose2D(const TensorImpl& t) {
 TensorImpl TensorOpsCPU::index(
     const TensorImpl& t,
     const std::vector<std::reference_wrapper<TensorImpl>>& indices) {
-  auto len = (int32_t)indices.size();
-  auto fistDim = (int32_t)indices[0].get().elemCount_;
+  auto len = indices.size();
+  auto fistDim = indices[0].get().elemCount_;
   auto dimStride = t.strides_[len - 1];
   Shape retShape = {fistDim};
   for (auto i = len; i < t.dimCount_; i++) {
@@ -969,8 +968,8 @@ TensorImpl TensorOpsCPU::index(
 void TensorOpsCPU::indexPut_(
     TensorImpl& t,
     const std::vector<std::reference_wrapper<TensorImpl>>& indices, float val) {
-  auto len = (int32_t)indices.size();
-  auto fistDim = (int32_t)indices[0].get().elemCount_;
+  auto len = indices.size();
+  auto fistDim = indices[0].get().elemCount_;
   auto dimStride = t.strides_[len - 1];
 
   static int32_t subIndices[TENSOR_MAX_DIMS];
@@ -985,8 +984,8 @@ void TensorOpsCPU::indexPut_(
     TensorImpl& t,
     const std::vector<std::reference_wrapper<TensorImpl>>& indices,
     const TensorImpl& val) {
-  auto len = (int32_t)indices.size();
-  auto fistDim = (int32_t)indices[0].get().elemCount_;
+  auto len = indices.size();
+  auto fistDim = indices[0].get().elemCount_;
   auto dimStride = t.strides_[len - 1];
   assert(val.elemCount_ == dimStride * fistDim);
 

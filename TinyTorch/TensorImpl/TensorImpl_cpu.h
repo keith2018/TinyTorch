@@ -110,15 +110,16 @@ class TensorOpsCPU : public TensorOperations {
   template <typename OP>
   void reduceAll(float *output, const float *input, int32_t n);
   template <typename OP>
-  void reduceAllIdx(float *output, const float *input, int32_t n);
+  void reduceIdxAll(float *output, const float *input, int32_t n);
+
   template <typename Compare, bool IsLastDim>
-  static void reduceDimImpl(TensorImpl &values, TensorImpl &indices,
-                            const TensorImpl &t, int32_t dim, bool keepDims,
-                            float initVal, Compare comp);
+  static void reduceIdxDimImpl(TensorImpl &values, TensorImpl &indices,
+                               const TensorImpl &t, int32_t dim, bool keepDims,
+                               float initVal, Compare comp);
   template <typename Compare>
-  std::pair<TensorImpl, TensorImpl> reduceDim(const TensorImpl &t, int32_t dim,
-                                              bool keepDims, float initVal,
-                                              Compare comp);
+  std::pair<TensorImpl, TensorImpl> reduceIdxDim(const TensorImpl &t,
+                                                 int32_t dim, bool keepDims,
+                                                 float initVal, Compare comp);
 
   template <typename Op>
   TensorImpl reduceMultiDim(const TensorImpl &t,
