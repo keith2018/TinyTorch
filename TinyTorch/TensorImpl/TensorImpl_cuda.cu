@@ -1089,21 +1089,30 @@ TensorImpl TensorOpsCUDA::index(
     const TensorImpl& t,
     const std::vector<std::reference_wrapper<TensorImpl>>& indices) {
   auto len = indices.size();
-  auto fistDim = indices[0].get().elemCount_;
+  auto firstDim = indices[0].get().elemCount_;
   auto dimStride = t.strides_[len - 1];
-  Shape retShape = {fistDim};
+  Shape retShape = {firstDim};
   for (auto i = len; i < t.dimCount_; i++) {
     retShape.push_back(t.shape_[i]);
   }
   auto retTensor = TensorImpl::shape(retShape, t.device_);
+
+  // 2D
+  if (t.dimCount_ == 2 && len == 2) {
+    kIndex2D<<<getGridSize(firstDim), getBlockSize()>>>(
+        retTensor.data_, t.data_, indices[0].get().data_,
+        indices[1].get().data_, t.shape_[0], t.shape_[1], firstDim);
+    CUDA_KERNEL_CHECK();
+    return retTensor;
+  }
 
   FixedVector<float*> indicesData{};
   for (int32_t i = 0; i < len; i++) {
     indicesData.data[i] = indices[i].get().data_;
   }
   auto ctxT = getTensorCtx(t);
-  kIndex<<<getGridSize(fistDim), getBlockSize()>>>(
-      retTensor.data_, ctxT, indicesData, dimStride, len, fistDim);
+  kIndex<<<getGridSize(firstDim), getBlockSize()>>>(
+      retTensor.data_, ctxT, indicesData, dimStride, len, firstDim);
   CUDA_KERNEL_CHECK();
   return retTensor;
 }
@@ -1112,16 +1121,25 @@ void TensorOpsCUDA::indexPut_(
     TensorImpl& t,
     const std::vector<std::reference_wrapper<TensorImpl>>& indices, float val) {
   auto len = indices.size();
-  auto fistDim = indices[0].get().elemCount_;
+  auto firstDim = indices[0].get().elemCount_;
   auto dimStride = t.strides_[len - 1];
+
+  // 2D
+  if (t.dimCount_ == 2 && len == 2) {
+    kIndexPut2D<<<getGridSize(firstDim), getBlockSize()>>>(
+        t.data_, indices[0].get().data_, indices[1].get().data_, t.shape_[0],
+        t.shape_[1], val, firstDim);
+    CUDA_KERNEL_CHECK();
+    return;
+  }
 
   FixedVector<float*> indicesData{};
   for (int32_t i = 0; i < len; i++) {
     indicesData.data[i] = indices[i].get().data_;
   }
   auto ctxT = getTensorCtx(t);
-  kIndexPut<<<getGridSize(fistDim), getBlockSize()>>>(
-      ctxT, indicesData, dimStride, len, val, fistDim);
+  kIndexPut<<<getGridSize(firstDim), getBlockSize()>>>(
+      ctxT, indicesData, dimStride, len, val, firstDim);
   CUDA_KERNEL_CHECK();
 }
 
@@ -1130,17 +1148,26 @@ void TensorOpsCUDA::indexPut_(
     const std::vector<std::reference_wrapper<TensorImpl>>& indices,
     const TensorImpl& val) {
   auto len = indices.size();
-  auto fistDim = indices[0].get().elemCount_;
+  auto firstDim = indices[0].get().elemCount_;
   auto dimStride = t.strides_[len - 1];
-  assert(val.elemCount_ == dimStride * fistDim);
+  assert(val.elemCount_ == dimStride * firstDim);
+
+  // 2D
+  if (t.dimCount_ == 2 && len == 2) {
+    kIndexPut2D<<<getGridSize(firstDim), getBlockSize()>>>(
+        t.data_, indices[0].get().data_, indices[1].get().data_, t.shape_[0],
+        t.shape_[1], val.data_, firstDim);
+    CUDA_KERNEL_CHECK();
+    return;
+  }
 
   FixedVector<float*> indicesData{};
   for (int32_t i = 0; i < len; i++) {
     indicesData.data[i] = indices[i].get().data_;
   }
   auto ctxT = getTensorCtx(t);
-  kIndexPut<<<getGridSize(fistDim), getBlockSize()>>>(
-      ctxT, indicesData, dimStride, len, val.data_, fistDim);
+  kIndexPut<<<getGridSize(firstDim), getBlockSize()>>>(
+      ctxT, indicesData, dimStride, len, val.data_, firstDim);
   CUDA_KERNEL_CHECK();
 }
 

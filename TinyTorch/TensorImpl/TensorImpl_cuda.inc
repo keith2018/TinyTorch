@@ -193,7 +193,7 @@ __device__ __forceinline__ void cuGetSubIndices(
     const float* const* __restrict__ indices, int32_t idx, int len) {
 #pragma unroll
   for (int32_t i = 0; i < len; i++) {
-    auto ind = (int32_t)((float*)indices[i])[idx];
+    auto ind = static_cast<int32_t>(indices[i][idx]);
     subIndices[i] = ind >= 0 ? ind : ind + shape[i];
   }
 }
@@ -837,7 +837,7 @@ __global__ void kTranspose(float* __restrict__ out,
   }
 }
 
-__global__ void kIndex(float* __restrict__ retData, const TensorCudaCtx t,
+__global__ void kIndex(float* __restrict__ ret, const TensorCudaCtx t,
                        const FixedVector<float*> indices, const int dimStride,
                        const int len, const int n) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -846,8 +846,23 @@ __global__ void kIndex(float* __restrict__ retData, const TensorCudaCtx t,
     cuGetSubIndices(subIndices, t.shape_, indices.data,
                     static_cast<int32_t>(index), len);
     int32_t dataIdx = cuIndicesToOffset(t.strides_, subIndices, t.dimCount_);
-    memcpy(&retData[dimStride * index], &t.data_[dataIdx],
+    memcpy(&ret[dimStride * index], &t.data_[dataIdx],
            dimStride * sizeof(float));
+  }
+}
+
+__global__ void kIndex2D(float* __restrict__ ret, const float* __restrict__ t,
+                         const float* __restrict__ indices0,
+                         const float* __restrict__ indices1, const int dim0,
+                         const int dim1, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  if (index < n) {
+    auto idx0 = static_cast<int32_t>(indices0[index]);
+    auto idx1 = static_cast<int32_t>(indices1[index]);
+    if (idx0 < 0) idx0 += dim0;
+    if (idx1 < 0) idx1 += dim1;
+    const auto dataIdx = idx0 * dim1 + idx1;
+    ret[index] = t[dataIdx];
   }
 }
 
@@ -867,6 +882,21 @@ __global__ void kIndexPut(TensorCudaCtx t, FixedVector<float*> indices,
   }
 }
 
+__global__ void kIndexPut2D(float* __restrict__ t,
+                            const float* __restrict__ indices0,
+                            const float* __restrict__ indices1, const int dim0,
+                            const int dim1, const float val, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  if (index < n) {
+    auto idx0 = static_cast<int32_t>(indices0[index]);
+    auto idx1 = static_cast<int32_t>(indices1[index]);
+    if (idx0 < 0) idx0 += dim0;
+    if (idx1 < 0) idx1 += dim1;
+    const auto dataIdx = idx0 * dim1 + idx1;
+    t[dataIdx] = val;
+  }
+}
+
 __global__ void kIndexPut(TensorCudaCtx t, FixedVector<float*> indices,
                           const int dimStride, const int len, const float* val,
                           const int n) {
@@ -878,6 +908,22 @@ __global__ void kIndexPut(TensorCudaCtx t, FixedVector<float*> indices,
     int32_t dataIdx = cuIndicesToOffset(t.strides_, subIndices, t.dimCount_);
     memcpy(&t.data_[dataIdx], &val[dimStride * index],
            dimStride * sizeof(float));
+  }
+}
+
+__global__ void kIndexPut2D(float* __restrict__ t,
+                            const float* __restrict__ indices0,
+                            const float* __restrict__ indices1, const int dim0,
+                            const int dim1, const float* __restrict__ val,
+                            const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  if (index < n) {
+    auto idx0 = static_cast<int32_t>(indices0[index]);
+    auto idx1 = static_cast<int32_t>(indices1[index]);
+    if (idx0 < 0) idx0 += dim0;
+    if (idx1 < 0) idx1 += dim1;
+    const auto dataIdx = idx0 * dim1 + idx1;
+    t[dataIdx] = val[index];
   }
 }
 
