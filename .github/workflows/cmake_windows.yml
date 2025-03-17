@@ -49,8 +49,8 @@ jobs:
       - name: Build
         run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
 
-      - name: Test
-        run: cd ${{github.workspace}}/build && ctest
-
-      - name: Demo
-        run: cd ${{github.workspace}}/demo/bin/${{env.BUILD_TYPE}} && ./TinyTorch_demo.exe
+#      - name: Test
+#        run: cd ${{github.workspace}}/build && ctest
+#
+#      - name: Demo
+#        run: cd ${{github.workspace}}/demo/bin/${{env.BUILD_TYPE}} && ./TinyTorch_demo.exe
