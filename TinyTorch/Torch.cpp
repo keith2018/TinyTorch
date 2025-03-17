@@ -21,6 +21,8 @@ void manualSeed(unsigned long seed) {
 #endif
 }
 
+void setDefaultDevice(Device device) { TensorImpl::setDefaultDevice(device); }
+
 template <typename T>
 static std::string printArray(const std::vector<T>& vec, bool full) {
   auto size = vec.size();
