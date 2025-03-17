@@ -29,7 +29,7 @@ jobs:
         run: cd ${{github.workspace}}/build && ctest
 
       - name: Demo
-        run: cd ${{github.workspace}}/demo/bin && TinyTorch_demo.exe
+        run: cd ${{github.workspace}}/demo/bin/${{env.BUILD_TYPE}} && ./TinyTorch_demo.exe
 
   build_windows_gpu:
     name: build_windows_gpu
@@ -53,4 +53,4 @@ jobs:
         run: cd ${{github.workspace}}/build && ctest
 
       - name: Demo
-        run: cd ${{github.workspace}}/demo/bin && TinyTorch_demo.exe
+        run: cd ${{github.workspace}}/demo/bin/${{env.BUILD_TYPE}} && ./TinyTorch_demo.exe
