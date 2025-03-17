@@ -12,7 +12,7 @@ env:
 jobs:
   build_windows_cpu:
     name: build_windows_cpu
-    runs-on: windows-latest
+    runs-on: windows-2019
 
     steps:
       - uses: actions/checkout@v3
@@ -29,11 +29,11 @@ jobs:
         run: cd ${{github.workspace}}/build && ctest
 
       - name: Demo
-        run: cd ${{github.workspace}}/demo/bin && ./TinyTorch_demo.exe
+        run: cd ${{github.workspace}}/demo/bin && TinyTorch_demo.exe
 
   build_windows_gpu:
     name: build_windows_gpu
-    runs-on: windows-latest
+    runs-on: windows-2019
 
     steps:
       - uses: actions/checkout@v3
@@ -53,4 +53,4 @@ jobs:
         run: cd ${{github.workspace}}/build && ctest
 
       - name: Demo
-        run: cd ${{github.workspace}}/demo/bin && ./TinyTorch_demo.exe
+        run: cd ${{github.workspace}}/demo/bin && TinyTorch_demo.exe
