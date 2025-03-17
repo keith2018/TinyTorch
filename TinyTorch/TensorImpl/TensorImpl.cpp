@@ -878,6 +878,16 @@ TensorImpl TensorImpl::max(const TensorImpl &t) {
   return t.ops_->max(t);
 }
 
+TensorImpl TensorImpl::argmin(const TensorImpl &t) {
+  TENSOR_CHECK_EMPTY_RET(t, {});
+  return t.ops_->argmin(t);
+}
+
+TensorImpl TensorImpl::argmax(const TensorImpl &t) {
+  TENSOR_CHECK_EMPTY_RET(t, {});
+  return t.ops_->argmax(t);
+}
+
 TensorImpl TensorImpl::sum(const TensorImpl &t) {
   TENSOR_CHECK_EMPTY_RET(t, {});
   return t.ops_->sum(t);
@@ -890,17 +900,13 @@ TensorImpl TensorImpl::mean(const TensorImpl &t) {
 
 TensorImpl TensorImpl::var(const TensorImpl &t, bool unbiased) {
   TENSOR_CHECK_EMPTY_RET(t, {});
-  return t.ops_->var(t, unbiased);
+  return t.ops_->varMean(t, unbiased).first;
 }
 
-TensorImpl TensorImpl::argmin(const TensorImpl &t) {
+std::pair<TensorImpl, TensorImpl> TensorImpl::varMean(const TensorImpl &t,
+                                                      bool unbiased) {
   TENSOR_CHECK_EMPTY_RET(t, {});
-  return t.ops_->argmin(t);
-}
-
-TensorImpl TensorImpl::argmax(const TensorImpl &t) {
-  TENSOR_CHECK_EMPTY_RET(t, {});
-  return t.ops_->argmax(t);
+  return t.ops_->varMean(t, unbiased);
 }
 
 std::pair<TensorImpl, TensorImpl> TensorImpl::min(const TensorImpl &t,
@@ -913,6 +919,16 @@ std::pair<TensorImpl, TensorImpl> TensorImpl::max(const TensorImpl &t,
                                                   int32_t dim, bool keepDims) {
   TENSOR_CHECK_EMPTY_RET(t, {});
   return t.ops_->max(t, dim, keepDims);
+}
+
+TensorImpl TensorImpl::argmin(const TensorImpl &t, int32_t dim, bool keepDims) {
+  TENSOR_CHECK_EMPTY_RET(t, {});
+  return t.ops_->min(t, dim, keepDims).second;
+}
+
+TensorImpl TensorImpl::argmax(const TensorImpl &t, int32_t dim, bool keepDims) {
+  TENSOR_CHECK_EMPTY_RET(t, {});
+  return t.ops_->max(t, dim, keepDims).second;
 }
 
 TensorImpl TensorImpl::sum(const TensorImpl &t, int32_t dim, bool keepDims) {
@@ -928,17 +944,15 @@ TensorImpl TensorImpl::mean(const TensorImpl &t, int32_t dim, bool keepDims) {
 TensorImpl TensorImpl::var(const TensorImpl &t, int32_t dim, bool unbiased,
                            bool keepDims) {
   TENSOR_CHECK_EMPTY_RET(t, {});
-  return t.ops_->var(t, {dim}, unbiased, keepDims);
+  return t.ops_->varMean(t, {dim}, unbiased, keepDims).first;
 }
 
-TensorImpl TensorImpl::argmin(const TensorImpl &t, int32_t dim, bool keepDims) {
+std::pair<TensorImpl, TensorImpl> TensorImpl::varMean(const TensorImpl &t,
+                                                      int32_t dim,
+                                                      bool unbiased,
+                                                      bool keepDims) {
   TENSOR_CHECK_EMPTY_RET(t, {});
-  return t.ops_->min(t, dim, keepDims).second;
-}
-
-TensorImpl TensorImpl::argmax(const TensorImpl &t, int32_t dim, bool keepDims) {
-  TENSOR_CHECK_EMPTY_RET(t, {});
-  return t.ops_->max(t, dim, keepDims).second;
+  return t.ops_->varMean(t, {dim}, unbiased, keepDims);
 }
 
 TensorImpl TensorImpl::sum(const TensorImpl &t,
@@ -957,7 +971,14 @@ TensorImpl TensorImpl::var(const TensorImpl &t,
                            const std::vector<int32_t> &dims, bool unbiased,
                            bool keepDims) {
   TENSOR_CHECK_EMPTY_RET(t, {});
-  return t.ops_->var(t, dims, unbiased, keepDims);
+  return t.ops_->varMean(t, dims, unbiased, keepDims).first;
+}
+
+std::pair<TensorImpl, TensorImpl> TensorImpl::varMean(
+    const TensorImpl &t, const std::vector<int32_t> &dims, bool unbiased,
+    bool keepDims) {
+  TENSOR_CHECK_EMPTY_RET(t, {});
+  return t.ops_->varMean(t, dims, unbiased, keepDims);
 }
 
 void TensorImpl::transpose_(int32_t dim0, int32_t dim1) {

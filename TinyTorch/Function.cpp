@@ -664,8 +664,9 @@ TensorImpl FuncBatchNorm::forward(const std::vector<const Tensor*>& inputs) {
   Tensor mean;
   Tensor var;
   if (training_) {
-    mean.data() = input.mean(dims_, true);
-    var.data() = input.var(dims_, false, true);
+    auto varMean = input.varMean(dims_, false, true);
+    mean.data() = varMean.second;
+    var.data() = varMean.first;
     auto varUnbiased = input.var(dims_, true, true);
 
     if (!runningMean_.empty() && !runningVar_.empty()) {
@@ -679,8 +680,9 @@ TensorImpl FuncBatchNorm::forward(const std::vector<const Tensor*>& inputs) {
       mean = runningMean_;
       var = runningVar_;
     } else {
-      mean.data() = input.mean(dims_, true);
-      var.data() = input.var(dims_, true, true);
+      auto varMean = input.varMean(dims_, true, true);
+      mean.data() = varMean.second;
+      var.data() = varMean.first;
     }
   }
 

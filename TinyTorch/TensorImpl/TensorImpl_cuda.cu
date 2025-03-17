@@ -769,6 +769,24 @@ TensorImpl TensorOpsCUDA::max(const TensorImpl& t) {
   return ret;
 }
 
+TensorImpl TensorOpsCUDA::argmin(const TensorImpl& t) {
+  if (t.dimCount_ == 0) {
+    return TensorImpl::scalar(0, t.device_);
+  }
+  auto ret = TensorImpl::scalar(t.device_);
+  reduceAllIdx<OpCudaReduceMin>(ret.data_, t.data_, t.elemCount_);
+  return ret;
+}
+
+TensorImpl TensorOpsCUDA::argmax(const TensorImpl& t) {
+  if (t.dimCount_ == 0) {
+    return TensorImpl::scalar(0, t.device_);
+  }
+  auto ret = TensorImpl::scalar(t.device_);
+  reduceAllIdx<OpCudaReduceMax>(ret.data_, t.data_, t.elemCount_);
+  return ret;
+}
+
 TensorImpl TensorOpsCUDA::sum(const TensorImpl& t) {
   if (t.dimCount_ == 0) {
     return t;
@@ -789,43 +807,26 @@ TensorImpl TensorOpsCUDA::mean(const TensorImpl& t) {
   return ret;
 }
 
-TensorImpl TensorOpsCUDA::var(const TensorImpl& t, bool unbiased) {
+std::pair<TensorImpl, TensorImpl> TensorOpsCUDA::varMean(const TensorImpl& t,
+                                                         bool unbiased) {
   if (t.dimCount_ == 0) {
-    return TensorImpl::scalar(0, t.device_);
+    return {TensorImpl::scalar(0, t.device_), t};
   }
   const auto meanVal = mean(t);
   const auto squaredDiff = TensorImpl::shape({t.elemCount_}, t.device_);
   kSquaredDiff<<<getGridSize(t.elemCount_), getBlockSize()>>>(
       squaredDiff.data_, t.data_, meanVal.data_, t.elemCount_);
 
-  auto ret = TensorImpl::scalar(t.device_);
-  reduceAll<OpCudaReduceSum>(ret.data_, squaredDiff.data_, t.elemCount_);
+  auto varVal = TensorImpl::scalar(t.device_);
+  reduceAll<OpCudaReduceSum>(varVal.data_, squaredDiff.data_, t.elemCount_);
 
   const auto n = static_cast<float>(t.elemCount_);
   auto r = 1.f / n;
   if (unbiased) {
     r *= n / (n - 1.f);
   }
-  mul_(ret, r);
-  return ret;
-}
-
-TensorImpl TensorOpsCUDA::argmin(const TensorImpl& t) {
-  if (t.dimCount_ == 0) {
-    return TensorImpl::scalar(0, t.device_);
-  }
-  auto ret = TensorImpl::scalar(t.device_);
-  reduceAllIdx<OpCudaReduceMin>(ret.data_, t.data_, t.elemCount_);
-  return ret;
-}
-
-TensorImpl TensorOpsCUDA::argmax(const TensorImpl& t) {
-  if (t.dimCount_ == 0) {
-    return TensorImpl::scalar(0, t.device_);
-  }
-  auto ret = TensorImpl::scalar(t.device_);
-  reduceAllIdx<OpCudaReduceMax>(ret.data_, t.data_, t.elemCount_);
-  return ret;
+  mul_(varVal, r);
+  return {varVal, meanVal};
 }
 
 std::pair<TensorImpl, TensorImpl> TensorOpsCUDA::min(const TensorImpl& t,
@@ -911,9 +912,9 @@ TensorImpl TensorOpsCUDA::mean(const TensorImpl& t,
   return ret;
 }
 
-TensorImpl TensorOpsCUDA::var(const TensorImpl& t,
-                              const std::vector<int32_t>& dims, bool unbiased,
-                              bool keepDims) {
+std::pair<TensorImpl, TensorImpl> TensorOpsCUDA::varMean(
+    const TensorImpl& t, const std::vector<int32_t>& dims, bool unbiased,
+    bool keepDims) {
   FixedVector<uint8_t> inAxis{};
   for (int32_t d : dims) {
     if (d < 0) {
@@ -926,27 +927,27 @@ TensorImpl TensorOpsCUDA::var(const TensorImpl& t,
     inAxis.data[d] = 1;
   }
   if (t.dimCount_ == 0) {
-    return TensorImpl::scalar(0, t.device_);
+    return {TensorImpl::scalar(0, t.device_), t};
   }
 
-  auto retShape = getReduceShape(t, inAxis, keepDims);
-  auto ret = TensorImpl::shape(retShape, t.device_);
+  auto meanVal = mean(t, dims, true);
 
-  auto meanTensor = mean(t, dims, true);
-  fillConstant_(ret, 0);
+  auto retShape = getReduceShape(t, inAxis, keepDims);
+  auto varVal = TensorImpl::shape(retShape, t.device_);
+  fillConstant_(varVal, 0);
 
   auto ctxT = getTensorCtx(t);
   kReduceVar<<<getGridSize(t.elemCount_), getBlockSize()>>>(
-      ret.data_, ctxT, meanTensor.data_, inAxis, t.elemCount_);
+      varVal.data_, ctxT, meanVal.data_, inAxis, t.elemCount_);
   CUDA_KERNEL_CHECK();
 
-  auto reduceSize = (float)t.elemCount_ / (float)ret.elemCount_;
+  auto reduceSize = (float)t.elemCount_ / (float)varVal.elemCount_;
   auto r = 1.f / reduceSize;
   if (unbiased) {
     r *= reduceSize / (reduceSize - 1.f);
   }
-  mul_(ret, r);
-  return ret;
+  mul_(varVal, r);
+  return {varVal, meanVal};
 }
 
 TensorImpl TensorOpsCUDA::permute(const TensorImpl& t,

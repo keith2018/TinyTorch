@@ -791,6 +791,24 @@ TensorImpl TensorOpsCPU::max(const TensorImpl& t) {
   return ret;
 }
 
+TensorImpl TensorOpsCPU::argmin(const TensorImpl& t) {
+  if (t.dimCount_ == 0) {
+    return TensorImpl::scalar(0, t.device_);
+  }
+  auto ret = TensorImpl::scalar(t.device_);
+  reduceAllIdx<OpCpuReduceMin>(ret.data_, t.data_, t.elemCount_);
+  return ret;
+}
+
+TensorImpl TensorOpsCPU::argmax(const TensorImpl& t) {
+  if (t.dimCount_ == 0) {
+    return TensorImpl::scalar(0, t.device_);
+  }
+  auto ret = TensorImpl::scalar(t.device_);
+  reduceAllIdx<OpCpuReduceMax>(ret.data_, t.data_, t.elemCount_);
+  return ret;
+}
+
 TensorImpl TensorOpsCPU::sum(const TensorImpl& t) {
   if (t.dimCount_ == 0) {
     return t;
@@ -811,9 +829,10 @@ TensorImpl TensorOpsCPU::mean(const TensorImpl& t) {
   return ret;
 }
 
-TensorImpl TensorOpsCPU::var(const TensorImpl& t, bool unbiased) {
+std::pair<TensorImpl, TensorImpl> TensorOpsCPU::varMean(const TensorImpl& t,
+                                                        bool unbiased) {
   if (t.dimCount_ == 0) {
-    return TensorImpl::scalar(0, t.device_);
+    return {TensorImpl::scalar(0, t.device_), t};
   }
   const auto meanVal = mean(t);
   auto squaredDiff = 0.f;
@@ -821,32 +840,14 @@ TensorImpl TensorOpsCPU::var(const TensorImpl& t, bool unbiased) {
     const auto diff = t.data_[i] - meanVal.data_[0];
     squaredDiff += diff * diff;
   }
-  auto ret = TensorImpl::scalar(squaredDiff, t.device_);
+  auto varVal = TensorImpl::scalar(squaredDiff, t.device_);
   const auto n = static_cast<float>(t.elemCount_);
   auto r = 1.f / n;
   if (unbiased) {
     r *= n / (n - 1.f);
   }
-  ret.data_[0] *= r;
-  return ret;
-}
-
-TensorImpl TensorOpsCPU::argmin(const TensorImpl& t) {
-  if (t.dimCount_ == 0) {
-    return TensorImpl::scalar(0, t.device_);
-  }
-  auto ret = TensorImpl::scalar(t.device_);
-  reduceAllIdx<OpCpuReduceMin>(ret.data_, t.data_, t.elemCount_);
-  return ret;
-}
-
-TensorImpl TensorOpsCPU::argmax(const TensorImpl& t) {
-  if (t.dimCount_ == 0) {
-    return TensorImpl::scalar(0, t.device_);
-  }
-  auto ret = TensorImpl::scalar(t.device_);
-  reduceAllIdx<OpCpuReduceMax>(ret.data_, t.data_, t.elemCount_);
-  return ret;
+  varVal.data_[0] *= r;
+  return {varVal, meanVal};
 }
 
 std::pair<TensorImpl, TensorImpl> TensorOpsCPU::min(const TensorImpl& t,
@@ -895,29 +896,29 @@ TensorImpl TensorOpsCPU::mean(const TensorImpl& t,
   return ret;
 }
 
-TensorImpl TensorOpsCPU::var(const TensorImpl& t,
-                             const std::vector<int32_t>& dims, bool unbiased,
-                             bool keepDims) {
+std::pair<TensorImpl, TensorImpl> TensorOpsCPU::varMean(
+    const TensorImpl& t, const std::vector<int32_t>& dims, bool unbiased,
+    bool keepDims) {
   if (t.dimCount_ == 0) {
-    return TensorImpl::scalar(0, t.device_);
+    return {TensorImpl::scalar(0, t.device_), t};
   }
-  auto meanTensor = mean(t, dims, true);
-  auto ret = reduceMultiDim(t, dims, keepDims,
-                            [&meanTensor](TensorImpl& ret, const TensorImpl& t,
+  auto meanVal = mean(t, dims, true);
+  auto varVal = reduceMultiDim(t, dims, keepDims,
+                               [&meanVal](TensorImpl& ret, const TensorImpl& t,
                                           int32_t retIdx, int32_t srcIdx) {
-                              float diff =
-                                  t.data_[srcIdx] - meanTensor.data_[retIdx];
-                              ret.data_[retIdx] += diff * diff;
-                            });
-  if (!ret.empty()) {
-    auto reduceSize = (float)t.elemCount_ / (float)ret.elemCount_;
+                                 float diff =
+                                     t.data_[srcIdx] - meanVal.data_[retIdx];
+                                 ret.data_[retIdx] += diff * diff;
+                               });
+  if (!varVal.empty()) {
+    auto reduceSize = (float)t.elemCount_ / (float)varVal.elemCount_;
     auto r = 1.f / reduceSize;
     if (unbiased) {
       r *= reduceSize / (reduceSize - 1.f);
     }
-    mul_(ret, r);
+    mul_(varVal, r);
   }
-  return ret;
+  return {varVal, meanVal};
 }
 
 TensorImpl TensorOpsCPU::permute(const TensorImpl& t,

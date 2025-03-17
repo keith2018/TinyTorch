@@ -227,26 +227,34 @@ class TensorImpl {
   // aggregation
   static TensorImpl min(const TensorImpl &t);
   static TensorImpl max(const TensorImpl &t);
+  static TensorImpl argmin(const TensorImpl &t);
+  static TensorImpl argmax(const TensorImpl &t);
+
   static TensorImpl sum(const TensorImpl &t);
   static TensorImpl mean(const TensorImpl &t);
   static TensorImpl var(const TensorImpl &t, bool unbiased = true);
-  static TensorImpl argmin(const TensorImpl &t);
-  static TensorImpl argmax(const TensorImpl &t);
+  static std::pair<TensorImpl, TensorImpl> varMean(const TensorImpl &t,
+                                                   bool unbiased = true);
 
   static std::pair<TensorImpl, TensorImpl> min(const TensorImpl &t, int32_t dim,
                                                bool keepDims = false);
   static std::pair<TensorImpl, TensorImpl> max(const TensorImpl &t, int32_t dim,
                                                bool keepDims = false);
+  static TensorImpl argmin(const TensorImpl &t, int32_t dim,
+                           bool keepDims = false);
+  static TensorImpl argmax(const TensorImpl &t, int32_t dim,
+                           bool keepDims = false);
+
   static TensorImpl sum(const TensorImpl &t, int32_t dim,
                         bool keepDims = false);
   static TensorImpl mean(const TensorImpl &t, int32_t dim,
                          bool keepDims = false);
   static TensorImpl var(const TensorImpl &t, int32_t dim, bool unbiased = true,
                         bool keepDims = false);
-  static TensorImpl argmin(const TensorImpl &t, int32_t dim,
-                           bool keepDims = false);
-  static TensorImpl argmax(const TensorImpl &t, int32_t dim,
-                           bool keepDims = false);
+  static std::pair<TensorImpl, TensorImpl> varMean(const TensorImpl &t,
+                                                   int32_t dim,
+                                                   bool unbiased = true,
+                                                   bool keepDims = false);
 
   static TensorImpl sum(const TensorImpl &t, const std::vector<int32_t> &dims,
                         bool keepDims = false);
@@ -254,10 +262,17 @@ class TensorImpl {
                          bool keepDims = false);
   static TensorImpl var(const TensorImpl &t, const std::vector<int32_t> &dims,
                         bool unbiased = true, bool keepDims = false);
+  static std::pair<TensorImpl, TensorImpl> varMean(
+      const TensorImpl &t, const std::vector<int32_t> &dims,
+      bool unbiased = true, bool keepDims = false);
 
   TensorImpl min() const { return min(*this); }
 
   TensorImpl max() const { return max(*this); }
+
+  TensorImpl argmin() const { return argmin(*this); }
+
+  TensorImpl argmax() const { return argmax(*this); }
 
   TensorImpl sum() const { return sum(*this); }
 
@@ -265,9 +280,9 @@ class TensorImpl {
 
   TensorImpl var(bool unbiased = true) const { return var(*this, unbiased); }
 
-  TensorImpl argmin() const { return argmin(*this); }
-
-  TensorImpl argmax() const { return argmax(*this); }
+  std::pair<TensorImpl, TensorImpl> varMean(bool unbiased = true) const {
+    return varMean(*this, unbiased);
+  }
 
   std::pair<TensorImpl, TensorImpl> min(int32_t dim,
                                         bool keepDims = false) const {
@@ -277,6 +292,14 @@ class TensorImpl {
   std::pair<TensorImpl, TensorImpl> max(int32_t dim,
                                         bool keepDims = false) const {
     return max(*this, dim, keepDims);
+  }
+
+  TensorImpl argmin(int32_t dim, bool keepDims = false) const {
+    return argmin(*this, dim, keepDims);
+  }
+
+  TensorImpl argmax(int32_t dim, bool keepDims = false) const {
+    return argmax(*this, dim, keepDims);
   }
 
   TensorImpl sum(int32_t dim, bool keepDims = false) const {
@@ -291,12 +314,9 @@ class TensorImpl {
     return var(*this, dim, unbiased, keepDims);
   }
 
-  TensorImpl argmin(int32_t dim, bool keepDims = false) const {
-    return argmin(*this, dim, keepDims);
-  }
-
-  TensorImpl argmax(int32_t dim, bool keepDims = false) const {
-    return argmax(*this, dim, keepDims);
+  std::pair<TensorImpl, TensorImpl> varMean(int32_t dim, bool unbiased,
+                                            bool keepDims = false) const {
+    return varMean(*this, dim, unbiased, keepDims);
   }
 
   TensorImpl sum(const std::vector<int32_t> &dims,
@@ -312,6 +332,12 @@ class TensorImpl {
   TensorImpl var(const std::vector<int32_t> &dims, bool unbiased = true,
                  bool keepDims = false) const {
     return var(*this, dims, unbiased, keepDims);
+  }
+
+  std::pair<TensorImpl, TensorImpl> varMean(const std::vector<int32_t> &dims,
+                                            bool unbiased = true,
+                                            bool keepDims = false) const {
+    return varMean(*this, dims, unbiased, keepDims);
   }
 
   // transpose
