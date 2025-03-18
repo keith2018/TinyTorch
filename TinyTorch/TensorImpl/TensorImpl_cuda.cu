@@ -1189,7 +1189,7 @@ TensorImpl TensorOpsCUDA::im2col(const TensorImpl& t, Size2D kernel,
   int32_t colW = channels * kernel.h * kernel.w;
   auto ret = TensorImpl::shape({batch * colH, colW}, t.device_);
 
-  int32_t n = batch * channels * outH * outW * kernel.h * kernel.w;
+  int32_t n = ret.elemCount_;
   kIm2Col<<<getGridSize(n), getBlockSize()>>>(
       ret.data_, t.data_, n, channels, height, width, outH, outW, kernel.h,
       kernel.w, stride.h, stride.w, padding.h, padding.w);
@@ -1201,7 +1201,7 @@ TensorImpl TensorOpsCUDA::col2im(const TensorImpl& t, const Shape& shape,
                                  Size2D kernel, Size2D stride, Size2D padding) {
   // shape: [C, H, W], [N, C, H, W]
   assert(shape.size() == 3 || shape.size() == 4);
-  int32_t batch = (shape.size() == 4) ? shape[0] : 1;
+  // int32_t batch = (shape.size() == 4) ? shape[0] : 1;
   int32_t channels = (shape.size() == 4) ? shape[1] : shape[0];
   int32_t height = (shape.size() == 4) ? shape[2] : shape[1];
   int32_t width = (shape.size() == 4) ? shape[3] : shape[2];
@@ -1211,9 +1211,9 @@ TensorImpl TensorOpsCUDA::col2im(const TensorImpl& t, const Shape& shape,
 
   // int32_t colH = outH * outW;
   // int32_t colW = channels * kernel.h * kernel.w;
-  auto ret = TensorImpl::zeros(shape, t.device_);
+  auto ret = TensorImpl::shape(shape, t.device_);
 
-  int32_t n = batch * channels * outH * outW;
+  int32_t n = ret.elemCount_;
   kCol2Im<<<getGridSize(n), getBlockSize()>>>(
       ret.data_, t.data_, n, channels, height, width, outH, outW, kernel.h,
       kernel.w, stride.h, stride.w, padding.h, padding.w);
