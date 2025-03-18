@@ -87,7 +87,8 @@ void DatasetMNIST::loadImages(const std::string& path) {
     ifs.read(tmp, height_ * width_);
     float* dataPtr = &images_[i][0];
     for (int32_t j = 0; j < height_ * width_; ++j) {
-      dataPtr[j] = (float)((uint8_t)tmp[j]) / 255.0f;
+      auto d = static_cast<uint8_t>(tmp[j]);
+      dataPtr[j] = static_cast<float>(d) / 255.0f;
     }
   }
   delete[] tmp;
@@ -112,7 +113,7 @@ void DatasetMNIST::loadLabels(const std::string& path) {
   labels_.resize(size);
   for (int32_t i = 0; i < size; ++i) {
     ifs.read(p, 1);
-    labels_[i] = (float)(p[0]);
+    labels_[i] = static_cast<float>(p[0]);
   }
 
   ifs.close();

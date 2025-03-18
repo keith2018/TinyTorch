@@ -100,14 +100,15 @@ TensorImpl &TensorImpl::operator=(TensorImpl &&other) noexcept {
 
 TensorImpl::TensorImpl(const Array1d &values1d, Device device) {
   device_ = device;
-  shape_ = {(int32_t)values1d.size()};
+  shape_ = {static_cast<int32_t>(values1d.size())};
   initMeta();
   initData(values1d.data());
 }
 
 TensorImpl::TensorImpl(const Array2d &values2d, Device device) {
   device_ = device;
-  shape_ = {(int32_t)values2d.size(), (int32_t)values2d[0].size()};
+  shape_ = {static_cast<int32_t>(values2d.size()),
+            static_cast<int32_t>(values2d[0].size())};
   initMeta();
   initData();
   for (int32_t idx = 0; idx < shape_[0]; idx++) {
@@ -118,8 +119,9 @@ TensorImpl::TensorImpl(const Array2d &values2d, Device device) {
 
 TensorImpl::TensorImpl(const Array3d &values3d, Device device) {
   device_ = device;
-  shape_ = {(int32_t)values3d.size(), (int32_t)values3d[0].size(),
-            (int32_t)values3d[0][0].size()};
+  shape_ = {static_cast<int32_t>(values3d.size()),
+            static_cast<int32_t>(values3d[0].size()),
+            static_cast<int32_t>(values3d[0][0].size())};
   initMeta();
   initData();
   for (int32_t idx = 0; idx < shape_[0]; idx++) {
@@ -132,10 +134,10 @@ TensorImpl::TensorImpl(const Array3d &values3d, Device device) {
 }
 
 void TensorImpl::initMeta() {
-  dimCount_ = (int32_t)shape_.size();
+  dimCount_ = static_cast<int32_t>(shape_.size());
   elemCount_ = 1;
   strides_.resize(dimCount_);
-  for (auto dim = int32_t(dimCount_ - 1); dim >= 0; dim--) {
+  for (auto dim = dimCount_ - 1; dim >= 0; dim--) {
     strides_[dim] = elemCount_;
     elemCount_ *= shape_[dim];
   }
@@ -274,7 +276,7 @@ TensorImpl TensorImpl::bernoulli(const Shape &s, float p, Device device) {
 
 TensorImpl TensorImpl::arange(float start, float stop, float step,
                               Device device) {
-  auto steps = (int32_t)std::ceil((stop - start) / step);
+  auto steps = static_cast<int32_t>(std::ceil((stop - start) / step));
   auto ret = shape({steps}, device);
   ret.ops_->fillLinSpace_(ret.data_, start, step, steps);
   return ret;
@@ -285,7 +287,7 @@ TensorImpl TensorImpl::linspace(float start, float end, int32_t steps,
   assert(steps > 0);
   float step = 0;
   if (steps > 1) {
-    step = (end - start) / ((float)steps - 1);
+    step = (end - start) / static_cast<float>(steps - 1);
   }
   auto ret = shape({steps}, device);
   ret.ops_->fillLinSpace_(ret.data_, start, step, steps);
@@ -878,6 +880,16 @@ TensorImpl TensorImpl::max(const TensorImpl &t) {
   return t.ops_->max(t);
 }
 
+TensorImpl TensorImpl::argmin(const TensorImpl &t) {
+  TENSOR_CHECK_EMPTY_RET(t, {});
+  return t.ops_->argmin(t);
+}
+
+TensorImpl TensorImpl::argmax(const TensorImpl &t) {
+  TENSOR_CHECK_EMPTY_RET(t, {});
+  return t.ops_->argmax(t);
+}
+
 TensorImpl TensorImpl::sum(const TensorImpl &t) {
   TENSOR_CHECK_EMPTY_RET(t, {});
   return t.ops_->sum(t);
@@ -890,17 +902,13 @@ TensorImpl TensorImpl::mean(const TensorImpl &t) {
 
 TensorImpl TensorImpl::var(const TensorImpl &t, bool unbiased) {
   TENSOR_CHECK_EMPTY_RET(t, {});
-  return t.ops_->var(t, unbiased);
+  return t.ops_->varMean(t, unbiased).first;
 }
 
-TensorImpl TensorImpl::argmin(const TensorImpl &t) {
+std::pair<TensorImpl, TensorImpl> TensorImpl::varMean(const TensorImpl &t,
+                                                      bool unbiased) {
   TENSOR_CHECK_EMPTY_RET(t, {});
-  return t.ops_->argmin(t);
-}
-
-TensorImpl TensorImpl::argmax(const TensorImpl &t) {
-  TENSOR_CHECK_EMPTY_RET(t, {});
-  return t.ops_->argmax(t);
+  return t.ops_->varMean(t, unbiased);
 }
 
 std::pair<TensorImpl, TensorImpl> TensorImpl::min(const TensorImpl &t,
@@ -913,6 +921,16 @@ std::pair<TensorImpl, TensorImpl> TensorImpl::max(const TensorImpl &t,
                                                   int32_t dim, bool keepDims) {
   TENSOR_CHECK_EMPTY_RET(t, {});
   return t.ops_->max(t, dim, keepDims);
+}
+
+TensorImpl TensorImpl::argmin(const TensorImpl &t, int32_t dim, bool keepDims) {
+  TENSOR_CHECK_EMPTY_RET(t, {});
+  return t.ops_->min(t, dim, keepDims).second;
+}
+
+TensorImpl TensorImpl::argmax(const TensorImpl &t, int32_t dim, bool keepDims) {
+  TENSOR_CHECK_EMPTY_RET(t, {});
+  return t.ops_->max(t, dim, keepDims).second;
 }
 
 TensorImpl TensorImpl::sum(const TensorImpl &t, int32_t dim, bool keepDims) {
@@ -928,17 +946,15 @@ TensorImpl TensorImpl::mean(const TensorImpl &t, int32_t dim, bool keepDims) {
 TensorImpl TensorImpl::var(const TensorImpl &t, int32_t dim, bool unbiased,
                            bool keepDims) {
   TENSOR_CHECK_EMPTY_RET(t, {});
-  return t.ops_->var(t, {dim}, unbiased, keepDims);
+  return t.ops_->varMean(t, {dim}, unbiased, keepDims).first;
 }
 
-TensorImpl TensorImpl::argmin(const TensorImpl &t, int32_t dim, bool keepDims) {
+std::pair<TensorImpl, TensorImpl> TensorImpl::varMean(const TensorImpl &t,
+                                                      int32_t dim,
+                                                      bool unbiased,
+                                                      bool keepDims) {
   TENSOR_CHECK_EMPTY_RET(t, {});
-  return t.ops_->min(t, dim, keepDims).second;
-}
-
-TensorImpl TensorImpl::argmax(const TensorImpl &t, int32_t dim, bool keepDims) {
-  TENSOR_CHECK_EMPTY_RET(t, {});
-  return t.ops_->max(t, dim, keepDims).second;
+  return t.ops_->varMean(t, {dim}, unbiased, keepDims);
 }
 
 TensorImpl TensorImpl::sum(const TensorImpl &t,
@@ -957,7 +973,14 @@ TensorImpl TensorImpl::var(const TensorImpl &t,
                            const std::vector<int32_t> &dims, bool unbiased,
                            bool keepDims) {
   TENSOR_CHECK_EMPTY_RET(t, {});
-  return t.ops_->var(t, dims, unbiased, keepDims);
+  return t.ops_->varMean(t, dims, unbiased, keepDims).first;
+}
+
+std::pair<TensorImpl, TensorImpl> TensorImpl::varMean(
+    const TensorImpl &t, const std::vector<int32_t> &dims, bool unbiased,
+    bool keepDims) {
+  TENSOR_CHECK_EMPTY_RET(t, {});
+  return t.ops_->varMean(t, dims, unbiased, keepDims);
 }
 
 void TensorImpl::transpose_(int32_t dim0, int32_t dim1) {
@@ -1050,7 +1073,7 @@ TensorImpl TensorImpl::permute(const std::vector<int32_t> &dims) const {
 
 TensorImpl TensorImpl::index(const std::vector<int32_t> &indices) const {
   TENSOR_CHECK_EMPTY_RET(*this, {});
-  auto len = (int32_t)indices.size();
+  auto len = static_cast<int32_t>(indices.size());
   int32_t dataIdx = 0;
   for (int32_t i = 0; i < len; i++) {
     auto idx = indices[i];
@@ -1084,7 +1107,7 @@ TensorImpl TensorImpl::index(
 void TensorImpl::indexPut_(const std::vector<int32_t> &indices, float val) {
   TENSOR_CHECK_EMPTY_RET(*this, );
   cow();
-  auto len = (int32_t)indices.size();
+  auto len = static_cast<int32_t>(indices.size());
   int32_t dataIdx = 0;
   for (int32_t i = 0; i < len; i++) {
     auto idx = indices[i];
@@ -1098,7 +1121,7 @@ void TensorImpl::indexPut_(const std::vector<int32_t> &indices,
                            const TensorImpl &val) {
   TENSOR_CHECK_EMPTY_RET(*this, );
   cow();
-  auto len = (int32_t)indices.size();
+  auto len = static_cast<int32_t>(indices.size());
   int32_t dataIdx = 0;
   for (int32_t i = 0; i < len; i++) {
     auto idx = indices[i];
@@ -1166,7 +1189,8 @@ TensorImpl TensorImpl::stack(
 
   // init result shape
   Shape retShape = t0.shape();
-  retShape.insert(retShape.begin() + targetDim, (int32_t)tensors.size());
+  retShape.insert(retShape.begin() + targetDim,
+                  static_cast<int32_t>(tensors.size()));
   TensorImpl retTensor = shape(retShape, t0.device_);
 
   int32_t innerSize = 1;
@@ -1246,7 +1270,7 @@ TensorImpl TensorImpl::matmul(const TensorImpl &a, const TensorImpl &b) {
     return {};
   }
 
-  auto retDimCnt = (int32_t)retShape.size();
+  auto retDimCnt = static_cast<int32_t>(retShape.size());
   auto m = shapeA[shapeA.size() - 2];
   auto k = shapeA.back();
   auto n = shapeB.back();

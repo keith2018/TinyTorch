@@ -193,7 +193,7 @@ __device__ __forceinline__ void cuGetSubIndices(
     const float* const* __restrict__ indices, int32_t idx, int len) {
 #pragma unroll
   for (int32_t i = 0; i < len; i++) {
-    auto ind = (int32_t)((float*)indices[i])[idx];
+    auto ind = static_cast<int32_t>(indices[i][idx]);
     subIndices[i] = ind >= 0 ? ind : ind + shape[i];
   }
 }
@@ -449,6 +449,7 @@ __device__ void cuOffsetToIndices(int32_t* __restrict__ indices,
   }
 }
 
+// TODO optimize
 template <typename OP>
 __global__ void kBroadcastOpCommon(TensorCudaCtx c, const TensorCudaCtx a,
                                    const TensorCudaCtx b, const int n) {
@@ -504,19 +505,53 @@ struct OpCudaReduceSum {
   static __device__ float defaultVal() { return 0.f; }
 };
 
+struct ReduceIdx {
+  int inIdx;
+  int outIdx;
+};
+
+struct ReduceIndexAll {
+  __device__ ReduceIdx operator()(const int index, const int segLength,
+                                  const int segCount) const {
+    int idx = (index < segLength) ? index : -1;
+    return {idx, idx};
+  }
+};
+
+struct ReduceIndexFirstDim {
+  __device__ ReduceIdx operator()(const int index, const int segLength,
+                                  const int segCount) const {
+    const int segDim = gridDim.x * blockDim.x / segCount;
+    const int segIdx = index / segDim;
+    const int segTid = index % segDim;
+    int idx = (segTid < segLength) ? segIdx + segTid * segCount : -1;
+    return {idx, segTid};
+  }
+};
+
+struct ReduceIndexLastDim {
+  __device__ ReduceIdx operator()(const int index, const int segLength,
+                                  const int segCount) const {
+    const int segDim = gridDim.x * blockDim.x / segCount;
+    const int segIdx = index / segDim;
+    const int segTid = index % segDim;
+    int idx = (segTid < segLength) ? segTid + segIdx * segLength : -1;
+    return {idx, segTid};
+  }
+};
+
 template <typename OP>
-__device__ __forceinline__ float cuWarpReduce(float val) {
+__device__ __forceinline__ void cuWarpReduce(float& val) {
   const OP op;
   val = op(val, __shfl_down_sync(0xFFFFFFFF, val, 16));
   val = op(val, __shfl_down_sync(0xFFFFFFFF, val, 8));
   val = op(val, __shfl_down_sync(0xFFFFFFFF, val, 4));
   val = op(val, __shfl_down_sync(0xFFFFFFFF, val, 2));
   val = op(val, __shfl_down_sync(0xFFFFFFFF, val, 1));
-  return val;
 }
 
 template <typename OP>
-__device__ __forceinline__ int cuWarpReduceIdx(float val, int idx) {
+__device__ __forceinline__ void cuWarpReduceIdx(float& val, int& idx) {
   const OP op;
 
   float otherVal = __shfl_down_sync(0xFFFFFFFF, val, 16);
@@ -553,22 +588,22 @@ __device__ __forceinline__ int cuWarpReduceIdx(float val, int idx) {
     val = otherVal;
     idx = otherIdx;
   }
-
-  return idx;
 }
 
-template <typename OP>
-__global__ void kReduceAll(float* __restrict__ output,
-                           const float* __restrict__ input, const int n,
-                           const int m) {
+template <typename OP, typename IndexFunc>
+__global__ void kReduceMerge(float* __restrict__ outValues,
+                             const float* __restrict__ inValues,
+                             const int segLength, const int segCount) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   __shared__ float shared[WARP_SIZE];
   float val = OP::defaultVal();
 
-  if (index < n) {
-    val = input[index];
+  const IndexFunc indexer;
+  auto [inIdx, outIdx] = indexer(index, segLength, segCount);
+  if (inIdx >= 0) {
+    val = inValues[inIdx];
   }
-  val = cuWarpReduce<OP>(val);
+  cuWarpReduce<OP>(val);
 
   if (threadIdx.x % warpSize == 0) {
     shared[threadIdx.x / warpSize] = val;
@@ -578,81 +613,20 @@ __global__ void kReduceAll(float* __restrict__ output,
   if (threadIdx.x < warpSize) {
     val = (threadIdx.x < blockDim.x / warpSize) ? shared[threadIdx.x]
                                                 : OP::defaultVal();
-    val = cuWarpReduce<OP>(val);
+    cuWarpReduce<OP>(val);
   }
 
   if (threadIdx.x == 0) {
-    output[blockIdx.x] = val;
+    outValues[blockIdx.x] = val;
   }
 }
 
-template <typename OP>
-__global__ void kReduceAllFirstDim(float* __restrict__ output,
-                                   const float* __restrict__ input, const int n,
-                                   const int m) {
-  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
-  __shared__ float shared[WARP_SIZE];
-  float val = OP::defaultVal();
-
-  const auto segDim = gridDim.x * blockDim.x / m;
-  const auto segIdx = index / segDim;
-  const auto segTid = index % segDim;
-  if (segTid < n) {
-    val = input[segIdx + segTid * m];
-  }
-  val = cuWarpReduce<OP>(val);
-
-  if (threadIdx.x % warpSize == 0) {
-    shared[threadIdx.x / warpSize] = val;
-  }
-  __syncthreads();
-
-  if (threadIdx.x < warpSize) {
-    val = (threadIdx.x < blockDim.x / warpSize) ? shared[threadIdx.x]
-                                                : OP::defaultVal();
-    val = cuWarpReduce<OP>(val);
-  }
-
-  if (threadIdx.x == 0) {
-    output[blockIdx.x] = val;
-  }
-}
-
-template <typename OP>
-__global__ void kReduceAllLastDim(float* __restrict__ output,
-                                  const float* __restrict__ input, const int n,
-                                  const int m) {
-  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
-  __shared__ float shared[WARP_SIZE];
-  float val = OP::defaultVal();
-
-  const auto segDim = gridDim.x * blockDim.x / m;
-  const auto segIdx = index / segDim;
-  const auto segTid = index % segDim;
-  if (segTid < n) {
-    val = input[segTid + segIdx * n];
-  }
-  val = cuWarpReduce<OP>(val);
-
-  if (threadIdx.x % warpSize == 0) {
-    shared[threadIdx.x / warpSize] = val;
-  }
-  __syncthreads();
-
-  if (threadIdx.x < warpSize) {
-    val = (threadIdx.x < blockDim.x / warpSize) ? shared[threadIdx.x]
-                                                : OP::defaultVal();
-    val = cuWarpReduce<OP>(val);
-  }
-
-  if (threadIdx.x == 0) {
-    output[blockIdx.x] = val;
-  }
-}
-
-template <typename OP>
-__global__ void kReduceAllIdx(float* output, const float* __restrict__ input,
-                              const int n, const int m) {
+template <typename OP, typename IndexFunc>
+__global__ void kReduceIdxMerge(float* __restrict__ outValues,
+                                float* __restrict__ outIndices,
+                                const float* __restrict__ inValues,
+                                const float* __restrict__ inIndices,
+                                const int segLength, const int segCount) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   __shared__ float sharedVal[WARP_SIZE];
   __shared__ int sharedIdx[WARP_SIZE];
@@ -660,11 +634,13 @@ __global__ void kReduceAllIdx(float* output, const float* __restrict__ input,
   float val = OP::defaultVal();
   int idx = -1;
 
-  if (index < n) {
-    val = input[index];
-    idx = static_cast<int>(index);
+  const IndexFunc indexer;
+  auto [inIdx, outIdx] = indexer(index, segLength, segCount);
+  if (inIdx >= 0) {
+    val = inValues[inIdx];
+    idx = inIndices ? static_cast<int>(inIndices[inIdx]) : outIdx;
   }
-  idx = cuWarpReduceIdx<OP>(val, idx);
+  cuWarpReduceIdx<OP>(val, idx);
 
   if (threadIdx.x % warpSize == 0) {
     sharedVal[threadIdx.x / warpSize] = val;
@@ -677,49 +653,87 @@ __global__ void kReduceAllIdx(float* output, const float* __restrict__ input,
                                                 : OP::defaultVal();
     idx = (threadIdx.x < blockDim.x / warpSize) ? sharedIdx[threadIdx.x] : -1;
 
-    idx = cuWarpReduceIdx<OP>(val, idx);
+    cuWarpReduceIdx<OP>(val, idx);
   }
 
   if (threadIdx.x == 0) {
-    output[blockIdx.x] = static_cast<float>(idx);
+    if (outIndices) outIndices[blockIdx.x] = static_cast<float>(idx);
+    if (outValues) outValues[blockIdx.x] = val;
   }
 }
 
-__global__ void kSquaredDiff(float* __restrict__ output,
-                             const float* __restrict__ input,
-                             const float* __restrict__ mean, const int n) {
+template <typename OP, bool isFirstDim>
+__global__ void kReduceDimFirstOrLast(float* __restrict__ outValues,
+                                      const float* __restrict__ inValues,
+                                      const int segLength, const int segCount) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (index < n) {
-    const float diff = input[index] - *mean;
-    output[index] = diff * diff;
+  const OP op;
+  if (index < segCount) {
+    auto targetVal = OP::defaultVal();
+    auto srcIdx = isFirstDim ? index : index * segLength;
+#pragma unroll
+    for (int32_t j = 0; j < segLength; j++) {
+      auto val = inValues[srcIdx];
+      srcIdx += isFirstDim ? segCount : 1;
+      targetVal = op(val, targetVal);
+    }
+    outValues[index] = targetVal;
   }
 }
 
 template <typename OP>
-__global__ void kReduceLastDim(float* values, float* indices, const float* t,
-                               int32_t dimSize, int n) {
+__global__ void kReduceDim(TensorCudaCtx values, const TensorCudaCtx t,
+                           int32_t dim, const int n) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   const OP op;
+
+  const auto dimSize = t.shape_[dim];
+  const auto stride = t.strides_[dim];
+
   if (index < n) {
     auto targetVal = OP::defaultVal();
-    int32_t targetIdx = 0;
-    int32_t srcIdx = index * dimSize;
+    int32_t srcIdx =
+        cuGetReduceSrcIndex(values.shape_, t.strides_,
+                            static_cast<int32_t>(index), dim, values.dimCount_);
 #pragma unroll
     for (int32_t j = 0; j < dimSize; j++) {
-      auto val = t[srcIdx++];
+      auto val = t.data_[srcIdx];
+      srcIdx += stride;
+      targetVal = op(val, targetVal);
+    }
+    values.data_[index] = targetVal;
+  }
+}
+
+template <typename OP, bool isFirstDim>
+__global__ void kReduceIdxDimFirstOrLast(float* __restrict__ outValues,
+                                         float* __restrict__ outIndices,
+                                         const float* __restrict__ inValues,
+                                         const int segLength,
+                                         const int segCount) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  const OP op;
+  if (index < segCount) {
+    auto targetVal = OP::defaultVal();
+    auto targetIdx = 0;
+    auto srcIdx = isFirstDim ? index : index * segLength;
+#pragma unroll
+    for (int32_t j = 0; j < segLength; j++) {
+      auto val = inValues[srcIdx];
+      srcIdx += isFirstDim ? segCount : 1;
       if (op(val, targetVal) == val) {
         targetVal = val;
         targetIdx = j;
       }
     }
-    values[index] = targetVal;
-    indices[index] = static_cast<float>(targetIdx);
+    outValues[index] = targetVal;
+    outIndices[index] = static_cast<float>(targetIdx);
   }
 }
 
 template <typename OP>
-__global__ void kReduceDim(TensorCudaCtx values, float* indices,
-                           const TensorCudaCtx t, int32_t dim, int n) {
+__global__ void kReduceIdxDim(TensorCudaCtx values, float* indices,
+                              const TensorCudaCtx t, int32_t dim, const int n) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   const OP op;
 
@@ -729,8 +743,9 @@ __global__ void kReduceDim(TensorCudaCtx values, float* indices,
   if (index < n) {
     auto targetVal = OP::defaultVal();
     int32_t targetIdx = 0;
-    int32_t srcIdx = cuGetReduceSrcIndex(values.shape_, t.strides_, index, dim,
-                                         values.dimCount_);
+    int32_t srcIdx =
+        cuGetReduceSrcIndex(values.shape_, t.strides_,
+                            static_cast<int32_t>(index), dim, values.dimCount_);
 #pragma unroll
     for (int32_t j = 0; j < dimSize; j++) {
       auto val = t.data_[srcIdx];
@@ -745,30 +760,48 @@ __global__ void kReduceDim(TensorCudaCtx values, float* indices,
   }
 }
 
-__global__ void kReduceSum(float* retPtr, const TensorCudaCtx t,
-                           const FixedVector<uint8_t> inAxis, int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void kSquaredDiff(float* __restrict__ output,
+                             const float* __restrict__ input,
+                             const float* __restrict__ mean, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
-    int32_t retIdx = cuGetReduceDstIndex(t.shape_, t.strides_, inAxis.data,
-                                         index, t.dimCount_);
+    const float diff = input[index] - *mean;
+    output[index] = diff * diff;
+  }
+}
+
+// TODO optimize
+__global__ void kReduceMultiDimSum(float* __restrict__ retPtr,
+                                   const TensorCudaCtx t,
+                                   const FixedVector<uint8_t> inAxis,
+                                   const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  if (index < n) {
+    int32_t retIdx =
+        cuGetReduceDstIndex(t.shape_, t.strides_, inAxis.data,
+                            static_cast<int32_t>(index), t.dimCount_);
     atomicAdd(&retPtr[retIdx], t.data_[index]);
   }
 }
 
-__global__ void kReduceVar(float* retPtr, const TensorCudaCtx t,
-                           const float* meanValues,
-                           const FixedVector<uint8_t> inAxis, int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+// TODO optimize
+__global__ void kReduceMultiDimVar(float* __restrict__ retPtr,
+                                   const TensorCudaCtx t,
+                                   const float* __restrict__ meanValues,
+                                   const FixedVector<uint8_t> inAxis,
+                                   const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
-    int32_t retIdx = cuGetReduceDstIndex(t.shape_, t.strides_, inAxis.data,
-                                         index, t.dimCount_);
+    int32_t retIdx =
+        cuGetReduceDstIndex(t.shape_, t.strides_, inAxis.data,
+                            static_cast<int32_t>(index), t.dimCount_);
     float diff = t.data_[index] - meanValues[retIdx];
     atomicAdd(&retPtr[retIdx], diff * diff);
   }
 }
 
 __global__ void kPermute(const TensorCudaCtx ret, const TensorCudaCtx t,
-                         const FixedVector<int32_t> dims, int n) {
+                         const FixedVector<int32_t> dims, const int n) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
     unsigned int srcIndex = 0;
@@ -804,25 +837,43 @@ __global__ void kTranspose(float* __restrict__ out,
   }
 }
 
-__global__ void kIndex(float* retData, const TensorCudaCtx t,
-                       const FixedVector<float*> indices, int dimStride,
-                       int len, int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void kIndex(float* __restrict__ ret, const TensorCudaCtx t,
+                       const FixedVector<float*> indices, const int dimStride,
+                       const int len, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
     int32_t subIndices[TENSOR_MAX_DIMS];
-    cuGetSubIndices(subIndices, t.shape_, indices.data, index, len);
+    cuGetSubIndices(subIndices, t.shape_, indices.data,
+                    static_cast<int32_t>(index), len);
     int32_t dataIdx = cuIndicesToOffset(t.strides_, subIndices, t.dimCount_);
-    memcpy(&retData[dimStride * index], &t.data_[dataIdx],
+    memcpy(&ret[dimStride * index], &t.data_[dataIdx],
            dimStride * sizeof(float));
   }
 }
 
+__global__ void kIndex2D(float* __restrict__ ret, const float* __restrict__ t,
+                         const float* __restrict__ indices0,
+                         const float* __restrict__ indices1, const int dim0,
+                         const int dim1, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  if (index < n) {
+    auto idx0 = static_cast<int32_t>(indices0[index]);
+    auto idx1 = static_cast<int32_t>(indices1[index]);
+    if (idx0 < 0) idx0 += dim0;
+    if (idx1 < 0) idx1 += dim1;
+    const auto dataIdx = idx0 * dim1 + idx1;
+    ret[index] = t[dataIdx];
+  }
+}
+
 __global__ void kIndexPut(TensorCudaCtx t, FixedVector<float*> indices,
-                          int dimStride, int len, float val, int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+                          const int dimStride, const int len, const float val,
+                          const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
     int32_t subIndices[TENSOR_MAX_DIMS];
-    cuGetSubIndices(subIndices, t.shape_, indices.data, index, len);
+    cuGetSubIndices(subIndices, t.shape_, indices.data,
+                    static_cast<int32_t>(index), len);
     int32_t dataIdx = cuIndicesToOffset(t.strides_, subIndices, t.dimCount_);
 #pragma unroll
     for (int32_t i = 0; i < dimStride; i++) {
@@ -831,25 +882,58 @@ __global__ void kIndexPut(TensorCudaCtx t, FixedVector<float*> indices,
   }
 }
 
+__global__ void kIndexPut2D(float* __restrict__ t,
+                            const float* __restrict__ indices0,
+                            const float* __restrict__ indices1, const int dim0,
+                            const int dim1, const float val, const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  if (index < n) {
+    auto idx0 = static_cast<int32_t>(indices0[index]);
+    auto idx1 = static_cast<int32_t>(indices1[index]);
+    if (idx0 < 0) idx0 += dim0;
+    if (idx1 < 0) idx1 += dim1;
+    const auto dataIdx = idx0 * dim1 + idx1;
+    t[dataIdx] = val;
+  }
+}
+
 __global__ void kIndexPut(TensorCudaCtx t, FixedVector<float*> indices,
-                          int dimStride, int len, float* val, int n) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
+                          const int dimStride, const int len, const float* val,
+                          const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
     int32_t subIndices[TENSOR_MAX_DIMS];
-    cuGetSubIndices(subIndices, t.shape_, indices.data, index, len);
+    cuGetSubIndices(subIndices, t.shape_, indices.data,
+                    static_cast<int32_t>(index), len);
     int32_t dataIdx = cuIndicesToOffset(t.strides_, subIndices, t.dimCount_);
     memcpy(&t.data_[dataIdx], &val[dimStride * index],
            dimStride * sizeof(float));
   }
 }
 
-__global__ void kIm2Col(float* ret, const float* t, int32_t batch,
-                        int32_t channels, int32_t height, int32_t width,
-                        int32_t outH, int32_t outW, int32_t kernelH,
-                        int32_t kernelW, int32_t strideH, int32_t strideW,
-                        int32_t paddingH, int32_t paddingW, int32_t imStride,
-                        int32_t colH, int32_t colW) {
-  auto index = (int32_t)(blockIdx.x * blockDim.x + threadIdx.x);
+__global__ void kIndexPut2D(float* __restrict__ t,
+                            const float* __restrict__ indices0,
+                            const float* __restrict__ indices1, const int dim0,
+                            const int dim1, const float* __restrict__ val,
+                            const int n) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  if (index < n) {
+    auto idx0 = static_cast<int32_t>(indices0[index]);
+    auto idx1 = static_cast<int32_t>(indices1[index]);
+    if (idx0 < 0) idx0 += dim0;
+    if (idx1 < 0) idx1 += dim1;
+    const auto dataIdx = idx0 * dim1 + idx1;
+    t[dataIdx] = val[index];
+  }
+}
+
+__global__ void kIm2Col(float* __restrict__ ret, const float* __restrict__ t,
+                        int32_t batch, int32_t channels, int32_t height,
+                        int32_t width, int32_t outH, int32_t outW,
+                        int32_t kernelH, int32_t kernelW, int32_t strideH,
+                        int32_t strideW, int32_t paddingH, int32_t paddingW,
+                        int32_t imStride, int32_t colH, int32_t colW) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   int32_t totalElements = batch * outH * outW * channels * kernelH * kernelW;
 
   if (index < totalElements) {
@@ -874,13 +958,13 @@ __global__ void kIm2Col(float* ret, const float* t, int32_t batch,
   }
 }
 
-__global__ void kCol2Im(float* ret, const float* t, int32_t batch,
-                        int32_t channels, int32_t height, int32_t width,
-                        int32_t outH, int32_t outW, int32_t kernelH,
-                        int32_t kernelW, int32_t strideH, int32_t strideW,
-                        int32_t paddingH, int32_t paddingW, int32_t imStride,
-                        int32_t colW) {
-  auto index = (int32_t)(blockIdx.x * blockDim.x + threadIdx.x);
+__global__ void kCol2Im(float* __restrict__ ret, const float* __restrict__ t,
+                        int32_t batch, int32_t channels, int32_t height,
+                        int32_t width, int32_t outH, int32_t outW,
+                        int32_t kernelH, int32_t kernelW, int32_t strideH,
+                        int32_t strideW, int32_t paddingH, int32_t paddingW,
+                        int32_t imStride, int32_t colW) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   int32_t totalElements = batch * channels * height * width;
 
   if (index < totalElements) {
@@ -912,29 +996,30 @@ __global__ void kCol2Im(float* ret, const float* t, int32_t batch,
   }
 }
 
-__global__ void kDot(float* ret, const float* a, const float* b, int n) {
+__global__ void kDot(float* __restrict__ ret, const float* __restrict__ a,
+                     const float* __restrict__ b, const int n) {
   extern __shared__ float sharedData[];
 
-  unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
-  auto threadId = threadIdx.x;
+  auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  auto tid = threadIdx.x;
 
   float temp = 0.f;
-  while (tid < n) {
-    temp += a[tid] * b[tid];
-    tid += blockDim.x * gridDim.x;
+  while (index < n) {
+    temp += a[index] * b[index];
+    index += blockDim.x * gridDim.x;
   }
 
-  sharedData[threadId] = temp;
+  sharedData[tid] = temp;
   __syncthreads();
 
-  for (int32_t stride = (int32_t)blockDim.x / 2; stride > 0; stride >>= 1) {
-    if (threadId < stride) {
-      sharedData[threadId] += sharedData[threadId + stride];
+  for (auto stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+    if (tid < stride) {
+      sharedData[tid] += sharedData[tid + stride];
     }
     __syncthreads();
   }
 
-  if (threadId == 0) {
+  if (tid == 0) {
     atomicAdd(ret, sharedData[0]);
   }
 }

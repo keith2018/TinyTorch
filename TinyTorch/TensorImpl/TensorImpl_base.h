@@ -147,11 +147,12 @@ typedef enum ShapeCompatible_ {
   /* aggregation */                                                            \
   _H TensorImpl min(const TensorImpl& t) _T;                                   \
   _H TensorImpl max(const TensorImpl& t) _T;                                   \
-  _H TensorImpl sum(const TensorImpl& t) _T;                                   \
-  _H TensorImpl mean(const TensorImpl& t) _T;                                  \
-  _H TensorImpl var(const TensorImpl& t, bool unbiased) _T;                    \
   _H TensorImpl argmin(const TensorImpl& t) _T;                                \
   _H TensorImpl argmax(const TensorImpl& t) _T;                                \
+  _H TensorImpl sum(const TensorImpl& t) _T;                                   \
+  _H TensorImpl mean(const TensorImpl& t) _T;                                  \
+  _H std::pair<TensorImpl, TensorImpl> varMean(const TensorImpl& t,            \
+                                               bool unbiased) _T;              \
                                                                                \
   _H std::pair<TensorImpl, TensorImpl> min(const TensorImpl& t, int32_t dim,   \
                                            bool keepDims) _T;                  \
@@ -162,8 +163,9 @@ typedef enum ShapeCompatible_ {
                     bool keepDims) _T;                                         \
   _H TensorImpl mean(const TensorImpl& t, const std::vector<int32_t>& dims,    \
                      bool keepDims) _T;                                        \
-  _H TensorImpl var(const TensorImpl& t, const std::vector<int32_t>& dims,     \
-                    bool unbiased, bool keepDims) _T;                          \
+  _H std::pair<TensorImpl, TensorImpl> varMean(                                \
+      const TensorImpl& t, const std::vector<int32_t>& dims, bool unbiased,    \
+      bool keepDims) _T;                                                       \
                                                                                \
   /* permute */                                                                \
   _H TensorImpl permute(const TensorImpl& t, const std::vector<int32_t>& dims) \

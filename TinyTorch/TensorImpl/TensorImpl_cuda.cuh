@@ -43,10 +43,12 @@ class TensorOpsCUDA : public TensorOperations {
   ~TensorOpsCUDA() override;
 
   unsigned int getGridSize(size_t n, int32_t batch = 1) const {
-    return (unsigned int)((n + (blockSize_ * batch) - 1) /
-                          (blockSize_ * batch));
+    return static_cast<unsigned int>((n + (blockSize_ * batch) - 1) /
+                                     (blockSize_ * batch));
   }
-  unsigned int getBlockSize() const { return (unsigned int)blockSize_; }
+  unsigned int getBlockSize() const {
+    return static_cast<unsigned int>(blockSize_);
+  }
 
   cublasHandle_t getCublasHandle();
   static TensorCudaCtx getTensorCtx(const TensorImpl &t);
@@ -92,22 +94,30 @@ class TensorOpsCUDA : public TensorOperations {
   void opPairBroadcast_(TensorImpl &a, const TensorImpl &b) const;
 
   // reduce
+  template <typename OP, typename IndexFunc>
+  void reduceMerge(float *values, const float *input, int32_t n, int32_t m = 1);
+  template <typename OP, typename IndexFunc>
+  void reduceIdxMerge(float *values, float *indices, const float *input,
+                      int32_t n, int32_t m = 1);
+
   template <typename OP>
-  using KernelFunc = void (*)(float *, const float *, int32_t, int32_t);
+  void reduceDimFirst(float *values, const float *input, int32_t n,
+                      int32_t m = 1);
   template <typename OP>
-  void reduceAllImpl(float *dOutput, const float *dInput, int32_t n, int32_t m,
-                     KernelFunc<OP> kernel);
+  void reduceDimLast(float *values, const float *input, int32_t n,
+                     int32_t m = 1);
   template <typename OP>
-  void reduceAll(float *dOutput, const float *dInput, int32_t n, int32_t m = 1);
+  void reduceIdxDimFirst(float *values, float *indices, const float *input,
+                         int32_t n, int32_t m = 1);
   template <typename OP>
-  void reduceAllIdx(float *dOutput, const float *dInput, int32_t n,
-                    int32_t m = 1);
+  void reduceIdxDimLast(float *values, float *indices, const float *input,
+                        int32_t n, int32_t m = 1);
+
   template <typename OP>
-  void reduceAllLastDim(float *dOutput, const float *dInput, int32_t n,
-                        int32_t m = 1);
+  TensorImpl reduceDim(const TensorImpl &t, int32_t dim, bool keepDims);
   template <typename OP>
-  std::pair<TensorImpl, TensorImpl> reduceDim(const TensorImpl &t, int32_t dim,
-                                              bool keepDims);
+  std::pair<TensorImpl, TensorImpl> reduceIdxDim(const TensorImpl &t,
+                                                 int32_t dim, bool keepDims);
 
   // transpose
   static void transpose2D(float *out, const float *in, int32_t width,

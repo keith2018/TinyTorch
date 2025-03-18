@@ -21,7 +21,7 @@ int32_t TensorOperations::indicesToOffset(const Shape &strides,
 
 void TensorOperations::offsetToIndices(int32_t *indices, const Shape &shape,
                                        int32_t offset) {
-  for (int32_t i = (int32_t)shape.size() - 1; i >= 0; i--) {
+  for (int32_t i = static_cast<int32_t>(shape.size()) - 1; i >= 0; i--) {
     indices[i] = offset % shape[i];
     offset /= shape[i];
   }
@@ -107,9 +107,9 @@ ShapeCompatible TensorOperations::checkShapeCompatible(const Shape &t0,
                                                        int32_t skipLast) {
   retShape = t0.size() > t1.size() ? t0 : t1;
 
-  auto idxRet = (int32_t)(retShape.size() - 1 - skipLast);
-  auto idx0 = (int32_t)(t0.size() - 1 - skipLast);
-  auto idx1 = (int32_t)(t1.size() - 1 - skipLast);
+  auto idxRet = static_cast<int32_t>(retShape.size()) - 1 - skipLast;
+  auto idx0 = static_cast<int32_t>(t0.size()) - 1 - skipLast;
+  auto idx1 = static_cast<int32_t>(t1.size()) - 1 - skipLast;
 
   bool needBroadcast = false;
   while (idx0 >= 0 && idx1 >= 0) {

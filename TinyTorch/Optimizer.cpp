@@ -94,7 +94,7 @@ void Adagrad::doStep() {
     auto &param = parameters_[i];
     auto grad = getDecayedGrad(param);
     auto &s = stateSums_[i];
-    auto clr = lr_ / (1 + (float)(step_ - 1) * lrDecay_);
+    auto clr = lr_ / (1 + static_cast<float>(step_ - 1) * lrDecay_);
     s += grad * grad;
     param->data() += -clr * grad / (s.sqrt() + eps_);
   }
@@ -177,8 +177,8 @@ Adam::Adam(std::vector<Tensor *> &&parameters, float lr,
 }
 
 void Adam::doStep() {
-  float b1t = 1.f - std::pow(beta1_, (float)step_);
-  float b2t = 1.f - std::pow(beta2_, (float)step_);
+  float b1t = 1.f - std::pow(beta1_, static_cast<float>(step_));
+  float b2t = 1.f - std::pow(beta2_, static_cast<float>(step_));
 
   for (int32_t i = 0; i < parameters_.size(); i++) {
     auto &param = parameters_[i];
