@@ -1176,7 +1176,7 @@ void TensorOpsCUDA::indexPut_(
 
 TensorImpl TensorOpsCUDA::im2col(const TensorImpl& t, Size2D kernel,
                                  Size2D stride, Size2D padding) {
-  // this: [C, H, W], [N, C, H, W]
+  // shape: [C, H, W], [N, C, H, W]
   assert(t.dimCount_ == 3 || t.dimCount_ == 4);
   int32_t batch = (t.dimCount_ == 4) ? t.shape_[0] : 1;
   int32_t channels = (t.dimCount_ == 4) ? t.shape_[1] : t.shape_[0];
@@ -1187,16 +1187,14 @@ TensorImpl TensorOpsCUDA::im2col(const TensorImpl& t, Size2D kernel,
 
   int32_t colH = outH * outW;
   int32_t colW = channels * kernel.h * kernel.w;
-  auto retTensor = TensorImpl::shape({batch * colH, colW}, t.device_);
+  auto ret = TensorImpl::shape({batch * colH, colW}, t.device_);
 
-  int32_t imStride = t.strides_[0];
-  int totalElements = batch * outH * outW * channels * kernel.h * kernel.w;
-  kIm2Col<<<getGridSize(totalElements), getBlockSize()>>>(
-      retTensor.data_, t.data_, batch, channels, height, width, outH, outW,
-      kernel.h, kernel.w, stride.h, stride.w, padding.h, padding.w, imStride,
-      colH, colW);
+  int32_t n = batch * channels * outH * outW * kernel.h * kernel.w;
+  kIm2Col<<<getGridSize(n), getBlockSize()>>>(
+      ret.data_, t.data_, n, channels, height, width, outH, outW, kernel.h,
+      kernel.w, stride.h, stride.w, padding.h, padding.w);
   CUDA_KERNEL_CHECK();
-  return retTensor;
+  return ret;
 }
 
 TensorImpl TensorOpsCUDA::col2im(const TensorImpl& t, const Shape& shape,
@@ -1212,18 +1210,15 @@ TensorImpl TensorOpsCUDA::col2im(const TensorImpl& t, const Shape& shape,
   auto outW = (width - kernel.w + 2 * padding.w) / stride.w + 1;
 
   // int32_t colH = outH * outW;
-  int32_t colW = channels * kernel.h * kernel.w;
+  // int32_t colW = channels * kernel.h * kernel.w;
+  auto ret = TensorImpl::zeros(shape, t.device_);
 
-  auto retTensor = TensorImpl::zeros(shape, t.device_);
-
-  auto imStride = retTensor.strides_[0];
-  int totalElements = batch * channels * height * width;
-  kCol2Im<<<getGridSize(totalElements), getBlockSize()>>>(
-      retTensor.data_, t.data_, batch, channels, height, width, outH, outW,
-      kernel.h, kernel.w, stride.h, stride.w, padding.h, padding.w, imStride,
-      colW);
+  int32_t n = batch * channels * outH * outW;
+  kCol2Im<<<getGridSize(n), getBlockSize()>>>(
+      ret.data_, t.data_, n, channels, height, width, outH, outW, kernel.h,
+      kernel.w, stride.h, stride.w, padding.h, padding.w);
   CUDA_KERNEL_CHECK();
-  return retTensor;
+  return ret;
 }
 
 TensorImpl TensorOpsCUDA::dot(const TensorImpl& a, const TensorImpl& b) {

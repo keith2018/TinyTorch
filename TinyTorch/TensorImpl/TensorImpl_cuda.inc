@@ -901,72 +901,76 @@ __global__ void kIndexPut2D(float* t, const float* indices0,
   }
 }
 
-__global__ void kIm2Col(float* ret, const float* t, int32_t batch,
-                        int32_t channels, int32_t height, int32_t width,
-                        int32_t outH, int32_t outW, int32_t kernelH,
-                        int32_t kernelW, int32_t strideH, int32_t strideW,
-                        int32_t paddingH, int32_t paddingW, int32_t imStride,
-                        int32_t colH, int32_t colW) {
-  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
-  int32_t totalElements = batch * outH * outW * channels * kernelH * kernelW;
+__global__ void kIm2Col(float* ret, const float* t, const int32_t n,
+                        const int32_t channels, const int32_t height,
+                        const int32_t width, const int32_t outH,
+                        const int32_t outW, const int32_t kernelH,
+                        const int32_t kernelW, const int32_t strideH,
+                        const int32_t strideW, const int32_t paddingH,
+                        const int32_t paddingW) {
+  const int32_t index = blockIdx.x * blockDim.x + threadIdx.x;
+  if (index < n) {
+    const int32_t colH = outH * outW;
+    const int32_t kernelSize = kernelH * kernelW;
 
-  if (index < totalElements) {
-    int32_t kw = index % kernelW;
-    int32_t kh = (index / kernelW) % kernelH;
-    int32_t c = (index / (kernelW * kernelH)) % channels;
-    int32_t w = (index / (kernelW * kernelH * channels)) % outW;
-    int32_t h = (index / (kernelW * kernelH * channels * outW)) % outH;
-    int32_t n = (index / (kernelW * kernelH * channels * outW * outH)) % batch;
+    const int32_t kernelIdx = index % kernelSize;
+    const int32_t colIdx = index / kernelSize;
 
-    int32_t colIdx = (n * outH + h) * outW + w;
-    int32_t imRow = h * strideH + kh - paddingH;
-    int32_t imCol = w * strideW + kw - paddingW;
-    int32_t colWIdx = c * kernelH * kernelW + kh * kernelW + kw;
+    const int32_t b = colIdx / (channels * colH);
+    const int32_t c = (colIdx % (channels * colH)) / colH;
+    const int32_t h = (colIdx % colH) / outW;
+    const int32_t w = colIdx % outW;
 
-    float value = 0.0f;
-    if (imRow >= 0 && imRow < height && imCol >= 0 && imCol < width) {
-      int32_t imgIdx = imCol + width * (imRow + height * c);
-      value = t[n * imStride + imgIdx];
+    const int32_t kh = kernelIdx / kernelW;
+    const int32_t kw = kernelIdx % kernelW;
+
+    const float* imPtr = t + (b * channels + c) * height * width;
+    float* colPtr =
+        ret + ((b * colH + h * outW + w) * channels + c) * kernelSize;
+
+    const int32_t ih = h * strideH - paddingH + kh;
+    const int32_t iw = w * strideW - paddingW + kw;
+    float val = 0.f;
+    if (ih >= 0 && ih < height && iw >= 0 && iw < width) {
+      val = imPtr[ih * width + iw];
     }
-    ret[colIdx * colW + colWIdx] = value;
+    colPtr[kh * kernelW + kw] = val;
   }
 }
 
-__global__ void kCol2Im(float* ret, const float* t, int32_t batch,
-                        int32_t channels, int32_t height, int32_t width,
-                        int32_t outH, int32_t outW, int32_t kernelH,
-                        int32_t kernelW, int32_t strideH, int32_t strideW,
-                        int32_t paddingH, int32_t paddingW, int32_t imStride,
-                        int32_t colW) {
-  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
-  int32_t totalElements = batch * channels * height * width;
+__global__ void kCol2Im(float* ret, const float* t, const int32_t n,
+                        const int32_t channels, const int32_t height,
+                        const int32_t width, const int32_t outH,
+                        const int32_t outW, const int32_t kernelH,
+                        const int32_t kernelW, const int32_t strideH,
+                        const int32_t strideW, const int32_t paddingH,
+                        const int32_t paddingW) {
+  const int32_t index = blockIdx.x * blockDim.x + threadIdx.x;
+  if (index < n) {
+    const int32_t colH = outH * outW;
+    const int32_t kernelSize = kernelH * kernelW;
 
-  if (index < totalElements) {
-    int32_t w = index % width;
-    int32_t h = (index / width) % height;
-    int32_t c = (index / (width * height)) % channels;
-    int32_t n = index / (width * height * channels);
+    const int32_t b = index / (channels * colH);
+    const int32_t c = (index % (channels * colH)) / colH;
+    const int32_t h = (index % colH) / outW;
+    const int32_t w = index % outW;
 
-    float value = 0.0f;
-    for (int32_t kh = 0; kh < kernelH; ++kh) {
-      for (int32_t kw = 0; kw < kernelW; ++kw) {
-        int32_t imRow = h + paddingH - kh;
-        int32_t imCol = w + paddingW - kw;
+    const int32_t hStride = h * strideH - paddingH;
+    const int32_t wStride = w * strideW - paddingW;
 
-        if (imRow % strideH == 0 && imCol % strideW == 0) {
-          int32_t outRow = imRow / strideH;
-          int32_t outCol = imCol / strideW;
+    float* imPtr = ret + (b * channels + c) * height * width;
+    const float* colPtr =
+        t + ((b * colH + h * outW + w) * channels + c) * kernelSize;
 
-          if (outRow >= 0 && outRow < outH && outCol >= 0 && outCol < outW) {
-            int32_t colIdx = (n * outH + outRow) * outW + outCol;
-            int32_t colWIdx = c * kernelH * kernelW + kh * kernelW + kw;
-            value += t[colIdx * colW + colWIdx];
-          }
+    for (int32_t i = 0; i < kernelH; i++) {
+      for (int32_t j = 0; j < kernelW; j++) {
+        const int32_t ih = hStride + i;
+        const int32_t iw = wStride + j;
+        if (ih >= 0 && ih < height && iw >= 0 && iw < width) {
+          atomicAdd(&imPtr[ih * width + iw], colPtr[i * kernelW + j]);
         }
       }
     }
-
-    ret[index] = value;
   }
 }
 
