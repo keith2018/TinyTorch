@@ -141,10 +141,9 @@ struct OpCudaLog {
   __device__ float operator()(const float a) const { return log(a); }
 };
 
-__device__ int32_t cuGetReduceSrcIndex(const int32_t* __restrict__ retShape,
-                                       const int32_t* __restrict__ srcStrides,
-                                       int32_t idx, int32_t dim,
-                                       int32_t retDimCount) {
+__device__ int32_t cuGetReduceSrcIndex(const int32_t* retShape,
+                                       const int32_t* srcStrides, int32_t idx,
+                                       int32_t dim, int32_t retDimCount) {
   int32_t outIndex = idx;
   int32_t inIndex = 0;
 #pragma unroll
@@ -156,10 +155,9 @@ __device__ int32_t cuGetReduceSrcIndex(const int32_t* __restrict__ retShape,
   return inIndex;
 }
 
-__device__ int32_t cuGetReduceDstIndex(const int32_t* __restrict__ shape,
-                                       const int32_t* __restrict__ strides,
-                                       int32_t idx, int32_t dim,
-                                       int32_t dimCount) {
+__device__ int32_t cuGetReduceDstIndex(const int32_t* shape,
+                                       const int32_t* strides, int32_t idx,
+                                       int32_t dim, int32_t dimCount) {
   int32_t retIdx = 0;
   int32_t stride = 1;
 #pragma unroll
@@ -172,10 +170,10 @@ __device__ int32_t cuGetReduceDstIndex(const int32_t* __restrict__ shape,
   return retIdx;
 }
 
-__device__ int32_t cuGetReduceDstIndex(const int32_t* __restrict__ shape,
-                                       const int32_t* __restrict__ strides,
-                                       const uint8_t* __restrict__ inAxis,
-                                       int32_t idx, int32_t dimCount) {
+__device__ int32_t cuGetReduceDstIndex(const int32_t* shape,
+                                       const int32_t* strides,
+                                       const uint8_t* inAxis, int32_t idx,
+                                       int32_t dimCount) {
   int32_t retIdx = 0;
   int32_t stride = 1;
 #pragma unroll
@@ -188,9 +186,10 @@ __device__ int32_t cuGetReduceDstIndex(const int32_t* __restrict__ shape,
   return retIdx;
 }
 
-__device__ __forceinline__ void cuGetSubIndices(
-    int32_t* __restrict__ subIndices, const int32_t* __restrict__ shape,
-    const float* const* __restrict__ indices, int32_t idx, int len) {
+__device__ __forceinline__ void cuGetSubIndices(int32_t* subIndices,
+                                                const int32_t* shape,
+                                                const float* const* indices,
+                                                int32_t idx, int len) {
 #pragma unroll
   for (int32_t i = 0; i < len; i++) {
     auto ind = static_cast<int32_t>(indices[i][idx]);
@@ -198,8 +197,7 @@ __device__ __forceinline__ void cuGetSubIndices(
   }
 }
 
-__global__ void kFillConstant(float* __restrict__ t, const float val,
-                              const size_t n) {
+__global__ void kFillConstant(float* t, const float val, const size_t n) {
   const auto index = (blockIdx.x * blockDim.x + threadIdx.x) * 4;
   if (index + 3 < n) {
     FETCH_FLOAT4(t[index]) = make_float4(val, val, val, val);
@@ -210,8 +208,8 @@ __global__ void kFillConstant(float* __restrict__ t, const float val,
   }
 }
 
-__global__ void kFillLinSpace(float* __restrict__ dst, const float start,
-                              const float step, const size_t n) {
+__global__ void kFillLinSpace(float* dst, const float start, const float step,
+                              const size_t n) {
   const auto index = (blockIdx.x * blockDim.x + threadIdx.x) * 4;
   const auto base = start + static_cast<float>(index) * step;
   if (index + 3 < n) {
@@ -224,7 +222,7 @@ __global__ void kFillLinSpace(float* __restrict__ dst, const float start,
   }
 }
 
-__global__ void kFillRandUniform(float* __restrict__ t, const float minVal,
+__global__ void kFillRandUniform(float* t, const float minVal,
                                  const float maxVal, const unsigned long seed,
                                  const unsigned long seq, const int n) {
   const auto index = (blockIdx.x * blockDim.x + threadIdx.x) * 4;
@@ -246,8 +244,8 @@ __global__ void kFillRandUniform(float* __restrict__ t, const float minVal,
   }
 }
 
-__global__ void kFillRandNormal(float* __restrict__ t, const float mean,
-                                const float stddev, const unsigned long seed,
+__global__ void kFillRandNormal(float* t, const float mean, const float stddev,
+                                const unsigned long seed,
                                 const unsigned long seq, const int n) {
   const auto index = (blockIdx.x * blockDim.x + threadIdx.x) * 4;
   if (index < n) {
@@ -267,7 +265,7 @@ __global__ void kFillRandNormal(float* __restrict__ t, const float mean,
   }
 }
 
-__global__ void kFillRandBernoulli(float* __restrict__ t, const float p,
+__global__ void kFillRandBernoulli(float* t, const float p,
                                    const unsigned long seed,
                                    const unsigned long seq, const int n) {
   const auto index = (blockIdx.x * blockDim.x + threadIdx.x) * 4;
@@ -289,7 +287,7 @@ __global__ void kFillRandBernoulli(float* __restrict__ t, const float p,
 }
 
 template <typename OP>
-__global__ void kSingleOp_(float* __restrict__ t, const int n) {
+__global__ void kSingleOp_(float* t, const int n) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   const OP opFunc;
   if (index < n) {
@@ -298,8 +296,7 @@ __global__ void kSingleOp_(float* __restrict__ t, const int n) {
 }
 
 template <typename OP>
-__global__ void kSingleOp(float* __restrict__ ret, const float* __restrict__ t,
-                          const int n) {
+__global__ void kSingleOp(float* ret, const float* t, const int n) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   const OP opFunc;
   if (index < n) {
@@ -308,8 +305,7 @@ __global__ void kSingleOp(float* __restrict__ ret, const float* __restrict__ t,
 }
 
 template <typename OP>
-__global__ void kPairOp(float* __restrict__ c, const float* __restrict__ a,
-                        const float* __restrict__ b, const int n) {
+__global__ void kPairOp(float* c, const float* a, const float* b, const int n) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   const OP opFunc;
   if (index < n) {
@@ -318,8 +314,8 @@ __global__ void kPairOp(float* __restrict__ c, const float* __restrict__ a,
 }
 
 template <typename OP>
-__global__ void kPairScalarFirstOp(float* __restrict__ c, const float a,
-                                   const float* __restrict__ b, const int n) {
+__global__ void kPairScalarFirstOp(float* c, const float a, const float* b,
+                                   const int n) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   const OP opFunc;
   if (index < n) {
@@ -328,9 +324,8 @@ __global__ void kPairScalarFirstOp(float* __restrict__ c, const float a,
 }
 
 template <typename OP>
-__global__ void kPairScalarFirstOp(float* __restrict__ c,
-                                   const float* __restrict__ a,
-                                   const float* __restrict__ b, const int n) {
+__global__ void kPairScalarFirstOp(float* c, const float* a, const float* b,
+                                   const int n) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   const OP opFunc;
 
@@ -340,8 +335,7 @@ __global__ void kPairScalarFirstOp(float* __restrict__ c,
 }
 
 template <typename OP>
-__global__ void kPairScalarSecondOp(float* __restrict__ c,
-                                    const float* __restrict__ a, const float b,
+__global__ void kPairScalarSecondOp(float* c, const float* a, const float b,
                                     const int n) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   const OP opFunc;
@@ -351,9 +345,8 @@ __global__ void kPairScalarSecondOp(float* __restrict__ c,
 }
 
 template <typename OP>
-__global__ void kPairScalarSecondOp(float* __restrict__ c,
-                                    const float* __restrict__ a,
-                                    const float* __restrict__ b, const int n) {
+__global__ void kPairScalarSecondOp(float* c, const float* a, const float* b,
+                                    const int n) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   const OP opFunc;
 
@@ -363,8 +356,7 @@ __global__ void kPairScalarSecondOp(float* __restrict__ c,
 }
 
 template <typename OP>
-__global__ void kPairOp_(float* __restrict__ a, const float* __restrict__ b,
-                         const int n) {
+__global__ void kPairOp_(float* a, const float* b, const int n) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   const OP opFunc;
   if (index < n) {
@@ -373,8 +365,7 @@ __global__ void kPairOp_(float* __restrict__ a, const float* __restrict__ b,
 }
 
 template <typename OP>
-__global__ void kPairScalarSecondOp_(float* __restrict__ a, const float b,
-                                     const int n) {
+__global__ void kPairScalarSecondOp_(float* a, const float b, const int n) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   const OP opFunc;
   if (index < n) {
@@ -383,8 +374,7 @@ __global__ void kPairScalarSecondOp_(float* __restrict__ a, const float b,
 }
 
 template <typename OP>
-__global__ void kPairScalarSecondOp_(float* __restrict__ a,
-                                     const float* __restrict__ b, const int n) {
+__global__ void kPairScalarSecondOp_(float* a, const float* b, const int n) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   const OP opFunc;
 
@@ -393,16 +383,16 @@ __global__ void kPairScalarSecondOp_(float* __restrict__ a,
   }
 }
 
-__global__ void kClamp(float* __restrict__ ret, const float* __restrict__ t,
-                       const float minVal, const float maxVal, const int n) {
+__global__ void kClamp(float* ret, const float* t, const float minVal,
+                       const float maxVal, const int n) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
     ret[index] = max(minVal, min(t[index], maxVal));
   }
 }
 
-__global__ void kClamp_(float* __restrict__ t, const float minVal,
-                        const float maxVal, const int n) {
+__global__ void kClamp_(float* t, const float minVal, const float maxVal,
+                        const int n) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
     t[index] = max(minVal, min(t[index], maxVal));
@@ -410,9 +400,7 @@ __global__ void kClamp_(float* __restrict__ t, const float minVal,
 }
 
 template <typename OP, bool Leading, bool First>
-__global__ void kBroadcastOpFast(float* __restrict__ ret,
-                                 const float* __restrict__ a,
-                                 const float* __restrict__ b,
+__global__ void kBroadcastOpFast(float* ret, const float* a, const float* b,
                                  const int32_t stride, const int n) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   const OP opFunc;
@@ -427,8 +415,8 @@ __global__ void kBroadcastOpFast(float* __restrict__ ret,
   }
 }
 
-__device__ int32_t cuIndicesToOffset(const int32_t* __restrict__ strides,
-                                     const int32_t* __restrict__ indices,
+__device__ int32_t cuIndicesToOffset(const int32_t* strides,
+                                     const int32_t* indices,
                                      const int32_t dimCount) {
   int32_t offset = 0;
 #pragma unroll
@@ -438,8 +426,7 @@ __device__ int32_t cuIndicesToOffset(const int32_t* __restrict__ strides,
   return offset;
 }
 
-__device__ void cuOffsetToIndices(int32_t* __restrict__ indices,
-                                  const int32_t* __restrict__ shape,
+__device__ void cuOffsetToIndices(int32_t* indices, const int32_t* shape,
                                   const int32_t index, const int32_t dimCount) {
   int32_t offset = index;
 #pragma unroll
@@ -591,8 +578,7 @@ __device__ __forceinline__ void cuWarpReduceIdx(float& val, int& idx) {
 }
 
 template <typename OP, typename IndexFunc>
-__global__ void kReduceMerge(float* __restrict__ outValues,
-                             const float* __restrict__ inValues,
+__global__ void kReduceMerge(float* outValues, const float* inValues,
                              const int segLength, const int segCount) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   __shared__ float shared[WARP_SIZE];
@@ -622,10 +608,8 @@ __global__ void kReduceMerge(float* __restrict__ outValues,
 }
 
 template <typename OP, typename IndexFunc>
-__global__ void kReduceIdxMerge(float* __restrict__ outValues,
-                                float* __restrict__ outIndices,
-                                const float* __restrict__ inValues,
-                                const float* __restrict__ inIndices,
+__global__ void kReduceIdxMerge(float* outValues, float* outIndices,
+                                const float* inValues, const float* inIndices,
                                 const int segLength, const int segCount) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   __shared__ float sharedVal[WARP_SIZE];
@@ -663,8 +647,7 @@ __global__ void kReduceIdxMerge(float* __restrict__ outValues,
 }
 
 template <typename OP, bool isFirstDim>
-__global__ void kReduceDimFirstOrLast(float* __restrict__ outValues,
-                                      const float* __restrict__ inValues,
+__global__ void kReduceDimFirstOrLast(float* outValues, const float* inValues,
                                       const int segLength, const int segCount) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   const OP op;
@@ -706,9 +689,8 @@ __global__ void kReduceDim(TensorCudaCtx values, const TensorCudaCtx t,
 }
 
 template <typename OP, bool isFirstDim>
-__global__ void kReduceIdxDimFirstOrLast(float* __restrict__ outValues,
-                                         float* __restrict__ outIndices,
-                                         const float* __restrict__ inValues,
+__global__ void kReduceIdxDimFirstOrLast(float* outValues, float* outIndices,
+                                         const float* inValues,
                                          const int segLength,
                                          const int segCount) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -760,9 +742,8 @@ __global__ void kReduceIdxDim(TensorCudaCtx values, float* indices,
   }
 }
 
-__global__ void kSquaredDiff(float* __restrict__ output,
-                             const float* __restrict__ input,
-                             const float* __restrict__ mean, const int n) {
+__global__ void kSquaredDiff(float* output, const float* input,
+                             const float* mean, const int n) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
     const float diff = input[index] - *mean;
@@ -771,8 +752,7 @@ __global__ void kSquaredDiff(float* __restrict__ output,
 }
 
 // TODO optimize
-__global__ void kReduceMultiDimSum(float* __restrict__ retPtr,
-                                   const TensorCudaCtx t,
+__global__ void kReduceMultiDimSum(float* retPtr, const TensorCudaCtx t,
                                    const FixedVector<uint8_t> inAxis,
                                    const int n) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -785,9 +765,8 @@ __global__ void kReduceMultiDimSum(float* __restrict__ retPtr,
 }
 
 // TODO optimize
-__global__ void kReduceMultiDimVar(float* __restrict__ retPtr,
-                                   const TensorCudaCtx t,
-                                   const float* __restrict__ meanValues,
+__global__ void kReduceMultiDimVar(float* retPtr, const TensorCudaCtx t,
+                                   const float* meanValues,
                                    const FixedVector<uint8_t> inAxis,
                                    const int n) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -815,8 +794,7 @@ __global__ void kPermute(const TensorCudaCtx ret, const TensorCudaCtx t,
   }
 }
 
-__global__ void kTranspose(float* __restrict__ out,
-                           const float* __restrict__ in, const int width,
+__global__ void kTranspose(float* out, const float* in, const int width,
                            const int height) {
   __shared__ float tile[TRANSPOSE_TILE_DIM]
                        [TRANSPOSE_TILE_DIM + 1];  // +1 to avoid bank conflicts
@@ -837,7 +815,7 @@ __global__ void kTranspose(float* __restrict__ out,
   }
 }
 
-__global__ void kIndex(float* __restrict__ ret, const TensorCudaCtx t,
+__global__ void kIndex(float* ret, const TensorCudaCtx t,
                        const FixedVector<float*> indices, const int dimStride,
                        const int len, const int n) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -851,10 +829,9 @@ __global__ void kIndex(float* __restrict__ ret, const TensorCudaCtx t,
   }
 }
 
-__global__ void kIndex2D(float* __restrict__ ret, const float* __restrict__ t,
-                         const float* __restrict__ indices0,
-                         const float* __restrict__ indices1, const int dim0,
-                         const int dim1, const int n) {
+__global__ void kIndex2D(float* ret, const float* t, const float* indices0,
+                         const float* indices1, const int dim0, const int dim1,
+                         const int n) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
     auto idx0 = static_cast<int32_t>(indices0[index]);
@@ -882,9 +859,8 @@ __global__ void kIndexPut(TensorCudaCtx t, FixedVector<float*> indices,
   }
 }
 
-__global__ void kIndexPut2D(float* __restrict__ t,
-                            const float* __restrict__ indices0,
-                            const float* __restrict__ indices1, const int dim0,
+__global__ void kIndexPut2D(float* t, const float* indices0,
+                            const float* indices1, const int dim0,
                             const int dim1, const float val, const int n) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
@@ -911,11 +887,9 @@ __global__ void kIndexPut(TensorCudaCtx t, FixedVector<float*> indices,
   }
 }
 
-__global__ void kIndexPut2D(float* __restrict__ t,
-                            const float* __restrict__ indices0,
-                            const float* __restrict__ indices1, const int dim0,
-                            const int dim1, const float* __restrict__ val,
-                            const int n) {
+__global__ void kIndexPut2D(float* t, const float* indices0,
+                            const float* indices1, const int dim0,
+                            const int dim1, const float* val, const int n) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
     auto idx0 = static_cast<int32_t>(indices0[index]);
@@ -927,12 +901,12 @@ __global__ void kIndexPut2D(float* __restrict__ t,
   }
 }
 
-__global__ void kIm2Col(float* __restrict__ ret, const float* __restrict__ t,
-                        int32_t batch, int32_t channels, int32_t height,
-                        int32_t width, int32_t outH, int32_t outW,
-                        int32_t kernelH, int32_t kernelW, int32_t strideH,
-                        int32_t strideW, int32_t paddingH, int32_t paddingW,
-                        int32_t imStride, int32_t colH, int32_t colW) {
+__global__ void kIm2Col(float* ret, const float* t, int32_t batch,
+                        int32_t channels, int32_t height, int32_t width,
+                        int32_t outH, int32_t outW, int32_t kernelH,
+                        int32_t kernelW, int32_t strideH, int32_t strideW,
+                        int32_t paddingH, int32_t paddingW, int32_t imStride,
+                        int32_t colH, int32_t colW) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   int32_t totalElements = batch * outH * outW * channels * kernelH * kernelW;
 
@@ -958,12 +932,12 @@ __global__ void kIm2Col(float* __restrict__ ret, const float* __restrict__ t,
   }
 }
 
-__global__ void kCol2Im(float* __restrict__ ret, const float* __restrict__ t,
-                        int32_t batch, int32_t channels, int32_t height,
-                        int32_t width, int32_t outH, int32_t outW,
-                        int32_t kernelH, int32_t kernelW, int32_t strideH,
-                        int32_t strideW, int32_t paddingH, int32_t paddingW,
-                        int32_t imStride, int32_t colW) {
+__global__ void kCol2Im(float* ret, const float* t, int32_t batch,
+                        int32_t channels, int32_t height, int32_t width,
+                        int32_t outH, int32_t outW, int32_t kernelH,
+                        int32_t kernelW, int32_t strideH, int32_t strideW,
+                        int32_t paddingH, int32_t paddingW, int32_t imStride,
+                        int32_t colW) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   int32_t totalElements = batch * channels * height * width;
 
@@ -996,8 +970,7 @@ __global__ void kCol2Im(float* __restrict__ ret, const float* __restrict__ t,
   }
 }
 
-__global__ void kDot(float* __restrict__ ret, const float* __restrict__ a,
-                     const float* __restrict__ b, const int n) {
+__global__ void kDot(float* ret, const float* a, const float* b, const int n) {
   extern __shared__ float sharedData[];
 
   auto index = blockIdx.x * blockDim.x + threadIdx.x;
