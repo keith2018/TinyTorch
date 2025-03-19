@@ -35,7 +35,7 @@ Tiny deep learning training framework implemented from scratch in C++ that follo
 
 ## Automatic differentiation
 
-![](doc/AD.png)
+<img src=doc/AD.png width="600">
 
 ## MNIST training demo:
 ```c++
