@@ -1103,32 +1103,28 @@ TensorImpl TensorOpsCPU::col2im(const TensorImpl& t, const Shape& shape,
 
   int32_t colH = outH * outW;
   int32_t colW = channels * kernel.h * kernel.w;
-  auto ret = TensorImpl::shape(shape, t.device_);
+  auto ret = TensorImpl::zeros(shape, t.device_);
 
-  int32_t imIdx = 0;
   for (int32_t b = 0; b < batch; b++) {
     for (int32_t c = 0; c < channels; c++) {
-      for (int32_t h = 0; h < height; h++) {
-        for (int32_t w = 0; w < width; w++) {
-          float* baseColPtr =
-              t.data_ + (b * colH * channels + c) * kernel.h * kernel.w;
+      float* imPtr = ret.data_ + (b * channels + c) * height * width;
 
-          float val = 0.f;
-          for (int32_t kh = 0; kh < kernel.h; kh++) {
-            for (int32_t kw = 0; kw < kernel.w; kw++) {
-              const int32_t hOut = (h + padding.h - kh) / stride.h;
-              const int32_t wOut = (w + padding.w - kw) / stride.w;
-              const int32_t hStride = (h + padding.h - kh) % stride.h;
-              const int32_t wStride = (w + padding.w - kw) % stride.w;
+      for (int32_t h = 0; h < outH; h++) {
+        for (int32_t w = 0; w < outW; w++) {
+          int32_t hStride = h * stride.h - padding.h;
+          int32_t wStride = w * stride.w - padding.w;
+          float* colPtr = t.data_ + ((b * colH + h * outW + w) * colW) +
+                          (c * kernel.h * kernel.w);
 
-              if (hOut >= 0 && hOut < outH && wOut >= 0 && wOut < outW &&
-                  hStride == 0 && wStride == 0) {
-                float* colPtr = baseColPtr + (hOut * outW + wOut) * colW;
-                val += colPtr[kh * kernel.w + kw];
+          for (int32_t i = 0; i < kernel.h; i++) {
+            for (int32_t j = 0; j < kernel.w; j++) {
+              int32_t ih = hStride + i;
+              int32_t iw = wStride + j;
+              if (ih >= 0 && ih < height && iw >= 0 && iw < width) {
+                imPtr[ih * width + iw] += colPtr[i * kernel.w + j];
               }
             }
           }
-          ret.data_[imIdx++] = val;
         }
       }
     }

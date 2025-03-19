@@ -950,33 +950,27 @@ __global__ void kCol2Im(float* ret, const float* t, const int32_t n,
     const int32_t colH = outH * outW;
     const int32_t kernelSize = kernelH * kernelW;
 
-    const int32_t hw = height * width;
-    const int32_t chw = channels * hw;
+    const int32_t b = index / (channels * colH);
+    const int32_t c = (index % (channels * colH)) / colH;
+    const int32_t h = (index % colH) / outW;
+    const int32_t w = index % outW;
 
-    const int32_t b = index / chw;
-    const int32_t c = (index % chw) / hw;
-    const int32_t h = (index % hw) / width;
-    const int32_t w = index % width;
+    const int32_t hStride = h * strideH - paddingH;
+    const int32_t wStride = w * strideW - paddingW;
 
-    const float* baseColPtr = t + (b * colH * channels + c) * kernelSize;
-    float val = 0.f;
+    float* imPtr = ret + (b * channels + c) * height * width;
+    const float* colPtr =
+        t + ((b * colH + h * outW + w) * channels + c) * kernelSize;
 
-    for (int32_t kh = 0; kh < kernelH; kh++) {
-      for (int32_t kw = 0; kw < kernelW; kw++) {
-        const int32_t hOut = (h + paddingH - kh) / strideH;
-        const int32_t wOut = (w + paddingW - kw) / strideW;
-        const int32_t hStride = (h + paddingH - kh) % strideH;
-        const int32_t wStride = (w + paddingW - kw) % strideW;
-
-        if (hOut >= 0 && hOut < outH && wOut >= 0 && wOut < outW &&
-            hStride == 0 && wStride == 0) {
-          const float* colPtr =
-              baseColPtr + (hOut * outW + wOut) * channels * kernelSize;
-          val += colPtr[kh * kernelW + kw];
+    for (int32_t i = 0; i < kernelH; i++) {
+      for (int32_t j = 0; j < kernelW; j++) {
+        const int32_t ih = hStride + i;
+        const int32_t iw = wStride + j;
+        if (ih >= 0 && ih < height && iw >= 0 && iw < width) {
+          atomicAdd(&imPtr[ih * width + iw], colPtr[i * kernelW + j]);
         }
       }
     }
-    ret[index] = val;
   }
 }
 
