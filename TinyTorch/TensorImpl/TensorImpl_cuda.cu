@@ -414,7 +414,7 @@ TensorImpl TensorOpsCUDA::reduceDim(const TensorImpl& t, int32_t dim,
   // first dim
   if (dim == 0) {
     const auto dimSize = t.shape_.front();
-    if (dimSize < getBlockSize()) {
+    if (static_cast<uint32_t>(dimSize) < getBlockSize()) {
       kReduceDimFirstOrLast<OP, true>
           <<<getGridSize(t.elemCount_), getBlockSize()>>>(
               ret.data_, t.data_, dimSize, ret.elemCount_);
@@ -426,7 +426,7 @@ TensorImpl TensorOpsCUDA::reduceDim(const TensorImpl& t, int32_t dim,
   } else if (dim == t.dimCount_ - 1) {
     // last dim
     const auto dimSize = t.shape_.back();
-    if (dimSize < getBlockSize()) {
+    if (static_cast<uint32_t>(dimSize) < getBlockSize()) {
       kReduceDimFirstOrLast<OP, false>
           <<<getGridSize(t.elemCount_), getBlockSize()>>>(
               ret.data_, t.data_, dimSize, ret.elemCount_);
@@ -469,7 +469,7 @@ std::pair<TensorImpl, TensorImpl> TensorOpsCUDA::reduceIdxDim(
   if (dim == 0) {
     // first dim
     const auto dimSize = t.shape_.front();
-    if (dimSize < getBlockSize()) {
+    if (static_cast<uint32_t>(dimSize) < getBlockSize()) {
       kReduceIdxDimFirstOrLast<OP, true>
           <<<getGridSize(t.elemCount_), getBlockSize()>>>(
               values.data_, indices.data_, t.data_, dimSize, values.elemCount_);
@@ -481,7 +481,7 @@ std::pair<TensorImpl, TensorImpl> TensorOpsCUDA::reduceIdxDim(
   } else if (dim == t.dimCount_ - 1) {
     // last dim
     const auto dimSize = t.shape_.back();
-    if (dimSize < getBlockSize()) {
+    if (static_cast<uint32_t>(dimSize) < getBlockSize()) {
       kReduceIdxDimFirstOrLast<OP, false>
           <<<getGridSize(t.elemCount_), getBlockSize()>>>(
               values.data_, indices.data_, t.data_, dimSize, values.elemCount_);
@@ -535,7 +535,8 @@ void TensorOpsCUDA::copyDeviceToHost(void* dst, const void* src, size_t count) {
 }
 
 void TensorOpsCUDA::fillConstant_(float* dst, float val, size_t count) {
-  kFillConstant<<<getGridSize(count, 4), getBlockSize()>>>(dst, val, count);
+  kFillConstant<<<getGridSize(count, 4), getBlockSize()>>>(
+      dst, val, static_cast<int32_t>(count));
   CUDA_KERNEL_CHECK();
 }
 
@@ -547,8 +548,8 @@ void TensorOpsCUDA::fillConstant_(TensorImpl& t, float val) {
 
 void TensorOpsCUDA::fillLinSpace_(float* dst, float start, float step,
                                   size_t count) {
-  kFillLinSpace<<<getGridSize(count, 4), getBlockSize()>>>(dst, start, step,
-                                                           count);
+  kFillLinSpace<<<getGridSize(count, 4), getBlockSize()>>>(
+      dst, start, step, static_cast<int32_t>(count));
   CUDA_KERNEL_CHECK();
 }
 
@@ -1091,7 +1092,7 @@ TensorImpl TensorOpsCUDA::transpose2D(const TensorImpl& t) {
 TensorImpl TensorOpsCUDA::index(
     const TensorImpl& t,
     const std::vector<std::reference_wrapper<TensorImpl>>& indices) {
-  auto len = indices.size();
+  auto len = static_cast<int32_t>(indices.size());
   auto firstDim = indices[0].get().elemCount_;
   auto dimStride = t.strides_[len - 1];
   Shape retShape = {firstDim};
@@ -1123,7 +1124,7 @@ TensorImpl TensorOpsCUDA::index(
 void TensorOpsCUDA::indexPut_(
     TensorImpl& t,
     const std::vector<std::reference_wrapper<TensorImpl>>& indices, float val) {
-  auto len = indices.size();
+  auto len = static_cast<int32_t>(indices.size());
   auto firstDim = indices[0].get().elemCount_;
   auto dimStride = t.strides_[len - 1];
 
@@ -1150,7 +1151,7 @@ void TensorOpsCUDA::indexPut_(
     TensorImpl& t,
     const std::vector<std::reference_wrapper<TensorImpl>>& indices,
     const TensorImpl& val) {
-  auto len = indices.size();
+  auto len = static_cast<int32_t>(indices.size());
   auto firstDim = indices[0].get().elemCount_;
   auto dimStride = t.strides_[len - 1];
   assert(val.elemCount_ == dimStride * firstDim);
@@ -1176,7 +1177,7 @@ void TensorOpsCUDA::indexPut_(
 
 TensorImpl TensorOpsCUDA::im2col(const TensorImpl& t, Size2D kernel,
                                  Size2D stride, Size2D padding) {
-  // this: [C, H, W], [N, C, H, W]
+  // shape: [C, H, W], [N, C, H, W]
   assert(t.dimCount_ == 3 || t.dimCount_ == 4);
   int32_t batch = (t.dimCount_ == 4) ? t.shape_[0] : 1;
   int32_t channels = (t.dimCount_ == 4) ? t.shape_[1] : t.shape_[0];
@@ -1187,16 +1188,14 @@ TensorImpl TensorOpsCUDA::im2col(const TensorImpl& t, Size2D kernel,
 
   int32_t colH = outH * outW;
   int32_t colW = channels * kernel.h * kernel.w;
-  auto retTensor = TensorImpl::shape({batch * colH, colW}, t.device_);
+  auto ret = TensorImpl::shape({batch * colH, colW}, t.device_);
 
-  int32_t imStride = t.strides_[0];
-  int totalElements = batch * outH * outW * channels * kernel.h * kernel.w;
-  kIm2Col<<<getGridSize(totalElements), getBlockSize()>>>(
-      retTensor.data_, t.data_, batch, channels, height, width, outH, outW,
-      kernel.h, kernel.w, stride.h, stride.w, padding.h, padding.w, imStride,
-      colH, colW);
+  int32_t n = ret.elemCount_;
+  kIm2Col<<<getGridSize(n), getBlockSize()>>>(
+      ret.data_, t.data_, n, channels, height, width, outH, outW, kernel.h,
+      kernel.w, stride.h, stride.w, padding.h, padding.w);
   CUDA_KERNEL_CHECK();
-  return retTensor;
+  return ret;
 }
 
 TensorImpl TensorOpsCUDA::col2im(const TensorImpl& t, const Shape& shape,
@@ -1212,18 +1211,15 @@ TensorImpl TensorOpsCUDA::col2im(const TensorImpl& t, const Shape& shape,
   auto outW = (width - kernel.w + 2 * padding.w) / stride.w + 1;
 
   // int32_t colH = outH * outW;
-  int32_t colW = channels * kernel.h * kernel.w;
+  // int32_t colW = channels * kernel.h * kernel.w;
+  auto ret = TensorImpl::zeros(shape, t.device_);
 
-  auto retTensor = TensorImpl::zeros(shape, t.device_);
-
-  auto imStride = retTensor.strides_[0];
-  int totalElements = batch * channels * height * width;
-  kCol2Im<<<getGridSize(totalElements), getBlockSize()>>>(
-      retTensor.data_, t.data_, batch, channels, height, width, outH, outW,
-      kernel.h, kernel.w, stride.h, stride.w, padding.h, padding.w, imStride,
-      colW);
+  int32_t n = batch * channels * outH * outW;
+  kCol2Im<<<getGridSize(n), getBlockSize()>>>(
+      ret.data_, t.data_, n, channels, height, width, outH, outW, kernel.h,
+      kernel.w, stride.h, stride.w, padding.h, padding.w);
   CUDA_KERNEL_CHECK();
-  return retTensor;
+  return ret;
 }
 
 TensorImpl TensorOpsCUDA::dot(const TensorImpl& a, const TensorImpl& b) {

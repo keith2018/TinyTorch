@@ -1048,7 +1048,7 @@ void TensorOpsCPU::indexPut_(
 
 TensorImpl TensorOpsCPU::im2col(const TensorImpl& t, Size2D kernel,
                                 Size2D stride, Size2D padding) {
-  // this: [C, H, W], [N, C, H, W]
+  // shape: [C, H, W], [N, C, H, W]
   assert(t.dimCount_ == 3 || t.dimCount_ == 4);
   int32_t batch = (t.dimCount_ == 4) ? t.shape_[0] : 1;
   int32_t channels = (t.dimCount_ == 4) ? t.shape_[1] : t.shape_[0];
@@ -1059,33 +1059,34 @@ TensorImpl TensorOpsCPU::im2col(const TensorImpl& t, Size2D kernel,
 
   int32_t colH = outH * outW;
   int32_t colW = channels * kernel.h * kernel.w;
-  auto retTensor = TensorImpl::shape({batch * colH, colW}, t.device_);
+  auto ret = TensorImpl::shape({batch * colH, colW}, t.device_);
 
-  int32_t imStride = t.strides_[0];
-  for (int32_t n = 0; n < batch; n++) {
+  for (int32_t b = 0; b < batch; b++) {
     for (int32_t c = 0; c < channels; c++) {
-      for (int32_t kh = 0; kh < kernel.h; kh++) {
-        for (int32_t kw = 0; kw < kernel.w; kw++) {
-          for (int32_t h = 0; h < outH; h++) {
-            for (int32_t w = 0; w < outW; w++) {
-              int32_t imRow = h * stride.h + kh - padding.h;
-              int32_t imCol = w * stride.w + kw - padding.w;
-              int32_t colIdx = (n * outH + h) * outW + w;
-              int32_t colWIdx = c * kernel.h * kernel.w + kh * kernel.w + kw;
-              if (imRow < 0 || imRow >= height || imCol < 0 || imCol >= width) {
-                retTensor.data_[colIdx * colW + colWIdx] = 0;  // zero padding
-              } else {
-                int32_t imgIdx = imCol + width * (imRow + height * c);
-                retTensor.data_[colIdx * colW + colWIdx] =
-                    t.data_[n * imStride + imgIdx];
-              }
+      float* imPtr = t.data_ + (b * channels + c) * height * width;
+
+      for (int32_t h = 0; h < outH; h++) {
+        for (int32_t w = 0; w < outW; w++) {
+          int32_t hStride = h * stride.h - padding.h;
+          int32_t wStride = w * stride.w - padding.w;
+          float* colPtr = ret.data_ + ((b * colH + h * outW + w) * colW) +
+                          (c * kernel.h * kernel.w);
+
+          for (int32_t i = 0; i < kernel.h; i++) {
+            for (int32_t j = 0; j < kernel.w; j++) {
+              int32_t ih = hStride + i;
+              int32_t iw = wStride + j;
+              colPtr[i * kernel.w + j] =
+                  (ih >= 0 && ih < height && iw >= 0 && iw < width)
+                      ? imPtr[ih * width + iw]
+                      : 0.f;
             }
           }
         }
       }
     }
   }
-  return retTensor;
+  return ret;
 }
 
 TensorImpl TensorOpsCPU::col2im(const TensorImpl& t, const Shape& shape,
@@ -1100,26 +1101,27 @@ TensorImpl TensorOpsCPU::col2im(const TensorImpl& t, const Shape& shape,
   auto outH = (height - kernel.h + 2 * padding.h) / stride.h + 1;
   auto outW = (width - kernel.w + 2 * padding.w) / stride.w + 1;
 
-  // int32_t colH = outH * outW;
+  int32_t colH = outH * outW;
   int32_t colW = channels * kernel.h * kernel.w;
+  auto ret = TensorImpl::zeros(shape, t.device_);
 
-  auto retTensor = TensorImpl::zeros(shape, t.device_);
-
-  auto imStride = retTensor.strides_[0];
-  for (int32_t n = 0; n < batch; n++) {
+  for (int32_t b = 0; b < batch; b++) {
     for (int32_t c = 0; c < channels; c++) {
-      for (int32_t kh = 0; kh < kernel.h; kh++) {
-        for (int32_t kw = 0; kw < kernel.w; kw++) {
-          for (int32_t h = 0; h < outH; h++) {
-            for (int32_t w = 0; w < outW; w++) {
-              int32_t imRow = h * stride.h + kh - padding.h;
-              int32_t imCol = w * stride.w + kw - padding.w;
-              int32_t colIdx = (n * outH + h) * outW + w;
-              int32_t colWIdx = c * kernel.h * kernel.w + kh * kernel.w + kw;
-              if (imRow >= 0 && imRow < height && imCol >= 0 && imCol < width) {
-                int32_t imgIdx = imCol + width * (imRow + height * c);
-                retTensor.data_[n * imStride + imgIdx] +=
-                    t.data_[colIdx * colW + colWIdx];
+      float* imPtr = ret.data_ + (b * channels + c) * height * width;
+
+      for (int32_t h = 0; h < outH; h++) {
+        for (int32_t w = 0; w < outW; w++) {
+          int32_t hStride = h * stride.h - padding.h;
+          int32_t wStride = w * stride.w - padding.w;
+          float* colPtr = t.data_ + ((b * colH + h * outW + w) * colW) +
+                          (c * kernel.h * kernel.w);
+
+          for (int32_t i = 0; i < kernel.h; i++) {
+            for (int32_t j = 0; j < kernel.w; j++) {
+              int32_t ih = hStride + i;
+              int32_t iw = wStride + j;
+              if (ih >= 0 && ih < height && iw >= 0 && iw < width) {
+                imPtr[ih * width + iw] += colPtr[i * kernel.w + j];
               }
             }
           }
@@ -1127,7 +1129,7 @@ TensorImpl TensorOpsCPU::col2im(const TensorImpl& t, const Shape& shape,
       }
     }
   }
-  return retTensor;
+  return ret;
 }
 
 TensorImpl TensorOpsCPU::dot(const TensorImpl& a, const TensorImpl& b) {
