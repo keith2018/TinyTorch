@@ -35,13 +35,13 @@ struct OpCudaMul {
 
 struct OpCudaDiv {
   __device__ float operator()(const float a, const float b) const {
-    return a / b;
+    return __fdividef(a, b);
   }
 };
 
 struct OpCudaPow {
   __device__ float operator()(const float a, const float b) const {
-    return pow(a, b);
+    return powf(a, b);
   }
 };
 
@@ -94,51 +94,51 @@ struct OpCudaMin {
 };
 
 struct OpCudaSin_ {
-  __device__ void operator()(float& a) const { a = sin(a); }
+  __device__ void operator()(float& a) const { a = sinf(a); }
 };
 
 struct OpCudaCos_ {
-  __device__ void operator()(float& a) const { a = cos(a); }
+  __device__ void operator()(float& a) const { a = cosf(a); }
 };
 
 struct OpCudaSqrt_ {
-  __device__ void operator()(float& a) const { a = sqrt(a); }
+  __device__ void operator()(float& a) const { a = sqrtf(a); }
 };
 
 struct OpCudaTanh_ {
-  __device__ void operator()(float& a) const { a = tanh(a); }
+  __device__ void operator()(float& a) const { a = tanhf(a); }
 };
 
 struct OpCudaExp_ {
-  __device__ void operator()(float& a) const { a = exp(a); }
+  __device__ void operator()(float& a) const { a = expf(a); }
 };
 
 struct OpCudaLog_ {
-  __device__ void operator()(float& a) const { a = log(a); }
+  __device__ void operator()(float& a) const { a = logf(a); }
 };
 
 struct OpCudaSin {
-  __device__ float operator()(const float a) const { return sin(a); }
+  __device__ float operator()(const float a) const { return sinf(a); }
 };
 
 struct OpCudaCos {
-  __device__ float operator()(const float a) const { return cos(a); }
+  __device__ float operator()(const float a) const { return cosf(a); }
 };
 
 struct OpCudaSqrt {
-  __device__ float operator()(const float a) const { return sqrt(a); }
+  __device__ float operator()(const float a) const { return sqrtf(a); }
 };
 
 struct OpCudaTanh {
-  __device__ float operator()(const float a) const { return tanh(a); }
+  __device__ float operator()(const float a) const { return tanhf(a); }
 };
 
 struct OpCudaExp {
-  __device__ float operator()(const float a) const { return exp(a); }
+  __device__ float operator()(const float a) const { return expf(a); }
 };
 
 struct OpCudaLog {
-  __device__ float operator()(const float a) const { return log(a); }
+  __device__ float operator()(const float a) const { return logf(a); }
 };
 
 __device__ int32_t cuGetReduceSrcIndex(const int32_t* retShape,
