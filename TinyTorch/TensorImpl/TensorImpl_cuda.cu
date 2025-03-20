@@ -103,13 +103,13 @@ TensorOpsCUDA::TensorOpsCUDA(int32_t device, size_t blockSize)
 TensorOpsCUDA::~TensorOpsCUDA() {
   allocator_.clear();
   if (blasHandle_) {
-    cublasDestroy(blasHandle_);
+    CUBLAS_CHECK(cublasDestroy(blasHandle_));
   }
 }
 
 cublasHandle_t TensorOpsCUDA::getCublasHandle() {
   if (blasHandle_ == nullptr) {
-    cublasCreate(&blasHandle_);
+    CUBLAS_CHECK(cublasCreate(&blasHandle_));
   }
   return blasHandle_;
 }
