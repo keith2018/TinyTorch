@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "Loss.h"
@@ -125,7 +126,7 @@ class Function : public std::enable_shared_from_this<Function> {
       savedTensors_.push_back(*t);
     }
   }
-  std::vector<Tensor>& getSavedTensors() { return savedTensors_; };
+  Tensor& getSavedTensors(int32_t idx) { return savedTensors_[idx]; }
 
   std::weak_ptr<AutogradMeta> owner_;
   std::vector<Tensor> savedTensors_;
@@ -241,7 +242,7 @@ class FuncUnsqueeze : public Function {
 
 class FuncReshape : public Function {
  public:
-  explicit FuncReshape(const Shape& shape) : shape_(shape) {}
+  explicit FuncReshape(Shape shape) : shape_(std::move(shape)) {}
   DEFINE_FUNCTION_MEMBERS(Function_Reshape)
 
  private:
@@ -271,7 +272,7 @@ class FuncSoftmax : public Function {
 
  private:
   int32_t dim_;
-  TensorImpl forwardOutput_;
+  TensorImpl fOut_;
 };
 
 class FuncLogSoftmax : public Function {
@@ -281,7 +282,7 @@ class FuncLogSoftmax : public Function {
 
  private:
   int32_t dim_;
-  TensorImpl forwardOutput_;
+  TensorImpl fOut_;
 };
 
 class FuncMaxPool2D : public Function {

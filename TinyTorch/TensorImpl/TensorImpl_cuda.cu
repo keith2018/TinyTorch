@@ -103,13 +103,13 @@ TensorOpsCUDA::TensorOpsCUDA(int32_t device, size_t blockSize)
 TensorOpsCUDA::~TensorOpsCUDA() {
   allocator_.clear();
   if (blasHandle_) {
-    cublasDestroy(blasHandle_);
+    CUBLAS_CHECK(cublasDestroy(blasHandle_));
   }
 }
 
 cublasHandle_t TensorOpsCUDA::getCublasHandle() {
   if (blasHandle_ == nullptr) {
-    cublasCreate(&blasHandle_);
+    CUBLAS_CHECK(cublasCreate(&blasHandle_));
   }
   return blasHandle_;
 }
@@ -637,7 +637,7 @@ TensorImpl TensorOpsCUDA::mul(const TensorImpl& a, const float& b) {
 }
 
 TensorImpl TensorOpsCUDA::div(const TensorImpl& a, const float& b) {
-  return opPair<OpCudaDiv>(a, b);
+  return opPair<OpCudaMul>(a, 1.f / b);
 }
 
 TensorImpl TensorOpsCUDA::pow(const TensorImpl& a, const float& b) {
@@ -721,7 +721,7 @@ void TensorOpsCUDA::mul_(TensorImpl& a, const float& b) {
 }
 
 void TensorOpsCUDA::div_(TensorImpl& a, const float& b) {
-  opPair_<OpCudaDiv>(a, b);
+  opPair_<OpCudaMul>(a, 1.f / b);
 }
 
 TensorImpl TensorOpsCUDA::eq(const TensorImpl& a, const TensorImpl& b) {
