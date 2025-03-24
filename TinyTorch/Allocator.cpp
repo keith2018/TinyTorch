@@ -6,6 +6,7 @@
 
 #include "Allocator.h"
 
+#include <array>
 #include <cassert>
 #include <memory>
 #include <set>
