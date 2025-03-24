@@ -656,9 +656,9 @@ TensorImpl FuncConv2D::forward(const std::vector<const Tensor*>& inputs) {
   auto& weight = inputs[1];
   auto& bias = inputs[2];
 
-  assert(input.dim() == 4);
-  assert(weight.dim() == 4);
-  assert(input.shape()[1] == weight.shape()[1]);
+  assert(input->dim() == 4);
+  assert(weight->dim() == 4);
+  assert(input->shape()[1] == weight->shape()[1]);
 
   int32_t batch = input->shape()[0];
   int32_t outChannels = weight->shape()[0];
