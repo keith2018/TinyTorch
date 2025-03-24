@@ -9,12 +9,15 @@
 #include <functional>
 #include <optional>
 
+#include "../Allocator.h"
 #include "TensorImpl.h"
 
 namespace TinyTorch {
 
 class AllocatorCPU : public Allocator {
  public:
+  Device device() override { return Device::CPU; }
+
   void allocate(void **ptr, size_t size) override;
   void deallocate(void *ptr) override;
 
@@ -131,6 +134,9 @@ class TensorOpsCPU : public TensorOperations {
       int32_t *subIndices, const TensorImpl &t,
       const std::vector<std::reference_wrapper<TensorImpl>> &indices,
       int32_t idx);
+
+ protected:
+  CachedAllocator<AllocatorCPU> allocator_;
 };
 
 }  // namespace TinyTorch

@@ -6,6 +6,7 @@
 
 #include "TensorImpl_base.h"
 
+#include "../Logger.h"
 #include "TensorImpl.h"
 
 namespace TinyTorch {

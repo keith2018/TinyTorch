@@ -96,8 +96,6 @@ TensorOpsCUDA::TensorOpsCUDA(int32_t device, size_t blockSize)
   if (blockSize_ > deviceProp_.maxThreadsPerBlock) {
     blockSize_ = deviceProp_.maxThreadsPerBlock;
   }
-
-  allocator_.setBaseAllocator(std::make_shared<AllocatorCUDA>());
 }
 
 TensorOpsCUDA::~TensorOpsCUDA() {

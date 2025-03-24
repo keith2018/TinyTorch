@@ -6,10 +6,8 @@
 
 #pragma once
 
+#include <cstdint>
 #include <vector>
-
-#include "../Allocator.h"
-#include "../Logger.h"
 
 namespace TinyTorch {
 
@@ -225,9 +223,6 @@ class TensorOperations {
   static void error(const char* where, TensorError error);
 
   TENSOR_OPS_DECLARE(virtual, = 0)
-
- protected:
-  CachedAllocator allocator_;
 };
 
 }  // namespace TinyTorch
