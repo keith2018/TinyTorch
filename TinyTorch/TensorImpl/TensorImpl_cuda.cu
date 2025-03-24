@@ -89,7 +89,9 @@ void AllocatorCUDA::deallocate(void* ptr) {
 }
 
 TensorOpsCUDA::TensorOpsCUDA(int32_t device, size_t blockSize)
-    : cudaDeviceIdx_(device), blockSize_(blockSize) {
+    : cudaDeviceIdx_(device),
+      blockSize_(blockSize),
+      allocator_(std::make_unique<AllocatorCUDA>()) {
   CUDA_CHECK(cudaSetDevice(cudaDeviceIdx_));
   CUDA_CHECK(cudaGetDeviceProperties(&deviceProp_, cudaDeviceIdx_));
 

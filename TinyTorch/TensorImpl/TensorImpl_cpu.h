@@ -136,7 +136,7 @@ class TensorOpsCPU : public TensorOperations {
       int32_t idx);
 
  protected:
-  CachedAllocator<AllocatorCPU> allocator_;
+  CachedAllocator allocator_;
 };
 
 }  // namespace TinyTorch

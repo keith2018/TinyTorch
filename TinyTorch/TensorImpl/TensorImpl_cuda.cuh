@@ -131,7 +131,7 @@ class TensorOpsCUDA : public TensorOperations {
   size_t blockSize_;
   cudaDeviceProp deviceProp_{};
   cublasHandle_t blasHandle_ = nullptr;
-  CachedAllocator<AllocatorCUDA> allocator_;
+  CachedAllocator allocator_;
 };
 
 }  // namespace TinyTorch
