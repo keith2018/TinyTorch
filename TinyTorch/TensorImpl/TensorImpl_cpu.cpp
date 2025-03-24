@@ -63,9 +63,7 @@ void* AllocatorCPU::allocatePinned(size_t size) { return nullptr; }
 void AllocatorCPU::deallocatePinned(void* ptr) {}
 #endif
 
-TensorOpsCPU::TensorOpsCPU() {
-  allocator_.setBaseAllocator(std::make_shared<AllocatorCPU>());
-}
+TensorOpsCPU::TensorOpsCPU() : allocator_(std::make_unique<AllocatorCPU>()) {}
 
 TensorOpsCPU::~TensorOpsCPU() { allocator_.clear(); }
 

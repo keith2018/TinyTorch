@@ -89,15 +89,15 @@ void AllocatorCUDA::deallocate(void* ptr) {
 }
 
 TensorOpsCUDA::TensorOpsCUDA(int32_t device, size_t blockSize)
-    : cudaDeviceIdx_(device), blockSize_(blockSize) {
+    : cudaDeviceIdx_(device),
+      blockSize_(blockSize),
+      allocator_(std::make_unique<AllocatorCUDA>()) {
   CUDA_CHECK(cudaSetDevice(cudaDeviceIdx_));
   CUDA_CHECK(cudaGetDeviceProperties(&deviceProp_, cudaDeviceIdx_));
 
   if (blockSize_ > deviceProp_.maxThreadsPerBlock) {
     blockSize_ = deviceProp_.maxThreadsPerBlock;
   }
-
-  allocator_.setBaseAllocator(std::make_shared<AllocatorCUDA>());
 }
 
 TensorOpsCUDA::~TensorOpsCUDA() {

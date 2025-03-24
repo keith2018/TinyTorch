@@ -6,18 +6,17 @@
 
 #pragma once
 
-#include <list>
 #include <memory>
-#include <unordered_map>
 
 namespace TinyTorch {
 
-#define DEFAULT_ALLOC_MAX_CACHE (512 * 1024 * 1024) /* 512 MB */
+enum class Device;
 
 class Allocator {
  public:
   virtual ~Allocator() = default;
 
+  virtual Device device() = 0;
   virtual void allocate(void** ptr, size_t size) = 0;
   virtual void deallocate(void* ptr) = 0;
   virtual void clear() {}
@@ -25,23 +24,34 @@ class Allocator {
 
 class CachedAllocator : public Allocator {
  public:
-  explicit CachedAllocator(uint64_t maxCacheSize = DEFAULT_ALLOC_MAX_CACHE);
-  ~CachedAllocator() override;
+  explicit CachedAllocator(std::unique_ptr<Allocator> base);
 
-  void setBaseAllocator(const std::shared_ptr<Allocator>& base) {
-    base_ = base;
+  ~CachedAllocator() override { impl_->clear(); }
+
+  Device device() override { return base_->device(); }
+
+  void allocate(void** ptr, size_t size) override {
+    if (!cacheEnabled_) {
+      base_->allocate(ptr, size);
+      return;
+    }
+    impl_->allocate(ptr, size);
   }
-  void allocate(void** ptr, size_t size) override;
-  void deallocate(void* ptr) override;
-  void clear() override;
+
+  void deallocate(void* ptr) override {
+    if (!cacheEnabled_) {
+      base_->deallocate(ptr);
+      return;
+    }
+    impl_->deallocate(ptr);
+  }
+
+  void clear() override { impl_->clear(); }
 
  private:
   bool cacheEnabled_;
-  std::shared_ptr<Allocator> base_;
-  uint64_t maxCacheSize_;
-  uint64_t currentCacheSize_;
-  std::unordered_map<void*, size_t> allocatedList_;
-  std::unordered_map<size_t, std::list<void*>> freedList_;
+  std::unique_ptr<Allocator> base_;
+  std::unique_ptr<Allocator> impl_;
 };
 
 }  // namespace TinyTorch

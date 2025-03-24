@@ -8,6 +8,7 @@
 
 #include <cublas_v2.h>
 
+#include "../Allocator.h"
 #include "TensorImpl.h"
 
 namespace TinyTorch {
@@ -22,6 +23,8 @@ struct TINYTORCH_ALIGN(TENSOR_MEM_ALIGN) TensorCudaCtx {
 
 class AllocatorCUDA : public Allocator {
  public:
+  Device device() override { return Device::CUDA; }
+
   void allocate(void **ptr, size_t size) override;
   void deallocate(void *ptr) override;
 };
@@ -128,6 +131,7 @@ class TensorOpsCUDA : public TensorOperations {
   size_t blockSize_;
   cudaDeviceProp deviceProp_{};
   cublasHandle_t blasHandle_ = nullptr;
+  CachedAllocator allocator_;
 };
 
 }  // namespace TinyTorch
