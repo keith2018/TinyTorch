@@ -215,19 +215,19 @@ class CachedAllocatorImpl : public Allocator {
       remaining->prev = block;
       remaining->ptr = static_cast<char*>(remaining->ptr) + size;
       remaining->size -= size;
+      pool.blocks.insert(remaining);
     }
 
     block->allocated = true;
-    activeBlocks[block->ptr] = block;
     return block;
   }
 
-  void freeImpl(Block* block) {
+  static void freeImpl(Block* block) {
     block->allocated = false;
     freeBlock(block);
   }
 
-  void freeBlock(Block* block) {
+  static void freeBlock(Block* block) {
     assert(!block->allocated);
     auto& pool = *block->pool;
 
@@ -235,8 +235,6 @@ class CachedAllocatorImpl : public Allocator {
     for (Block* candidate : mergeCandidates) {
       tryMergeBlocks(block, candidate, pool);
     }
-
-    activeBlocks.erase(block->ptr);
     pool.blocks.insert(block);
   }
 
@@ -273,6 +271,7 @@ class CachedAllocatorImpl : public Allocator {
   void allocate(void** ptr, size_t size) override {
     Block* block = mallocImpl(size);
     if (block) {
+      activeBlocks[block->ptr] = block;
       *ptr = block->ptr;
     } else {
       LOGE("allocate error, size: %lld", size);
@@ -283,6 +282,7 @@ class CachedAllocatorImpl : public Allocator {
     auto it = activeBlocks.find(ptr);
     if (it != activeBlocks.end()) {
       freeImpl(it->second);
+      activeBlocks.erase(it);
     } else {
       LOGE("deallocate error, ptr not valid: %p", ptr);
     }
