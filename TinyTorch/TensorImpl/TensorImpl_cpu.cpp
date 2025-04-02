@@ -1044,6 +1044,27 @@ void TensorOpsCPU::indexPut_(
   }
 }
 
+TensorImpl TensorOpsCPU::triangle(const TensorImpl& t, int32_t diagonal,
+                                  bool lower) {
+  auto ret = TensorImpl::shape(t.shape_, t.device_);
+  const auto rows = t.shape_[0];
+  const auto cols = t.shape_[1];
+
+  int32_t idx = 0;
+  for (auto i = 0; i < rows; i++) {
+    idx = i * cols;
+    for (auto j = 0; j < cols; j++) {
+      if ((lower && j <= i + diagonal) || (!lower && j >= i + diagonal)) {
+        ret.data_[idx] = t.data_[idx];
+      } else {
+        ret.data_[idx] = 0.0f;
+      }
+      idx++;
+    }
+  }
+  return ret;
+}
+
 TensorImpl TensorOpsCPU::im2col(const TensorImpl& t, Size2D kernel,
                                 Size2D stride, Size2D padding) {
   // shape: [C, H, W], [N, C, H, W]

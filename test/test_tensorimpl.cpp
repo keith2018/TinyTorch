@@ -328,6 +328,42 @@ TEST(TEST_TensorImpl, basic_permute) {
   EXPECT_THAT(y.toList(), ElementsAre(0, 4, 2, 6, 1, 5, 3, 7));
 }
 
+TEST(TEST_TensorImpl, basic_tril) {
+  auto x = TensorImpl::tril(TensorImpl::ones({3, 3}));
+  EXPECT_THAT(x.shape(), ElementsAre(3, 3));
+  EXPECT_THAT(x.toList(), ElementsAre(1, 0, 0, 1, 1, 0, 1, 1, 1));
+
+  x = TensorImpl::tril(TensorImpl::ones({2, 3}));
+  EXPECT_THAT(x.shape(), ElementsAre(2, 3));
+  EXPECT_THAT(x.toList(), ElementsAre(1, 0, 0, 1, 1, 0));
+
+  x = TensorImpl::tril(TensorImpl::ones({3, 3}), 1);
+  EXPECT_THAT(x.shape(), ElementsAre(3, 3));
+  EXPECT_THAT(x.toList(), ElementsAre(1, 1, 0, 1, 1, 1, 1, 1, 1));
+
+  x = TensorImpl::tril(TensorImpl::ones({3, 3}), -1);
+  EXPECT_THAT(x.shape(), ElementsAre(3, 3));
+  EXPECT_THAT(x.toList(), ElementsAre(0, 0, 0, 1, 0, 0, 1, 1, 0));
+}
+
+TEST(TEST_TensorImpl, basic_triu) {
+  auto x = TensorImpl::triu(TensorImpl::ones({3, 3}));
+  EXPECT_THAT(x.shape(), ElementsAre(3, 3));
+  EXPECT_THAT(x.toList(), ElementsAre(1, 1, 1, 0, 1, 1, 0, 0, 1));
+
+  x = TensorImpl::triu(TensorImpl::ones({2, 3}));
+  EXPECT_THAT(x.shape(), ElementsAre(2, 3));
+  EXPECT_THAT(x.toList(), ElementsAre(1, 1, 1, 0, 1, 1));
+
+  x = TensorImpl::triu(TensorImpl::ones({3, 3}), 1);
+  EXPECT_THAT(x.shape(), ElementsAre(3, 3));
+  EXPECT_THAT(x.toList(), ElementsAre(0, 1, 1, 0, 0, 1, 0, 0, 0));
+
+  x = TensorImpl::triu(TensorImpl::ones({3, 3}), -1);
+  EXPECT_THAT(x.shape(), ElementsAre(3, 3));
+  EXPECT_THAT(x.toList(), ElementsAre(1, 1, 1, 1, 1, 1, 0, 1, 1));
+}
+
 TEST(TEST_TensorImpl, basic_stack) {
   TensorImpl a({1, 2, 3});
   TensorImpl b({4, 5, 6});
@@ -359,6 +395,60 @@ TEST(TEST_TensorImpl, basic_stack) {
   y = TensorImpl::stack({t1, t2}, 1);
   EXPECT_THAT(y.shape(), ElementsAre(2, 2, 2));
   EXPECT_THAT(y.toList(), ElementsAre(1, 2, 5, 6, 3, 4, 7, 8));
+}
+
+TEST(TEST_TensorImpl, basic_vstack) {
+  TensorImpl a({1, 2, 3});
+  TensorImpl b({4, 5, 6});
+  auto y = TensorImpl::vstack({a, b});
+  EXPECT_THAT(y.shape(), ElementsAre(2, 3));
+  EXPECT_THAT(y.toList(), ElementsAre(1, 2, 3, 4, 5, 6));
+
+  a = TensorImpl(Array2d({{1}, {2}, {3}}));
+  b = TensorImpl(Array2d({{4}, {5}, {6}}));
+  y = TensorImpl::vstack({a, b});
+  EXPECT_THAT(y.shape(), ElementsAre(6, 1));
+  EXPECT_THAT(y.toList(), ElementsAre(1, 2, 3, 4, 5, 6));
+}
+
+TEST(TEST_TensorImpl, basic_hstack) {
+  TensorImpl a({1, 2, 3});
+  TensorImpl b({4, 5, 6});
+  auto y = TensorImpl::hstack({a, b});
+  EXPECT_THAT(y.shape(), ElementsAre(6));
+  EXPECT_THAT(y.toList(), ElementsAre(1, 2, 3, 4, 5, 6));
+
+  a = TensorImpl(Array2d({{1}, {2}, {3}}));
+  b = TensorImpl(Array2d({{4}, {5}, {6}}));
+  y = TensorImpl::hstack({a, b});
+  EXPECT_THAT(y.shape(), ElementsAre(3, 2));
+  EXPECT_THAT(y.toList(), ElementsAre(1, 4, 2, 5, 3, 6));
+}
+
+TEST(TEST_TensorImpl, basic_split) {
+  TensorImpl x({{{4, 2, 3}, {1, 0, 3}}, {{4, 2, 3}, {1, 0, 3}}});
+  auto y = x.split(1, 0);
+  EXPECT_TRUE(y.size() == 2);
+  EXPECT_THAT(y[0].shape(), ElementsAre(1, 2, 3));
+  EXPECT_THAT(y[0].toList(), ElementsAre(4, 2, 3, 1, 0, 3));
+  EXPECT_THAT(y[1].shape(), ElementsAre(1, 2, 3));
+  EXPECT_THAT(y[1].toList(), ElementsAre(4, 2, 3, 1, 0, 3));
+
+  y = x.split(1, 1);
+  EXPECT_TRUE(y.size() == 2);
+  EXPECT_THAT(y[0].shape(), ElementsAre(2, 1, 3));
+  EXPECT_THAT(y[0].toList(), ElementsAre(4, 2, 3, 4, 2, 3));
+  EXPECT_THAT(y[1].shape(), ElementsAre(2, 1, 3));
+  EXPECT_THAT(y[1].toList(), ElementsAre(1, 0, 3, 1, 0, 3));
+
+  y = x.split(1, 2);
+  EXPECT_TRUE(y.size() == 3);
+  EXPECT_THAT(y[0].shape(), ElementsAre(2, 2, 1));
+  EXPECT_THAT(y[0].toList(), ElementsAre(4, 1, 4, 1));
+  EXPECT_THAT(y[1].shape(), ElementsAre(2, 2, 1));
+  EXPECT_THAT(y[1].toList(), ElementsAre(2, 0, 2, 0));
+  EXPECT_THAT(y[2].shape(), ElementsAre(2, 2, 1));
+  EXPECT_THAT(y[2].toList(), ElementsAre(3, 3, 3, 3));
 }
 
 TEST(TEST_TensorImpl, math_compare) {

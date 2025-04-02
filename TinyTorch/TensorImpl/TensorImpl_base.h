@@ -184,6 +184,9 @@ typedef enum ShapeCompatible_ {
       const std::vector<std::reference_wrapper<TensorImpl>>& indices,          \
       const TensorImpl& val) _T;                                               \
                                                                                \
+  _H TensorImpl triangle(const TensorImpl& t, int32_t diagonal, bool lower)    \
+      _T;                                                                      \
+                                                                               \
   /* im2col */                                                                 \
   _H TensorImpl im2col(const TensorImpl& t, Size2D kernel, Size2D stride,      \
                        Size2D padding) _T;                                     \
@@ -220,6 +223,10 @@ class TensorOperations {
   static ShapeCompatible checkShapeCompatible(const Shape& t0, const Shape& t1,
                                               Shape& retShape,
                                               int32_t skipLast = 0);
+
+  static bool checkShapeEqual(
+      const std::vector<std::reference_wrapper<TensorImpl>>& tensors,
+      int32_t exceptDim);
 
   static void error(const char* where, TensorError error);
 

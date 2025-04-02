@@ -1175,6 +1175,27 @@ void TensorOpsCUDA::indexPut_(
   CUDA_KERNEL_CHECK();
 }
 
+TensorImpl TensorOpsCUDA::triangle(const TensorImpl& t, int32_t diagonal,
+                                   bool lower) {
+  auto ret = TensorImpl::shape(t.shape_, t.device_);
+  const auto rows = t.shape_[0];
+  const auto cols = t.shape_[1];
+
+  dim3 blockSize(WARP_SIZE, WARP_SIZE);
+  dim3 gridSize((cols + blockSize.x - 1) / blockSize.x,
+                (rows + blockSize.y - 1) / blockSize.y);
+
+  if (lower) {
+    kTriangle<true>
+        <<<gridSize, blockSize>>>(ret.data_, t.data_, rows, cols, diagonal);
+  } else {
+    kTriangle<false>
+        <<<gridSize, blockSize>>>(ret.data_, t.data_, rows, cols, diagonal);
+  }
+  CUDA_KERNEL_CHECK();
+  return ret;
+}
+
 TensorImpl TensorOpsCUDA::im2col(const TensorImpl& t, Size2D kernel,
                                  Size2D stride, Size2D padding) {
   // shape: [C, H, W], [N, C, H, W]

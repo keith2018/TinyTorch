@@ -1160,6 +1160,24 @@ void TensorImpl::indexPut_(
   ops_->indexPut_(*this, indices, val);
 }
 
+TensorImpl TensorImpl::tril(int32_t diagonal) const {
+  TENSOR_CHECK_EMPTY_RET(*this, {});
+  if (dimCount_ != 2) {
+    TensorOperations::error(__FUNCTION__, TensorError_InvalidShape);
+    return {};
+  }
+  return ops_->triangle(*this, diagonal, true);
+}
+
+TensorImpl TensorImpl::triu(int32_t diagonal) const {
+  TENSOR_CHECK_EMPTY_RET(*this, {});
+  if (dimCount_ != 2) {
+    TensorOperations::error(__FUNCTION__, TensorError_InvalidShape);
+    return {};
+  }
+  return ops_->triangle(*this, diagonal, false);
+}
+
 TensorImpl TensorImpl::stack(
     const std::vector<std::reference_wrapper<TensorImpl>> &tensors,
     int32_t dim) {
@@ -1204,16 +1222,198 @@ TensorImpl TensorImpl::stack(
   }
 
   for (int32_t i = 0; i < tensors.size(); i++) {
-    const TensorImpl &t = tensors[i].get();
+    const auto &t = tensors[i].get();
+    auto *srcPtr = t.data_;
+    auto dstPtr = retTensor.data_ + i * innerSize;
     for (int32_t j = 0; j < outerSize; j++) {
-      float *dest =
-          retTensor.data_ + j * (tensors.size() * innerSize) + i * innerSize;
-      const float *src = t.data_ + j * innerSize;
-      retTensor.ops_->copyOnDevice(dest, src, innerSize * sizeof(float));
+      retTensor.ops_->copyOnDevice(dstPtr, srcPtr, innerSize * sizeof(float));
+      srcPtr += innerSize;
+      dstPtr += tensors.size() * innerSize;
     }
   }
 
   return retTensor;
+}
+
+TensorImpl TensorImpl::vstack(
+    const std::vector<std::reference_wrapper<TensorImpl>> &tensors) {
+  TENSOR_CHECK_EMPTY_RET(tensors, {});
+
+  auto targetDim = 0;
+  auto &t0 = tensors[0].get();
+
+  // check device & shapes
+  for (auto i = 1; i < tensors.size(); i++) {
+    auto &t = tensors[i].get();
+    if (t.device_ != t0.device_) {
+      TensorOperations::error(__FUNCTION__, TensorError_DeviceNotAligned);
+      return {};
+    }
+  }
+
+  // check shapes
+  bool shapesAligned = true;
+  if (t0.dim() == 1) {
+    // 1-D arrays must have the same length
+    for (auto i = 1; i < tensors.size(); i++) {
+      auto &t = tensors[i].get();
+      if (t.shape() != t0.shape()) {
+        shapesAligned = false;
+        break;
+      }
+    }
+  } else {
+    shapesAligned = TensorOperations::checkShapeEqual(tensors, targetDim);
+  }
+  if (!shapesAligned) {
+    TensorOperations::error(__FUNCTION__, TensorError_ShapeNotAligned);
+    return {};
+  }
+
+  Shape retShape;
+  if (t0.dim() == 1) {
+    retShape = {static_cast<int32_t>(tensors.size()), t0.shape_[0]};
+  } else {
+    retShape = t0.shape();
+    for (auto i = 1; i < tensors.size(); i++) {
+      retShape[targetDim] += tensors[i].get().shape()[targetDim];
+    }
+  }
+
+  auto retTensor = shape(retShape, t0.device_);
+
+  auto dstPtr = retTensor.data_;
+  for (auto &tensor : tensors) {
+    const auto &t = tensor.get();
+    retTensor.ops_->copyOnDevice(dstPtr, t.data_, t.elemCount_ * sizeof(float));
+    dstPtr += t.elemCount_;
+  }
+
+  return retTensor;
+}
+
+TensorImpl TensorImpl::hstack(
+    const std::vector<std::reference_wrapper<TensorImpl>> &tensors) {
+  TENSOR_CHECK_EMPTY_RET(tensors, {});
+
+  auto targetDim = 1;
+  auto &t0 = tensors[0].get();
+
+  // check device & shapes
+  for (auto i = 1; i < tensors.size(); i++) {
+    auto &t = tensors[i].get();
+    if (t.device_ != t0.device_) {
+      TensorOperations::error(__FUNCTION__, TensorError_DeviceNotAligned);
+      return {};
+    }
+  }
+
+  // check shapes
+  bool shapesAligned = true;
+  if (t0.dim() == 1) {
+    // 1-D arrays which can be any length
+    for (auto i = 1; i < tensors.size(); i++) {
+      auto &t = tensors[i].get();
+      if (t.dim() != t0.dim()) {
+        shapesAligned = false;
+        break;
+      }
+    }
+  } else {
+    shapesAligned = TensorOperations::checkShapeEqual(tensors, targetDim);
+  }
+  if (!shapesAligned) {
+    TensorOperations::error(__FUNCTION__, TensorError_ShapeNotAligned);
+    return {};
+  }
+
+  Shape retShape = t0.shape();
+  if (t0.dim() == 1) {
+    for (auto i = 1; i < tensors.size(); i++) {
+      retShape[0] += tensors[i].get().shape()[0];
+    }
+  } else {
+    for (auto i = 1; i < tensors.size(); i++) {
+      retShape[targetDim] += tensors[i].get().shape()[targetDim];
+    }
+  }
+
+  auto retTensor = shape(retShape, t0.device_);
+
+  if (t0.dim() == 1) {
+    auto dstPtr = retTensor.data_;
+    for (auto &tensor : tensors) {
+      const auto &t = tensor.get();
+      retTensor.ops_->copyOnDevice(dstPtr, t.data_,
+                                   t.elemCount_ * sizeof(float));
+      dstPtr += t.elemCount_;
+    }
+  } else {
+    int32_t innerSize = 1;
+    for (int32_t i = targetDim; i < t0.dimCount_; i++) {
+      innerSize *= t0.shape_[i];
+    }
+
+    int32_t outerSize = 1;
+    for (int32_t i = 0; i < targetDim; i++) {
+      outerSize *= t0.shape_[i];
+    }
+
+    for (int32_t i = 0; i < tensors.size(); i++) {
+      const auto &t = tensors[i].get();
+      auto *srcPtr = t.data_;
+      auto dstPtr = retTensor.data_ + i * innerSize;
+      for (int32_t j = 0; j < outerSize; j++) {
+        retTensor.ops_->copyOnDevice(dstPtr, srcPtr, innerSize * sizeof(float));
+        srcPtr += innerSize;
+        dstPtr += tensors.size() * innerSize;
+      }
+    }
+  }
+
+  return retTensor;
+}
+
+std::vector<TensorImpl> TensorImpl::split(int32_t splitSize,
+                                          int32_t dim) const {
+  if (dim < 0) {
+    dim += dimCount_;
+  }
+  if (dim < 0 || dim >= dimCount_) {
+    TensorOperations::error(__FUNCTION__, TensorError_InvalidAxis);
+    return {};
+  }
+
+  const auto dimSize = shape_[dim];
+  if (splitSize <= 0 || dimSize % splitSize != 0) {
+    TensorOperations::error(__FUNCTION__, TensorError_InvalidSections);
+    return {};
+  }
+
+  const auto sections = dimSize / splitSize;
+  std::vector<TensorImpl> retTensors(sections);
+
+  // init shape of result tensors
+  auto retShape = shape_;
+  retShape[dim] = splitSize;
+  for (auto i = 0; i < sections; i++) {
+    retTensors[i] = shape(retShape, device_);
+  }
+
+  const auto innerStride = strides_[dim];
+  const auto innerSize = innerStride * splitSize;
+  const auto outerSize = elemCount_ / dimSize;
+
+  for (auto i = 0; i < sections; i++) {
+    for (auto outerIdx = 0; outerIdx < outerSize; outerIdx++) {
+      const auto srcOffset = outerIdx * dimSize * innerStride + i * innerSize;
+      const auto dstOffset = outerIdx * splitSize * innerStride;
+      const auto copySize = splitSize * innerStride * sizeof(float);
+      ops_->copyOnDevice(retTensors[i].data_ + dstOffset, data_ + srcOffset,
+                         copySize);
+    }
+  }
+  return retTensors;
 }
 
 TensorImpl TensorImpl::dot(const TensorImpl &a, const TensorImpl &b) {

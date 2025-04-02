@@ -379,10 +379,36 @@ class TensorImpl {
   void indexPut_(const std::vector<std::reference_wrapper<TensorImpl>> &indices,
                  const TensorImpl &val);
 
+  TensorImpl tril(int32_t diagonal = 0) const;
+
+  TensorImpl triu(int32_t diagonal = 0) const;
+
+  static TensorImpl tril(const TensorImpl &t, int32_t diagonal = 0) {
+    return t.tril(diagonal);
+  }
+
+  static TensorImpl triu(const TensorImpl &t, int32_t diagonal = 0) {
+    return t.triu(diagonal);
+  }
+
   // stack
   static TensorImpl stack(
       const std::vector<std::reference_wrapper<TensorImpl>> &tensors,
       int32_t dim = 0);
+
+  static TensorImpl vstack(
+      const std::vector<std::reference_wrapper<TensorImpl>> &tensors);
+
+  static TensorImpl hstack(
+      const std::vector<std::reference_wrapper<TensorImpl>> &tensors);
+
+  // split
+  std::vector<TensorImpl> split(int32_t splitSize, int32_t dim = 0) const;
+
+  static std::vector<TensorImpl> split(const TensorImpl &t, int32_t splitSize,
+                                       int32_t dim = 0) {
+    return t.split(splitSize, dim);
+  }
 
   // dot
   TensorImpl dot(const TensorImpl &t) const { return dot(*this, t); }
