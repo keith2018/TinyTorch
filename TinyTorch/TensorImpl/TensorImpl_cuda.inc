@@ -915,6 +915,22 @@ __global__ void kIndexPut2D(float* t, const float* indices0,
   }
 }
 
+template <bool LOWER>
+__global__ void kTriangle(float* ret, const float* t, const int32_t rows,
+                          const int32_t cols, const int32_t diagonal) {
+  auto i = static_cast<int32_t>(blockIdx.y * blockDim.y + threadIdx.y);
+  auto j = static_cast<int32_t>(blockIdx.x * blockDim.x + threadIdx.x);
+
+  if (i < rows && j < cols) {
+    const auto index = i * cols + j;
+    if ((LOWER && j <= i + diagonal) || (!LOWER && j >= i + diagonal)) {
+      ret[index] = t[index];
+    } else {
+      ret[index] = 0.0f;
+    }
+  }
+}
+
 __global__ void kIm2Col(float* ret, const float* t, const int32_t n,
                         const int32_t channels, const int32_t height,
                         const int32_t width, const int32_t outH,

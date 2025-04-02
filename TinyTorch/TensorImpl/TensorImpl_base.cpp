@@ -137,6 +137,26 @@ ShapeCompatible TensorOperations::checkShapeCompatible(const Shape &t0,
   return ShapeCompatible_Broadcast;
 }
 
+bool TensorOperations::checkShapeEqual(
+    const std::vector<std::reference_wrapper<TensorImpl>> &tensors,
+    int32_t exceptDim) {
+  auto &t0 = tensors[0].get();
+
+  for (int32_t i = 1; i < tensors.size(); i++) {
+    auto &t = tensors[i].get();
+    if (t.dim() != t0.dim()) {
+      return false;
+    }
+    for (int32_t j = 0; j < t.dim(); j++) {
+      if (j != exceptDim && t.shape_[j] != t0.shape_[j]) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
 void TensorOperations::error(const char *where, TensorError error) {
   switch (error) {
     case TensorError_EmptyTensor:

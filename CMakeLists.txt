@@ -18,7 +18,7 @@ endif ()
 add_subdirectory(TinyTorch)
 add_subdirectory(demo)
 
-option(BUILD_TEST "Whether or not to build the tests" ON)
+option(BUILD_TEST "Whether or not to build the tests" OFF)
 if (${BUILD_TEST})
     message(STATUS "Building tests")
 
