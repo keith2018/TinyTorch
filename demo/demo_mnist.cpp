@@ -6,7 +6,7 @@
 
 #include "Torch.h"
 
-using namespace TinyTorch;
+using namespace tinytorch;
 
 // https://github.com/pytorch/examples/blob/main/mnist/main.py
 class Net : public nn::Module {

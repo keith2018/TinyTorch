@@ -8,7 +8,7 @@
 
 #include <memory>
 
-namespace TinyTorch {
+namespace tinytorch {
 
 enum class Device;
 
@@ -54,4 +54,4 @@ class CachedAllocator : public Allocator {
   std::unique_ptr<Allocator> impl_;
 };
 
-}  // namespace TinyTorch
+}  // namespace tinytorch

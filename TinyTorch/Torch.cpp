@@ -12,7 +12,7 @@
 #include "TensorImpl/TensorImpl_cuda.cuh"
 #endif
 
-namespace TinyTorch {
+namespace tinytorch {
 
 void manualSeed(unsigned long seed) {
   RandomGeneratorCPU::setSeed(seed);
@@ -172,4 +172,4 @@ void load(nn::Module& model, const char* path) {
   }
 }
 
-}  // namespace TinyTorch
+}  // namespace tinytorch

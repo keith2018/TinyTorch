@@ -6,7 +6,7 @@
 
 #include "Torch.h"
 
-using namespace TinyTorch;
+using namespace tinytorch;
 
 // https://pytorch.org/tutorials/beginner/pytorch_with_examples.html#pytorch-optim
 void demo_optim() {

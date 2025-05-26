@@ -8,7 +8,7 @@
 
 #include "test.h"
 
-using namespace TinyTorch;
+using namespace tinytorch;
 
 TEST(TEST_Optimizer, SGD) {
   auto x = Tensor({0.5, 1.5, -0.5}, true);

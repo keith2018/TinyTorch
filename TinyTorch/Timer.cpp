@@ -6,7 +6,7 @@
 
 #include "Timer.h"
 
-namespace TinyTorch {
+namespace tinytorch {
 
 void Timer::start() { start_ = std::chrono::steady_clock::now(); }
 
@@ -18,4 +18,4 @@ int64_t Timer::elapseMillis() const {
   return duration.count();
 }
 
-}  // namespace TinyTorch
+}  // namespace tinytorch

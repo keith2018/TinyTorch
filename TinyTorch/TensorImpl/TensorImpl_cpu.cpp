@@ -19,7 +19,7 @@
 
 #include "TensorImpl_cpu.inc"
 
-namespace TinyTorch {
+namespace tinytorch {
 
 std::optional<unsigned long> RandomGeneratorCPU::seed_;
 static std::random_device _r;
@@ -1182,4 +1182,4 @@ void TensorOpsCPU::gemm(float* c, const float* a, const float* b, int32_t m,
   }
 }
 
-}  // namespace TinyTorch
+}  // namespace tinytorch

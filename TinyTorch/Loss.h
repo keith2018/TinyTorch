@@ -8,7 +8,7 @@
 
 #include "Module.h"
 
-namespace TinyTorch {
+namespace tinytorch {
 
 typedef enum {
   NONE = 0,
@@ -45,4 +45,4 @@ class NLLLoss : public Loss {
 };
 
 }  // namespace nn
-}  // namespace TinyTorch
+}  // namespace tinytorch

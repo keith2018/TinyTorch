@@ -11,7 +11,7 @@
 
 #include "Logger.h"
 
-namespace TinyTorch {
+namespace tinytorch {
 
 class Timer {
  public:
@@ -42,11 +42,11 @@ class ScopedTimer {
 
 #ifndef NO_TIMER
 #define FUNCTION_TIMED() \
-  auto _functionTimer = TinyTorch::ScopedTimer(__FUNCTION__)
-#define SCOPE_TIMED(X) if (auto _scopeTimer = TinyTorch::ScopedTimer(X))
+  auto _functionTimer = tinytorch::ScopedTimer(__FUNCTION__)
+#define SCOPE_TIMED(X) if (auto _scopeTimer = tinytorch::ScopedTimer(X))
 #else
 #define FUNCTION_TIMED()
 #define SCOPE_TIMED(X)
 #endif
 
-}  // namespace TinyTorch
+}  // namespace tinytorch

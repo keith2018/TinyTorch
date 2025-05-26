@@ -8,7 +8,7 @@
 
 #include "test.h"
 
-using namespace TinyTorch;
+using namespace tinytorch;
 
 TEST(TEST_Module, linear) {
   auto layer = nn::Linear(4, 4, true);

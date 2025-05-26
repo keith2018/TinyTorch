@@ -11,7 +11,7 @@
 #include "Function.h"
 #include "Init.h"
 
-namespace TinyTorch::nn {
+namespace tinytorch::nn {
 
 std::vector<Tensor *> Module::parameters() {
   std::vector<Tensor *> ret;
@@ -276,4 +276,4 @@ void BatchNorm2D::zeroGrad() {
   }
 }
 
-}  // namespace TinyTorch::nn
+}  // namespace tinytorch::nn

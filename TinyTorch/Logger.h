@@ -8,13 +8,13 @@
 
 #include <mutex>
 
-namespace TinyTorch {
+namespace tinytorch {
 
 // clang-format off
-#define LOGI(...) TinyTorch::Logger::log(TinyTorch::LOG_INFO,     __FILE__, __LINE__, __VA_ARGS__)
-#define LOGD(...) TinyTorch::Logger::log(TinyTorch::LOG_DEBUG,    __FILE__, __LINE__, __VA_ARGS__)
-#define LOGW(...) TinyTorch::Logger::log(TinyTorch::LOG_WARNING,  __FILE__, __LINE__, __VA_ARGS__)
-#define LOGE(...) TinyTorch::Logger::log(TinyTorch::LOG_ERROR,    __FILE__, __LINE__, __VA_ARGS__)
+#define LOGI(...) tinytorch::Logger::log(tinytorch::LOG_INFO,     __FILE__, __LINE__, __VA_ARGS__)
+#define LOGD(...) tinytorch::Logger::log(tinytorch::LOG_DEBUG,    __FILE__, __LINE__, __VA_ARGS__)
+#define LOGW(...) tinytorch::Logger::log(tinytorch::LOG_WARNING,  __FILE__, __LINE__, __VA_ARGS__)
+#define LOGE(...) tinytorch::Logger::log(tinytorch::LOG_ERROR,    __FILE__, __LINE__, __VA_ARGS__)
 // clang-format on
 
 static constexpr int MAX_LOG_LENGTH = 1024;
@@ -41,4 +41,4 @@ class Logger {
   static std::mutex mutex_;
 };
 
-}  // namespace TinyTorch
+}  // namespace tinytorch

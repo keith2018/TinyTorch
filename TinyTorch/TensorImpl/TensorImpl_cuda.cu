@@ -15,7 +15,7 @@
 #include "TensorImpl_cuda.cuh"
 #include "TensorImpl_cuda.inc"
 
-namespace TinyTorch {
+namespace tinytorch {
 
 const char* curandGetErrorString(curandStatus_t status);
 const char* cublasGetErrorString(cublasStatus_t status);
@@ -1326,4 +1326,4 @@ const char* cublasGetErrorString(cublasStatus_t status) {
   return "Unknown cuBLAS error";
 }
 
-}  // namespace TinyTorch
+}  // namespace tinytorch

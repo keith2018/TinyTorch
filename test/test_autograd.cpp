@@ -8,7 +8,7 @@
 
 #include "test.h"
 
-using namespace TinyTorch;
+using namespace tinytorch;
 
 TEST(TEST_Autograd, backward_01) {
   Tensor x1({0.0140f, 0.5773f, 0.0469f}, true);

@@ -6,7 +6,7 @@
 
 #pragma once
 
-namespace TinyTorch {
+namespace tinytorch {
 
 struct OpCpuAdd {
   float operator()(const float a, const float b) const { return a + b; }
@@ -148,4 +148,4 @@ struct OpCpuReduceSum {
   static float defaultVal() { return 0.f; }
 };
 
-}  // namespace TinyTorch
+}  // namespace tinytorch

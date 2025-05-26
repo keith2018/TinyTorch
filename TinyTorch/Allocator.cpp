@@ -14,7 +14,7 @@
 
 #include "Logger.h"
 
-namespace TinyTorch {
+namespace tinytorch {
 
 // Ref:
 // https://github.com/pytorch/pytorch/blob/main/c10/cuda/CUDACachingAllocator.cpp
@@ -309,4 +309,4 @@ CachedAllocator::CachedAllocator(std::unique_ptr<Allocator> base)
       base_(std::move(base)),
       impl_(std::make_unique<CachedAllocatorImpl>(base_.get())) {}
 
-}  // namespace TinyTorch
+}  // namespace tinytorch

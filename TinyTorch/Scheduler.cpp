@@ -6,7 +6,7 @@
 
 #include "Scheduler.h"
 
-namespace TinyTorch::optim::lr_scheduler {
+namespace tinytorch::optim::lr_scheduler {
 
 float StepLR::getLr() {
   if (lastEpoch_ == 0 || lastEpoch_ % stepSize_ != 0) {
@@ -15,4 +15,4 @@ float StepLR::getLr() {
   return optimizer_.getLr() * gamma_;
 }
 
-}  // namespace TinyTorch::optim::lr_scheduler
+}  // namespace tinytorch::optim::lr_scheduler

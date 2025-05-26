@@ -13,7 +13,7 @@
 #include "Function.h"
 #include "Logger.h"
 
-namespace TinyTorch {
+namespace tinytorch {
 
 thread_local bool NoGradScope::gradEnabled = true;
 
@@ -347,4 +347,4 @@ void AutogradMeta::buildBackwardGraph() {
   }
 }
 
-}  // namespace TinyTorch
+}  // namespace tinytorch

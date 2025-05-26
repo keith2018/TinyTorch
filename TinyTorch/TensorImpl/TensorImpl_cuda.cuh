@@ -11,7 +11,7 @@
 #include "../Allocator.h"
 #include "TensorImpl.h"
 
-namespace TinyTorch {
+namespace tinytorch {
 
 struct TINYTORCH_ALIGN(TENSOR_MEM_ALIGN) TensorCudaCtx {
   int32_t dimCount_;
@@ -134,4 +134,4 @@ class TensorOpsCUDA : public TensorOperations {
   CachedAllocator allocator_;
 };
 
-}  // namespace TinyTorch
+}  // namespace tinytorch

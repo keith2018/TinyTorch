@@ -11,7 +11,7 @@
 
 #include "Logger.h"
 
-namespace TinyTorch::data::transforms {
+namespace tinytorch::data::transforms {
 
 Tensor Normalize::process(Tensor& input) const {
   Tensor ret = Tensor::shape(input.shape());
@@ -21,9 +21,9 @@ Tensor Normalize::process(Tensor& input) const {
   return ret;
 }
 
-}  // namespace TinyTorch::data::transforms
+}  // namespace tinytorch::data::transforms
 
-namespace TinyTorch::data {
+namespace tinytorch::data {
 
 constexpr auto MNIST_TRAIN_IMAGES = "train-images-idx3-ubyte";
 constexpr auto MNIST_TRAIN_LABELS = "train-labels-idx1-ubyte";
@@ -119,4 +119,4 @@ void DatasetMNIST::loadLabels(const std::string& path) {
   ifs.close();
 }
 
-}  // namespace TinyTorch::data
+}  // namespace tinytorch::data

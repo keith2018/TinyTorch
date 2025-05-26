@@ -10,7 +10,7 @@
 
 #include "TensorImpl/TensorImpl.h"
 
-namespace TinyTorch {
+namespace tinytorch {
 
 struct AutogradMeta;
 class Function;
@@ -168,7 +168,7 @@ class NoGradScope {
   const char *tag_;
 };
 
-#define NoGradTag(X) if (auto _noGrad = TinyTorch::NoGradScope(X))
+#define NoGradTag(X) if (auto _noGrad = tinytorch::NoGradScope(X))
 #define withNoGrad NoGradTag("")
 
-}  // namespace TinyTorch
+}  // namespace tinytorch

@@ -13,7 +13,7 @@
 #include "Tensor.h"
 #include "TensorImpl/TensorImpl_cpu.h"
 
-namespace TinyTorch::data {
+namespace tinytorch::data {
 
 namespace transforms {
 
@@ -209,4 +209,4 @@ class DataLoader {
   std::vector<size_t> indices_;
 };
 
-}  // namespace TinyTorch::data
+}  // namespace tinytorch::data

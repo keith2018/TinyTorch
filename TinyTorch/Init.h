@@ -8,7 +8,7 @@
 
 #include "Tensor.h"
 
-namespace TinyTorch::nn {
+namespace tinytorch::nn {
 
 typedef enum {
   FAN_IN = 0,
@@ -26,4 +26,4 @@ class Init {
   static float calculateGain(float param);
 };
 
-}  // namespace TinyTorch::nn
+}  // namespace tinytorch::nn

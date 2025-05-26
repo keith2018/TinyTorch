@@ -14,7 +14,7 @@
 #include "TensorImpl_cuda.cuh"
 #endif
 
-namespace TinyTorch {
+namespace tinytorch {
 
 #define TENSOR_DEVICE_AVAILABLE(device, ret)                            \
   do {                                                                  \
@@ -1562,4 +1562,4 @@ TensorImpl TensorImpl::col2im(const Shape &shape, Size2D kernelSize,
   return ops_->col2im(*this, shape, kernelSize, stride, padding);
 }
 
-}  // namespace TinyTorch
+}  // namespace tinytorch

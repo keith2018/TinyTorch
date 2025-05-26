@@ -12,7 +12,7 @@
 #include "../Allocator.h"
 #include "TensorImpl.h"
 
-namespace TinyTorch {
+namespace tinytorch {
 
 class AllocatorCPU : public Allocator {
  public:
@@ -139,4 +139,4 @@ class TensorOpsCPU : public TensorOperations {
   CachedAllocator allocator_;
 };
 
-}  // namespace TinyTorch
+}  // namespace tinytorch

@@ -13,7 +13,7 @@
 
 #include "Loss.h"
 
-namespace TinyTorch {
+namespace tinytorch {
 
 enum FunctionType {
   Function_Leaf,
@@ -350,4 +350,4 @@ class FuncNLLLoss : public Function {
   LossReduction reduction_;
 };
 
-}  // namespace TinyTorch
+}  // namespace tinytorch

@@ -10,7 +10,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace TinyTorch {
+namespace tinytorch {
 
 #define TENSOR_MAX_DIMS 8
 #define TENSOR_MEM_ALIGN 16
@@ -233,4 +233,4 @@ class TensorOperations {
   TENSOR_OPS_DECLARE(virtual, = 0)
 };
 
-}  // namespace TinyTorch
+}  // namespace tinytorch

@@ -8,7 +8,7 @@
 
 #include "Logger.h"
 
-namespace TinyTorch::optim {
+namespace tinytorch::optim {
 
 Optimizer::Optimizer(std::vector<Tensor *> &&parameters, float lr,
                      float weightDecay)
@@ -208,4 +208,4 @@ TensorImpl AdamW::getDecayedGrad(Tensor *param) const {
   return param->getGrad().data();
 }
 
-}  // namespace TinyTorch::optim
+}  // namespace tinytorch::optim

@@ -6,7 +6,7 @@
 
 #pragma once
 
-namespace TinyTorch {
+namespace tinytorch {
 
 #define WARP_SIZE 32
 #define TRANSPOSE_TILE_DIM 32
@@ -1034,4 +1034,4 @@ __global__ void kDot(float* ret, const float* a, const float* b,
   }
 }
 
-}  // namespace TinyTorch
+}  // namespace tinytorch

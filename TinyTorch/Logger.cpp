@@ -9,7 +9,7 @@
 #include <cstdarg>
 #include <cstdio>
 
-namespace TinyTorch {
+namespace tinytorch {
 
 void *Logger::logContext_ = nullptr;
 LogFunc Logger::logFunc_ = nullptr;
@@ -54,4 +54,4 @@ void Logger::log(LogLevel level, const char *file, int line,
   fflush(stderr);
 }
 
-}  // namespace TinyTorch
+}  // namespace tinytorch

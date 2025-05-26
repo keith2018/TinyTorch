@@ -17,7 +17,7 @@
 
 #include "TensorImpl_base.h"
 
-namespace TinyTorch {
+namespace tinytorch {
 
 class TensorOperations;
 class TensorOpsCPU;
@@ -483,4 +483,4 @@ class TensorImpl {
   static Device defaultDevice_;
 };
 
-}  // namespace TinyTorch
+}  // namespace tinytorch

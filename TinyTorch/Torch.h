@@ -18,7 +18,7 @@
 #include "Tensor.h"
 #include "Timer.h"
 
-namespace TinyTorch {
+namespace tinytorch {
 
 constexpr float PI = 3.1415926535f;
 
@@ -38,4 +38,4 @@ void save(nn::Module& model, const char* path);
 
 void load(nn::Module& model, const char* path);
 
-}  // namespace TinyTorch
+}  // namespace tinytorch

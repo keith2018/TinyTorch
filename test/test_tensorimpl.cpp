@@ -7,7 +7,7 @@
 #include "Torch.h"
 #include "test.h"
 
-using namespace TinyTorch;
+using namespace tinytorch;
 
 TEST(TEST_TensorImpl, constructor_default) {
   TensorImpl x;

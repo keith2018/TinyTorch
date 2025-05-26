@@ -10,7 +10,7 @@
 
 #include "Tensor.h"
 
-namespace TinyTorch::nn {
+namespace tinytorch::nn {
 
 class Module {
  public:
@@ -244,4 +244,4 @@ class BatchNorm2D : public Module {
   int32_t numBatchesTracked_;
 };
 
-}  // namespace TinyTorch::nn
+}  // namespace tinytorch::nn

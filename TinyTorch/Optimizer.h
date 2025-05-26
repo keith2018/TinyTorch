@@ -8,7 +8,7 @@
 
 #include "Tensor.h"
 
-namespace TinyTorch::optim {
+namespace tinytorch::optim {
 
 class Optimizer {
  public:
@@ -128,4 +128,4 @@ class AdamW : public Adam {
   TensorImpl getDecayedGrad(Tensor *param) const override;
 };
 
-}  // namespace TinyTorch::optim
+}  // namespace tinytorch::optim

@@ -12,7 +12,7 @@
 
 #include "Tensor.h"
 
-namespace TinyTorch {
+namespace tinytorch {
 
 #define FUNC_ENUM_TO_STRING(value) {value, #value}
 
@@ -888,4 +888,4 @@ std::vector<TensorImpl> FuncNLLLoss::backward(const TensorImpl& grad) {
   return ret;
 }
 
-}  // namespace TinyTorch
+}  // namespace tinytorch

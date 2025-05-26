@@ -10,7 +10,7 @@
 
 #include "Optimizer.h"
 
-namespace TinyTorch::optim::lr_scheduler {
+namespace tinytorch::optim::lr_scheduler {
 
 class Scheduler {
  public:
@@ -65,4 +65,4 @@ class StepLR : public Scheduler {
   float gamma_;
 };
 
-}  // namespace TinyTorch::optim::lr_scheduler
+}  // namespace tinytorch::optim::lr_scheduler

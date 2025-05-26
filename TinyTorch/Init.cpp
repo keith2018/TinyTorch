@@ -8,7 +8,7 @@
 
 #include "Logger.h"
 
-namespace TinyTorch::nn {
+namespace tinytorch::nn {
 
 void Init::uniform(Tensor &tensor, float min, float max) {
   tensor.data().fillUniform_(min, max);
@@ -57,4 +57,4 @@ float Init::calculateGain(float param) {
   return std::sqrt(2.0f / (1.f + param * param));
 }
 
-}  // namespace TinyTorch::nn
+}  // namespace tinytorch::nn

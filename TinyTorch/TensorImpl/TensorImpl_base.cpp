@@ -9,7 +9,7 @@
 #include "../Logger.h"
 #include "TensorImpl.h"
 
-namespace TinyTorch {
+namespace tinytorch {
 
 int32_t TensorOperations::indicesToOffset(const Shape &strides,
                                           const int32_t *indices) {
@@ -189,4 +189,4 @@ void TensorOperations::error(const char *where, TensorError error) {
 #endif
 }
 
-}  // namespace TinyTorch
+}  // namespace tinytorch

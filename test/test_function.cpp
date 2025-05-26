@@ -8,7 +8,7 @@
 
 #include "test.h"
 
-using namespace TinyTorch;
+using namespace tinytorch;
 
 TEST(TEST_Function, func_add) {
   Tensor a({1, 2, 3}, true);
