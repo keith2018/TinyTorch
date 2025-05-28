@@ -6,6 +6,7 @@
 
 #include "Tensor.h"
 
+#include <cassert>
 #include <deque>
 #include <set>
 #include <unordered_map>
@@ -208,7 +209,7 @@ bool Tensor::isRequiresGrad() const { return requiresGrad_; }
 
 void Tensor::setRequiresGrad(bool requires) { initAutograd(requires); }
 
-void Tensor::backward(const Tensor &grad) {
+void Tensor::backward(const Tensor &grad) const {
   if (requiresGrad_) {
     gradMeta_->backward(grad);
   }
@@ -225,14 +226,13 @@ const Tensor &Tensor::getGrad() const {
   return empty;
 }
 
-void Tensor::setGrad(const Tensor &grad) {
-  if (requiresGrad_) {
-    gradMeta_->grad_.data_ = grad.data_;
-  }
-}
+const AutogradMeta &Tensor::gradMeta() const { return *gradMeta_; }
 
-void Tensor::zeroGrad() {
+void Tensor::zeroGrad() const {
   if (requiresGrad_) {
+    if (gradMeta_->grad_.empty()) {
+      *gradMeta_->grad_.data_ = TensorImpl::shape(shape(), device());
+    }
     gradMeta_->grad_.data_->fill_(0.f);
   }
 }
@@ -241,37 +241,54 @@ void Tensor::initAutograd(bool requiresGrad,
                           const std::shared_ptr<Function> &gradFunc) {
   requiresGrad_ = requiresGrad;
   if (requiresGrad_) {
-    gradMeta_ = std::make_shared<AutogradMeta>();
+    gradMeta_ = std::make_shared<AutogradMeta>(shape(), device());
     gradMeta_->setGradFunc(gradFunc);
-    *gradMeta_->grad_.data_ =
-        TensorImpl::shape(data_->shape(), data_->device());
-
-    if (isLeaf()) {
-      gradMeta_->gradLeaf_ = std::make_shared<FuncLeaf>();
-      gradMeta_->gradLeaf_->setOwner(gradMeta_);
-    } else {
-      gradMeta_->gradLeaf_ = nullptr;
-    }
   } else {
     gradMeta_ = nullptr;
   }
 }
 
 bool Tensor::isLeaf() const {
-  return requiresGrad_ && gradMeta_->gradFunc_ == nullptr;
+  return requiresGrad_ && gradMeta_->gradFunc_->type() == Function_Leaf;
 }
 
 std::shared_ptr<Function> Tensor::getGradFunc() const {
   if (requiresGrad_) {
-    return isLeaf() ? gradMeta_->gradLeaf_ : gradMeta_->gradFunc_;
+    return gradMeta_->gradFunc_;
   }
   return nullptr;
 }
 
 void AutogradMeta::setGradFunc(const std::shared_ptr<Function> &gradFunc) {
-  gradFunc_ = gradFunc;
-  if (gradFunc_) {
-    gradFunc_->setOwner(shared_from_this());
+  if (gradFunc) {
+    gradFunc_ = gradFunc;
+  } else {
+    gradFunc_ = std::make_shared<FuncLeaf>();
+  }
+  gradFunc_->setOwner(shared_from_this());
+}
+
+void AutogradMeta::setGrad(const TensorImpl &grad) const {
+  *grad_.data_ = grad;
+}
+
+void AutogradMeta::setGrad(TensorImpl &&grad) const {
+  *grad_.data_ = std::move(grad);
+}
+
+void AutogradMeta::addGrad(const TensorImpl &grad) const {
+  if (grad_.empty()) {
+    setGrad(grad);
+  } else {
+    *grad_.data_ += grad;
+  }
+}
+
+void AutogradMeta::addGrad(TensorImpl &&grad) const {
+  if (grad_.empty()) {
+    setGrad(std::move(grad));
+  } else {
+    *grad_.data_ += grad;
   }
 }
 
@@ -287,7 +304,7 @@ void AutogradMeta::backward(const Tensor &grad) {
       return;
     }
   } else {
-    if (grad.data_->shape() != grad_.data_->shape()) {
+    if (shape_ != grad.shape()) {
       LOGE("error call backward: input grad shape mismatch");
       return;
     }
@@ -297,20 +314,16 @@ void AutogradMeta::backward(const Tensor &grad) {
     buildBackwardGraph();
   }
 
-  std::unordered_map<std::shared_ptr<Function>, TensorImpl> inputs = {
-      {gradFunc_,
-       grad.empty() ? TensorImpl::scalar(1.f, grad_.device()) : *grad.data_}};
+  if (grad.empty()) {
+    addGrad(TensorImpl::scalar(1.f, device_));
+  } else {
+    addGrad(grad.data());
+  }
+
   for (auto &currFunc : backwardGraph_) {
-    auto outputs = currFunc->callBackward(inputs[currFunc]);
-
-    for (int i = 0; i < currFunc->nextFuncs().size(); i++) {
-      auto &nextFunc = currFunc->nextFuncs()[i];
-
-      if (inputs.find(nextFunc) != inputs.end()) {
-        inputs[nextFunc] += outputs[i];
-      } else {
-        inputs[nextFunc] = std::move(outputs[i]);
-      }
+    auto owner = currFunc->getOwner();
+    if (owner) {
+      currFunc->callBackward(owner->grad_.data());
     }
   }
 }

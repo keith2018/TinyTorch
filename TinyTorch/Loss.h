@@ -19,8 +19,7 @@ typedef enum {
 namespace nn {
 class Loss : public Module {
  public:
-  explicit Loss(const LossReduction reduction = MEAN)
-      : reduction_(reduction) {};
+  explicit Loss(const LossReduction reduction = MEAN) : reduction_(reduction) {}
   ~Loss() override = default;
 
  private:

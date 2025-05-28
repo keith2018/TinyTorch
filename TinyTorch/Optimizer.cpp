@@ -27,6 +27,9 @@ void Optimizer::zeroGrad() {
 
 TensorImpl Optimizer::getDecayedGrad(Tensor *param) const {
   auto ret = param->getGrad().data();
+  if (ret.empty()) {
+    return ret;
+  }
   if (weightDecay_ != 0.f) {
     ret += weightDecay_ * param->data();
   }
@@ -62,6 +65,9 @@ void SGD::doStep() {
   for (int32_t i = 0; i < parameters_.size(); i++) {
     auto &param = parameters_[i];
     auto grad = getDecayedGrad(param);
+    if (grad.empty()) {
+      continue;
+    }
     if (momentum_ != 0.f) {
       auto &buf = momentumBuffer_[i];
       buf = buf.empty() ? grad : (momentum_ * buf + (1.f - dampening_) * grad);
@@ -93,6 +99,9 @@ void Adagrad::doStep() {
   for (int32_t i = 0; i < parameters_.size(); i++) {
     auto &param = parameters_[i];
     auto grad = getDecayedGrad(param);
+    if (grad.empty()) {
+      continue;
+    }
     auto &s = stateSums_[i];
     auto clr = lr_ / (1 + static_cast<float>(step_ - 1) * lrDecay_);
     s += grad * grad;
@@ -120,6 +129,9 @@ void RMSprop::doStep() {
   for (int32_t i = 0; i < parameters_.size(); i++) {
     auto &param = parameters_[i];
     auto grad = getDecayedGrad(param);
+    if (grad.empty()) {
+      continue;
+    }
     auto &v = squareAvg_[i];
     v = alpha_ * v + (1.f - alpha_) * grad * grad;
     TensorImpl avg;
@@ -152,6 +164,9 @@ void AdaDelta::doStep() {
   for (int32_t i = 0; i < parameters_.size(); i++) {
     auto &param = parameters_[i];
     auto grad = getDecayedGrad(param);
+    if (grad.empty()) {
+      continue;
+    }
     auto &v = squareAvg_[i];
     auto &u = accDelta_[i];
     v = rho_ * v + (1.f - rho_) * grad * grad;
@@ -183,6 +198,9 @@ void Adam::doStep() {
   for (int32_t i = 0; i < parameters_.size(); i++) {
     auto &param = parameters_[i];
     auto grad = getDecayedGrad(param);
+    if (grad.empty()) {
+      continue;
+    }
     auto &m = expAvg_[i];
     auto &v = expAvgSq_[i];
     m = beta1_ * m + (1.f - beta1_) * grad;

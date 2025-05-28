@@ -12,7 +12,7 @@ using namespace tinytorch;
 
 TEST(TEST_Optimizer, SGD) {
   auto x = Tensor({0.5, 1.5, -0.5}, true);
-  x.setGrad(Tensor({0.1, -0.2, 0.3}));
+  x.gradMeta().setGrad(TensorImpl({0.1, -0.2, 0.3}));
   auto optimizer = optim::SGD({&x}, 0.1, 0.6, 0.7, 0.8);
   optimizer.step();
   EXPECT_FLOAT_VEC_NEAR(x.data().toList(), {0.4500, 1.4000, -0.4900});
@@ -22,7 +22,7 @@ TEST(TEST_Optimizer, SGD) {
 
 TEST(TEST_Optimizer, Adagrad) {
   auto x = Tensor({0.5, 1.5, -0.5}, true);
-  x.setGrad(Tensor({0.1, -0.2, 0.3}));
+  x.gradMeta().setGrad(TensorImpl({0.1, -0.2, 0.3}));
   auto optimizer = optim::Adagrad({&x}, 0.1, 0.9, 0.5, 0.1);
   optimizer.step();
   EXPECT_FLOAT_VEC_NEAR(x.data().toList(), {0.4258, 1.4133, -0.5156});
@@ -32,7 +32,7 @@ TEST(TEST_Optimizer, Adagrad) {
 
 TEST(TEST_Optimizer, RMSprop) {
   auto x = Tensor({0.5, 1.5, -0.5}, true);
-  x.setGrad(Tensor({0.1, -0.2, 0.3}));
+  x.gradMeta().setGrad(TensorImpl({0.1, -0.2, 0.3}));
   auto optimizer = optim::RMSprop({&x}, 0.1, 0.9, 0.001, 0.1, 0.9);
   optimizer.step();
   EXPECT_FLOAT_VEC_NEAR(x.data().toList(), {0.1903, 1.7974, -0.8123});
@@ -42,7 +42,7 @@ TEST(TEST_Optimizer, RMSprop) {
 
 TEST(TEST_Optimizer, AdaDelta) {
   auto x = Tensor({0.5, 1.5, -0.5}, true);
-  x.setGrad(Tensor({0.1, -0.2, 0.3}));
+  x.gradMeta().setGrad(TensorImpl({0.1, -0.2, 0.3}));
   auto optimizer = optim::AdaDelta({&x}, 0.1, 0.9, 0.001, 0.1);
   optimizer.step();
   EXPECT_FLOAT_VEC_NEAR(x.data().toList(), {0.4917, 1.5045, -0.5093});
@@ -52,7 +52,7 @@ TEST(TEST_Optimizer, AdaDelta) {
 
 TEST(TEST_Optimizer, Adam) {
   auto x = Tensor({0.5, 1.5, -0.5}, true);
-  x.setGrad(Tensor({0.1, -0.2, 0.3}));
+  x.gradMeta().setGrad(TensorImpl({0.1, -0.2, 0.3}));
   auto optimizer = optim::Adam({&x}, 0.1, {0.9, 0.8}, 0.001, 0.1);
   optimizer.step();
   EXPECT_FLOAT_VEC_NEAR(x.data().toList(), {0.4007, 1.5980, -0.5996});
@@ -62,7 +62,7 @@ TEST(TEST_Optimizer, Adam) {
 
 TEST(TEST_Optimizer, AdamW) {
   auto x = Tensor({0.5, 1.5, -0.5}, true);
-  x.setGrad(Tensor({0.1, -0.2, 0.3}));
+  x.gradMeta().setGrad(TensorImpl({0.1, -0.2, 0.3}));
   auto optimizer = optim::AdamW({&x}, 0.1, {0.9, 0.8}, 0.001, 0.1);
   optimizer.step();
   EXPECT_FLOAT_VEC_NEAR(x.data().toList(), {0.3960, 1.5845, -0.5947});

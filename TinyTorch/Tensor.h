@@ -7,14 +7,15 @@
 #pragma once
 
 #include <memory>
+#include <utility>
 
 #include "TensorImpl/TensorImpl.h"
+#include "TensorImpl/TensorImpl_base.h"
 
 namespace tinytorch {
 
 struct AutogradMeta;
 class Function;
-class FuncLeaf;
 
 class Tensor {
  public:
@@ -94,18 +95,17 @@ class Tensor {
   Tensor squeeze(int32_t dim = -1) const;
   Tensor unsqueeze(int32_t dim) const;
 
- public:
   bool isRequiresGrad() const;
 
   void setRequiresGrad(bool requires);
 
-  void backward(const Tensor &grad = {});
+  void backward(const Tensor &grad = {}) const;
 
   const Tensor &getGrad() const;
 
-  void setGrad(const Tensor &grad);
+  const AutogradMeta &gradMeta() const;
 
-  void zeroGrad();
+  void zeroGrad() const;
 
   std::shared_ptr<Function> getGradFunc() const;
 
@@ -128,7 +128,6 @@ class Tensor {
   void initAutograd(bool requiresGrad,
                     const std::shared_ptr<Function> &gradFunc = nullptr);
 
- private:
   bool requiresGrad_ = false;
   std::shared_ptr<TensorImpl> data_;
   std::shared_ptr<AutogradMeta> gradMeta_ = nullptr;
@@ -139,13 +138,24 @@ class Tensor {
 };
 
 struct AutogradMeta : std::enable_shared_from_this<AutogradMeta> {
+  AutogradMeta(Shape shape, const Device &device)
+      : shape_(std::move(shape)), device_(device) {}
+
   void setGradFunc(const std::shared_ptr<Function> &gradFunc);
   void backward(const Tensor &grad);
+
+  void setGrad(const TensorImpl &grad) const;
+  void setGrad(TensorImpl &&grad) const;
+
+  void addGrad(const TensorImpl &grad) const;
+  void addGrad(TensorImpl &&grad) const;
+
   void buildBackwardGraph();
 
   Tensor grad_;
+  Shape shape_;
+  Device device_;
   std::shared_ptr<Function> gradFunc_;
-  std::shared_ptr<FuncLeaf> gradLeaf_;
   std::vector<std::shared_ptr<Function>> backwardGraph_;
 };
 

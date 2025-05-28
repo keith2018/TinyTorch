@@ -109,21 +109,23 @@ class Function : public std::enable_shared_from_this<Function> {
 
   virtual FunctionType type() const = 0;
   std::string typeString() const { return funcTypeToString_[type()]; }
-  Tensor callForward(const std::vector<const Tensor*>& inputs);
-  std::vector<TensorImpl> callBackward(const TensorImpl& grad);
+  Tensor callForward(const std::vector<Tensor>& inputs);
+  void callBackward(const TensorImpl& grad);
+
   void setOwner(const std::shared_ptr<AutogradMeta>& meta) { owner_ = meta; }
+  std::shared_ptr<AutogradMeta> getOwner() const { return owner_.lock(); }
 
  protected:
-  virtual TensorImpl forward(const std::vector<const Tensor*>& inputs) = 0;
-  virtual std::vector<TensorImpl> backward(const TensorImpl& grad) = 0;
+  virtual TensorImpl forward(const std::vector<Tensor>& inputs) = 0;
+  virtual void backward(const TensorImpl& grad) = 0;
 
-  void saveForBackward(const std::vector<const Tensor*>& tensors) {
+  void saveForBackward(const std::vector<Tensor>& tensors) {
     if (!NoGradScope::isGradEnabled()) {
       return;
     }
     savedTensors_.reserve(savedTensors_.size() + tensors.size());
     for (const auto& t : tensors) {
-      savedTensors_.push_back(*t);
+      savedTensors_.push_back(t);
     }
   }
   Tensor& getSavedTensors(int32_t idx) { return savedTensors_[idx]; }
@@ -136,10 +138,10 @@ class Function : public std::enable_shared_from_this<Function> {
   static std::unordered_map<FunctionType, std::string> funcTypeToString_;
 };
 
-#define DEFINE_FUNCTION_MEMBERS(TYPE)                                    \
-  FunctionType type() const override { return TYPE; }                    \
-  TensorImpl forward(const std::vector<const Tensor*>& inputs) override; \
-  std::vector<TensorImpl> backward(const TensorImpl& grad) override;
+#define DEFINE_FUNCTION_MEMBERS(TYPE)                             \
+  FunctionType type() const override { return TYPE; }             \
+  TensorImpl forward(const std::vector<Tensor>& inputs) override; \
+  void backward(const TensorImpl& grad) override;
 
 class FuncLeaf : public Function {
  public:
