@@ -4,7 +4,9 @@
  *
  */
 
-#include "Torch.h"
+#include "TinyTorch.h"
+#include "Utils/CUDAUtils.h"
+#include "Utils/Timer.h"
 
 using namespace tinytorch;
 
@@ -15,17 +17,17 @@ class Net : public nn::Module {
 
   Tensor forward(Tensor &x) override {
     x = conv1(x);
-    x = Function::relu(x);
+    x = function::relu(x);
     x = conv2(x);
-    x = Function::relu(x);
-    x = Function::maxPool2d(x, 2);
+    x = function::relu(x);
+    x = function::maxPool2d(x, 2, 2);
     x = dropout1(x);
-    x = Tensor::flatten(x, 1);
+    x = function::flatten(x, 1);
     x = fc1(x);
-    x = Function::relu(x);
+    x = function::relu(x);
     x = dropout2(x);
     x = fc2(x);
-    x = Function::logSoftmax(x, 1);
+    x = function::logSoftmax(x, 1);
     return x;
   }
 
@@ -67,22 +69,24 @@ struct TrainArgs {
   // how many batches to wait before logging training status
   int32_t logInterval = 10;
 
-  // For Saving the current Model
-  bool saveModel = false;
+  // saving the current model
+  bool saveModel = true;
+
+  // load pretrained model
+  std::string pretrainedModelPath;
 };
 
-void train(TrainArgs &args, nn::Module &model, Device device,
-           data::DataLoader &dataLoader, optim::Optimizer &optimizer,
+void train(TrainArgs &args, nn::Module &model, Device device, data::DataLoader &dataLoader, optim::Optimizer &optimizer,
            int32_t epoch) {
   model.train();
   Timer timer;
   timer.start();
   for (auto [batchIdx, batch] : dataLoader) {
-    auto &data = batch[0].to(device);
-    auto &target = batch[1].to(device);
+    auto data = batch[0].to(device);
+    auto target = batch[1].to(device);
     optimizer.zeroGrad();
     auto output = model(data);
-    auto loss = Function::nllloss(output, target);
+    auto loss = function::nllLoss(output, target);
     loss.backward();
     optimizer.step();
 
@@ -91,9 +95,8 @@ void train(TrainArgs &args, nn::Module &model, Device device,
       auto currDataCnt = batchIdx * dataLoader.batchSize();
       auto totalDataCnt = dataLoader.dataset().size();
       auto elapsed = (float)timer.elapseMillis() / 1000.f;  // seconds
-      LOGD("Train Epoch: %d [%d/%d (%.0f%%)] Loss: %.6f, Elapsed: %.2fs", epoch,
-           currDataCnt, totalDataCnt, 100.f * currDataCnt / (float)totalDataCnt,
-           loss.item(), elapsed);
+      LOGD("Train Epoch: %d [%d/%d (%.0f%%)] Loss: %.6f, Elapsed: %.2fs", epoch, currDataCnt, totalDataCnt,
+           100.f * currDataCnt / (float)totalDataCnt, loss.item<float>(), elapsed);
 
       if (args.dryRun) {
         break;
@@ -108,15 +111,15 @@ void test(nn::Module &model, Device device, data::DataLoader &dataLoader) {
   timer.start();
   auto testLoss = 0.f;
   auto correct = 0;
-  withNoGrad {
+  WithNoGrad {
     for (auto [batchIdx, batch] : dataLoader) {
-      auto &data = batch[0].to(device);
-      auto &target = batch[1].to(device);
+      auto data = batch[0].to(device);
+      auto target = batch[1].to(device);
       auto output = model(data);
-      testLoss += Function::nllloss(output, target, SUM).item();
-      auto pred = output.data().argmax(1, true);
-      correct +=
-          (int32_t)(pred == target.data().view(pred.shape())).sum().item();
+      testLoss += function::nllLoss(output, target, LossReduction::SUM).item<float>();
+      // TODO
+      auto pred = op::maxOnDim(output, 1, true).second;
+      correct += static_cast<int>((pred == op::view(target, pred.shape())).to(DType::Float32).sum().item<float>());
     }
   }
   auto total = dataLoader.dataset().size();
@@ -138,18 +141,15 @@ void demo_mnist() {
 
   manualSeed(args.seed);
 
-  auto useCuda = (!args.noCuda) && Tensor::deviceAvailable(Device::CUDA);
-  Device device = useCuda ? Device::CUDA : Device::CPU;
+  auto useCuda = (!args.noCuda) && cuda::deviceAvailable();
+  Device device = useCuda ? Device(DeviceType::CUDA, 0) : Device(DeviceType::CPU);
   LOGD("Train with device: %s", useCuda ? "CUDA" : "CPU");
 
-  auto transform = std::make_shared<data::transforms::Compose>(
-      data::transforms::Normalize(0.1307f, 0.3081f));
+  auto transform = std::make_shared<data::transforms::Compose>(data::transforms::Normalize(0.1307f, 0.3081f));
 
   auto dataDir = "./data/";
-  auto trainDataset = std::make_shared<data::DatasetMNIST>(
-      dataDir, data::DatasetMNIST::TRAIN, transform);
-  auto testDataset = std::make_shared<data::DatasetMNIST>(
-      dataDir, data::DatasetMNIST::TEST, transform);
+  auto trainDataset = std::make_shared<data::DatasetMNIST>(dataDir, data::DatasetMNIST::TRAIN, transform);
+  auto testDataset = std::make_shared<data::DatasetMNIST>(dataDir, data::DatasetMNIST::TEST, transform);
 
   if (trainDataset->size() == 0 || testDataset->size() == 0) {
     LOGE("Dataset invalid.");
@@ -160,6 +160,9 @@ void demo_mnist() {
   auto testDataloader = data::DataLoader(testDataset, args.testBatchSize, true);
 
   auto model = Net();
+  if (!args.pretrainedModelPath.empty()) {
+    load(model, args.pretrainedModelPath.c_str());
+  }
   model.to(device);
 
   auto optimizer = optim::AdaDelta(model.parameters(), args.lr);

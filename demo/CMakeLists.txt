@@ -16,10 +16,10 @@ add_executable(${PROJECT_NAME}
         main.cpp)
 
 target_include_directories(${PROJECT_NAME} PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/../TinyTorch
+        ${CMAKE_CURRENT_SOURCE_DIR}/../src
 )
 
-target_link_libraries(${PROJECT_NAME} TinyTorch)
+target_link_libraries(${PROJECT_NAME} TinyTorch_lib)
 
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_CURRENT_SOURCE_DIR}/bin)
 SET(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/../bin)

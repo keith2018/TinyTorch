@@ -4,7 +4,9 @@
  *
  */
 
-#include "Torch.h"
+#include "TinyTorch.h"
+#include "Utils/MathUtils.h"
+#include "Utils/Timer.h"
 
 using namespace tinytorch;
 
@@ -14,13 +16,14 @@ void demo_autograd() {
   Timer timer;
   timer.start();
 
-  auto x = Tensor::linspace(-PI, PI, 2000);
+  auto x = Tensor::linspace(-PI_FLT, PI_FLT, 2000);
   auto y = x.sin();
 
-  auto a = Tensor::randn({}, true);
-  auto b = Tensor::randn({}, true);
-  auto c = Tensor::randn({}, true);
-  auto d = Tensor::randn({}, true);
+  Options options = options::requiresGrad(true);
+  auto a = Tensor::randn({}, options);
+  auto b = Tensor::randn({}, options);
+  auto c = Tensor::randn({}, options);
+  auto d = Tensor::randn({}, options);
 
   constexpr float learningRate = 1e-6f;
   for (int t = 0; t < 2000; t++) {
@@ -28,16 +31,16 @@ void demo_autograd() {
     auto loss = (yPred - y).pow(2).sum();
 
     if (t % 100 == 99) {
-      LOGD("t: %d, loss: %f", t, loss.item());
+      LOGD("t: %d, loss: %f", t, loss.item<float>());
     }
 
     loss.backward();
 
-    withNoGrad {
-      a -= learningRate * a.getGrad();
-      b -= learningRate * b.getGrad();
-      c -= learningRate * c.getGrad();
-      d -= learningRate * d.getGrad();
+    WithNoGrad {
+      a -= learningRate * a.grad();
+      b -= learningRate * b.grad();
+      c -= learningRate * c.grad();
+      d -= learningRate * d.grad();
 
       a.zeroGrad();
       b.zeroGrad();
@@ -46,8 +49,7 @@ void demo_autograd() {
     }
   }
 
-  LOGD("Result: y = %f + %f x + %f x^2 + %f x^3", a.item(), b.item(), c.item(),
-       d.item());
+  LOGD("Result: y = %f + %f x + %f x^2 + %f x^3", a.item<float>(), b.item<float>(), c.item<float>(), d.item<float>());
 
   timer.mark();
   LOGD("Time cost: %lld ms", timer.elapseMillis());

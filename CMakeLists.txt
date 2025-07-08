@@ -9,15 +9,15 @@ if (APPLE)
     set(TINYTORCH_USE_CUDA OFF)
 endif ()
 
-message(STATUS "BUILD_DEMO ${TINYTORCH_BUILD_DEMO}")
-message(STATUS "BUILD_TEST ${TINYTORCH_BUILD_TEST}")
-message(STATUS "USE_CUDA ${TINYTORCH_USE_CUDA}")
+message(STATUS "TINYTORCH_BUILD_DEMO ${TINYTORCH_BUILD_DEMO}")
+message(STATUS "TINYTORCH_BUILD_TEST ${TINYTORCH_BUILD_TEST}")
+message(STATUS "TINYTORCH_USE_CUDA ${TINYTORCH_USE_CUDA}")
 
 if (${TINYTORCH_USE_CUDA})
     add_definitions(-DUSE_CUDA)
 endif ()
 
-add_subdirectory(TinyTorch)
+add_subdirectory(src)
 
 if (${TINYTORCH_BUILD_DEMO})
     add_subdirectory(demo)
@@ -27,7 +27,7 @@ if (${TINYTORCH_BUILD_TEST})
     message(STATUS "Building tests")
 
     option(TINYTORCH_TEST_CUDA "Test CUDA" OFF)
-    message(STATUS "TEST_CUDA ${TINYTORCH_TEST_CUDA}")
+    message(STATUS "TINYTORCH_TEST_CUDA ${TINYTORCH_TEST_CUDA}")
 
     if (${TINYTORCH_TEST_CUDA})
         add_definitions(-DDEFAULT_DEVICE_CUDA)
