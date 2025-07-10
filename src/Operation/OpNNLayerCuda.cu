@@ -21,6 +21,9 @@ void registerNNLayerCuda() {
 
   // dropout
   REGISTER_OP_IMPL_DTYPE_TPL(dropout, CUDA, dropoutOpCudaImpl);
+
+  // layerNorm
+  REGISTER_OP_IMPL_DTYPE_TPL(layerNorm, CUDA, layerNormOpCudaImpl);
 }
 
 }  // namespace tinytorch::op

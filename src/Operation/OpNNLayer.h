@@ -29,6 +29,8 @@ using SoftmaxOpBackwardFn = Tensor (*)(const Tensor& grad, const Tensor& output,
 
 using DropoutOpFn = Tensor (*)(const Tensor& grad, const Tensor& mask, float p);
 
+using LayerNormOpFn = Tensor (*)(const Tensor& self, const Tensor& weight, const Tensor& bias, float eps);
+
 // softmax
 DEFINE_OP(softmax, SoftmaxOpFn);
 DEFINE_OP(softmaxOut, SoftmaxOpOutFn);
@@ -41,6 +43,9 @@ DEFINE_OP(logSoftmaxBackward, SoftmaxOpBackwardFn);
 
 // dropout
 DEFINE_OP(dropout, DropoutOpFn);
+
+// layerNorm
+DEFINE_OP(layerNorm, LayerNormOpFn);
 
 void registerNNLayerCpu();
 void registerNNLayerCuda();

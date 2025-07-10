@@ -21,6 +21,9 @@ void registerNNLayerCpu() {
 
   // dropout
   REGISTER_OP_IMPL_DTYPE_TPL(dropout, CPU, dropoutOpCpuImpl);
+
+  // layerNorm
+  REGISTER_OP_IMPL_DTYPE_TPL(layerNorm, CPU, layerNormOpCpuImpl);
 }
 
 }  // namespace tinytorch::op

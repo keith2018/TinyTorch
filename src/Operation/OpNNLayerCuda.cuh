@@ -175,6 +175,74 @@ __global__ void kLogSoftmaxBackward(T* out, const T* output, const T* grad, int6
   }
 }
 
+template <typename T>
+__global__ void kLayerNormForward(T* out, const T* self, const T* weight, const T* bias, int64_t d, float eps) {
+  __shared__ T warpShared[32];
+
+  auto row = blockIdx.x;
+  auto tid = threadIdx.x;
+  auto lane = tid & 0x1f;
+  auto wid = tid >> 5;
+
+  auto base = row * d;
+
+  // mean
+  T mean = 0;
+  for (auto i = tid; i < d; i += blockDim.x) {
+    mean += self[base + i];
+  }
+  cudaWarpReduce<T, OpCudaReduceSum>(mean);
+
+  if (lane == 0) {
+    warpShared[wid] = mean;
+  }
+  __syncthreads();
+
+  T blockMean = 0;
+  if (wid == 0) {
+    blockMean = (tid < (blockDim.x >> 5)) ? warpShared[lane] : 0;
+    cudaWarpReduce<T, OpCudaReduceSum>(blockMean);
+    if (tid == 0) {
+      warpShared[0] = blockMean;
+    }
+  }
+  __syncthreads();
+  blockMean = warpShared[0] / static_cast<T>(d);
+
+  // var
+  T var = 0;
+  for (auto i = tid; i < d; i += blockDim.x) {
+    T diff = self[base + i] - blockMean;
+    var += diff * diff;
+  }
+  cudaWarpReduce<T, OpCudaReduceSum>(var);
+
+  if (lane == 0) {
+    warpShared[wid] = var;
+  }
+  __syncthreads();
+
+  T blockVar = 0;
+  if (wid == 0) {
+    blockVar = (tid < (blockDim.x >> 5)) ? warpShared[lane] : 0;
+    cudaWarpReduce<T, OpCudaReduceSum>(blockVar);
+    if (tid == 0) {
+      warpShared[0] = blockVar;
+    }
+  }
+  __syncthreads();
+  blockVar = warpShared[0] / static_cast<T>(d);
+  T invStd = static_cast<T>(1) / sqrtf(blockVar + eps);
+
+  // norm + affine
+  for (auto i = tid; i < d; i += blockDim.x) {
+    T normed = (self[base + i] - blockMean) * invStd;
+    if (weight) normed *= weight[i];
+    if (bias) normed += bias[i];
+    out[base + i] = normed;
+  }
+}
+
 template <typename T, SoftmaxType type>
 void softmaxForwardCudaImpl(Tensor& out, const Tensor& self, int64_t dim) {
   ASSERT(out.shape() == self.shape());
@@ -260,6 +328,26 @@ Tensor dropoutOpCudaImpl(const Tensor& grad, const Tensor& mask, float p) {
   ASSERT(iterator.isBroadcastOk());
   Tensor out(outShape, grad.options().noGrad());
   iterator.template forEach<T>(out, [p] __device__(const T& a, const T& b) -> T { return a * b / p; });
+  return out;
+}
+
+template <typename T>
+Tensor layerNormOpCudaImpl(const Tensor& self, const Tensor& weight, const Tensor& bias, float eps) {
+  int64_t d = self.shape().back();
+  int64_t n = self.numel() / d;
+  ASSERT(d <= 1024);
+  Tensor out(self.shape(), self.options().noGrad());
+
+  const auto* selfPtr = self.dataPtr<T>();
+  const auto* weightPtr = weight.defined() ? weight.dataPtr<T>() : nullptr;
+  const auto* biasPtr = bias.defined() ? bias.dataPtr<T>() : nullptr;
+
+  auto* outPtr = out.dataPtr<T>();
+
+  dim3 block(std::clamp(nextPow2(d), 32u, 1024u));
+  dim3 grid(n);
+  auto stream = cuda::getCurrentCUDAStream(self.device().index).stream;
+  kLayerNormForward<T><<<grid, block, 0, stream>>>(outPtr, selfPtr, weightPtr, biasPtr, d, eps);
   return out;
 }
 

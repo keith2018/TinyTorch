@@ -361,3 +361,12 @@ TEST(TEST_Function, func_conv2d_03) {
   EXPECT_THAT(weight.grad().toList<float>(), ElementsAre(54, 63, 90, 99, 54, 63, 90, 99));
   EXPECT_THAT(bias.grad().toList<float>(), ElementsAre(9));
 }
+
+TEST(TEST_Function, func_layerNorm) {
+  auto input = Tensor(Array2d<float>{{1.4176, 0.1874, 0.8367}, {-0.1203, 2.5638, -1.2554}});
+  auto w = Tensor(Array1d<float>{1.4072, -0.4768, -0.6006});
+  auto b = Tensor(Array1d<float>{-0.1609, -0.4865, -0.6256});
+  auto y = function::layerNorm(input, w, b);
+  EXPECT_TRUE(y.shape() == input.shape());
+  EXPECT_TRUE(VectorNear(y.toList<float>(), {1.5297, 0.1079, -0.6529, -0.6147, -1.1319, -0.0062}));
+}

@@ -217,6 +217,25 @@ class FuncConv2D : public Function<FuncConv2D> {
   }
 };
 
+class FuncLayerNorm : public Function<FuncLayerNorm> {
+ public:
+  static Tensor forward(AutogradContext* ctx, const Tensor& input, const Tensor& weight, const Tensor& bias,
+                        float eps) {
+    return op::layerNorm(input, weight, bias, eps);
+  }
+
+  static TensorList backward(AutogradContext* ctx, const Tensor& grad) {
+    auto& input = ctx->savedInputs[0];
+    auto& weight = ctx->savedInputs[1];
+    auto& bias = ctx->savedInputs[2];
+
+    TensorList ret;
+    // TODO
+    NOT_IMPLEMENTED();
+    return ret;
+  }
+};
+
 inline Tensor linear(const Tensor& input, const Tensor& weight, const Tensor& bias = {}) {
   return FuncLinear::apply(input, weight, bias);
 }
@@ -234,6 +253,8 @@ inline Tensor conv2d(const Tensor& input, const Tensor& weight, const Tensor& bi
   return FuncConv2D::apply(input, weight, bias, stride, padding);
 }
 
-// TODO BatchNorm
+inline Tensor layerNorm(const Tensor& input, const Tensor& weight, const Tensor& bias, float eps = 1e-5f) {
+  return FuncLayerNorm::apply(input, weight, bias, eps);
+}
 
 }  // namespace tinytorch::function

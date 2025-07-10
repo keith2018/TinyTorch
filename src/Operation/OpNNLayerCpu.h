@@ -163,4 +163,46 @@ Tensor dropoutOpCpuImpl(const Tensor& grad, const Tensor& mask, float p) {
   return out;
 }
 
+template <typename T>
+Tensor layerNormOpCpuImpl(const Tensor& self, const Tensor& weight, const Tensor& bias, float eps) {
+  int64_t d = self.shape().back();
+  int64_t n = self.numel() / d;
+
+  Tensor out(self.shape(), self.options().noGrad());
+
+  const auto* selfPtr = self.dataPtr<T>();
+  const auto* weightPtr = weight.defined() ? weight.dataPtr<T>() : nullptr;
+  const auto* biasPtr = bias.defined() ? bias.dataPtr<T>() : nullptr;
+
+  auto* outPtr = out.dataPtr<T>();
+
+  for (auto i = 0; i < n; i++) {
+    const T* src = selfPtr + i * d;
+    T* dst = outPtr + i * d;
+    // mean
+    T mean = 0.f;
+    for (auto j = 0; j < d; j++) {
+      mean += src[j];
+    }
+    mean /= static_cast<T>(d);
+    // var
+    T var = 0.f;
+    for (auto j = 0; j < d; j++) {
+      T diff = src[j] - mean;
+      var += diff * diff;
+    }
+    var /= static_cast<T>(d);
+    T invStd = 1.f / std::sqrt(var + eps);
+    // norm + affine
+    for (auto j = 0; j < d; j++) {
+      T normed = (src[j] - mean) * invStd;
+      if (weightPtr) normed *= weightPtr[j];
+      if (biasPtr) normed += biasPtr[j];
+      dst[j] = normed;
+    }
+  }
+
+  return out;
+}
+
 }  // namespace tinytorch::op
