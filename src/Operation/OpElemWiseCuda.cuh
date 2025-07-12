@@ -115,7 +115,14 @@ struct OpCudaGelu {
   __device__ static T apply(const T& a) {
     constexpr float sqrt2OverPi = 0.7978845608f;  // sqrt(2/pi)
     float tanhArg = sqrt2OverPi * (a + 0.044715f * a * a * a);
-    return 0.5f * a * (1.0f + tanhf(tanhArg));
+    return 0.5f * a * (1.0f + ::tanhf(tanhArg));
+  }
+};
+
+struct OpCudaSilu {
+  template <typename T>
+  __device__ static T apply(const T& a) {
+    return a / (1.0f + ::expf(-a));
   }
 };
 

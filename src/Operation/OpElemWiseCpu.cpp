@@ -81,6 +81,11 @@ void registerUnaryCpuFloat32() {
   REG_ELEM_WISE_CPU_F32(gelu, unaryOpCpuImpl, OpCpuGelu);
   REG_ELEM_WISE_CPU_F32(geluOut, unaryOpOutCpuImpl, OpCpuGelu);
   REG_ELEM_WISE_CPU_F32(geluInplace, unaryOpInplaceCpuImpl, OpCpuGelu);
+
+  // silu
+  REG_ELEM_WISE_CPU_F32(silu, unaryOpCpuImpl, OpCpuSilu);
+  REG_ELEM_WISE_CPU_F32(siluOut, unaryOpOutCpuImpl, OpCpuSilu);
+  REG_ELEM_WISE_CPU_F32(siluInplace, unaryOpInplaceCpuImpl, OpCpuSilu);
 }
 
 void registerBinaryCpuFloat32() {

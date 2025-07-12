@@ -131,6 +131,16 @@ TEST(TEST_Function, func_gelu) {
   Tensor x(Array1d<float>{-1., -0.5, 0.5, 1.});
   auto y = function::gelu(x);
   EXPECT_TRUE(VectorNear(y.toList<float>(), {-0.1587, -0.1543, 0.3457, 0.8413}));
+  // y.backward(Tensor::onesLike(y));
+  // EXPECT_TRUE(VectorNear(x.grad().toList<float>(), {-0.0833, 0.1325, 0.8675, 1.0833}));
+}
+
+TEST(TEST_Function, func_silu) {
+  Tensor x(Array1d<float>{-1., -0.5, 0.5, 1.});
+  auto y = function::silu(x);
+  EXPECT_TRUE(VectorNear(y.toList<float>(), {-0.2689, -0.1888, 0.3112, 0.7311}));
+  // y.backward(Tensor::onesLike(y));
+  // EXPECT_TRUE(VectorNear(x.grad().toList<float>(), {0.0723, 0.2600, 0.7400, 0.9277}));
 }
 
 TEST(TEST_Function, func_softmax) {

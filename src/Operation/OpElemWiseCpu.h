@@ -116,7 +116,14 @@ struct OpCpuGelu {
   static T apply(const T& a) {
     constexpr float sqrt2OverPi = 0.7978845608f;  // sqrt(2/pi)
     float tanhArg = sqrt2OverPi * (a + 0.044715f * a * a * a);
-    return 0.5f * a * (1.0f + tanhf(tanhArg));
+    return 0.5f * a * (1.0f + std::tanh(tanhArg));
+  }
+};
+
+struct OpCpuSilu {
+  template <typename T>
+  static T apply(const T& a) {
+    return a / (1.0f + std::exp(-a));
   }
 };
 

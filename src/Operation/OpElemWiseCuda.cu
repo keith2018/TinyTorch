@@ -81,6 +81,11 @@ void registerUnaryCudaFloat32() {
   REG_ELEM_WISE_CUDA_F32(gelu, unaryOpCudaImpl, OpCudaGelu);
   REG_ELEM_WISE_CUDA_F32(geluOut, unaryOpOutCudaImpl, OpCudaGelu);
   REG_ELEM_WISE_CUDA_F32(geluInplace, unaryOpInplaceCudaImpl, OpCudaGelu);
+
+  // silu
+  REG_ELEM_WISE_CUDA_F32(silu, unaryOpCudaImpl, OpCudaSilu);
+  REG_ELEM_WISE_CUDA_F32(siluOut, unaryOpOutCudaImpl, OpCudaSilu);
+  REG_ELEM_WISE_CUDA_F32(siluInplace, unaryOpInplaceCudaImpl, OpCudaSilu);
 }
 
 void registerBinaryCudaFloat32() {

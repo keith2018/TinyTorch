@@ -100,6 +100,11 @@ DEFINE_OP(gelu, UnaryOpFn)
 DEFINE_OP(geluOut, UnaryOpOutFn)
 DEFINE_OP(geluInplace, UnaryOpInplaceFn)
 
+// silu
+DEFINE_OP(silu, UnaryOpFn)
+DEFINE_OP(siluOut, UnaryOpOutFn)
+DEFINE_OP(siluInplace, UnaryOpInplaceFn)
+
 // add
 DEFINE_OP(add, BinaryOpAlphaFn)
 DEFINE_OP(addOut, BinaryOpAlphaOutFn)
