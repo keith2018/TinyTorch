@@ -70,7 +70,7 @@ struct TrainArgs {
   int32_t logInterval = 10;
 
   // saving the current model
-  bool saveModel = true;
+  bool saveModel = false;
 
   // load pretrained model
   std::string pretrainedModelPath;
