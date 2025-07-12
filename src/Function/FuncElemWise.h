@@ -17,14 +17,12 @@ class FuncSin : public Function<FuncSin> {
  public:
   static Tensor forward(AutogradContext* ctx, const Tensor& self) { return op::sin(self); }
 
-  static TensorList backward(AutogradContext* ctx, const Tensor& grad) {
+  static void backward(AutogradContext* ctx, const Tensor& grad) {
     auto& self = ctx->savedInputs[0];
 
-    TensorList ret;
     if (self.requiresGrad()) {
-      ret.push_back(std::move(op::sinBackwardP1(grad, self)));
+      self.addGrad(std::move(op::sinBackwardP1(grad, self)));
     }
-    return ret;
   }
 };
 
@@ -32,14 +30,12 @@ class FuncCos : public Function<FuncCos> {
  public:
   static Tensor forward(AutogradContext* ctx, const Tensor& self) { return op::cos(self); }
 
-  static TensorList backward(AutogradContext* ctx, const Tensor& grad) {
+  static void backward(AutogradContext* ctx, const Tensor& grad) {
     auto& self = ctx->savedInputs[0];
 
-    TensorList ret;
     if (self.requiresGrad()) {
-      ret.push_back(std::move(op::cosBackwardP1(grad, self)));
+      self.addGrad(std::move(op::cosBackwardP1(grad, self)));
     }
-    return ret;
   }
 };
 
@@ -49,18 +45,16 @@ class FuncAdd : public Function<FuncAdd> {
     return op::add(self, other, alpha);
   }
 
-  static TensorList backward(AutogradContext* ctx, const Tensor& grad) {
+  static void backward(AutogradContext* ctx, const Tensor& grad) {
     auto& self = ctx->savedInputs[0];
     auto& other = ctx->savedInputs[1];
 
-    TensorList ret;
     if (self.requiresGrad()) {
-      ret.push_back(std::move(reduceGrad(self, grad)));
+      self.addGrad(std::move(reduceGrad(self, grad)));
     }
     if (other.requiresGrad()) {
-      ret.push_back(std::move(reduceGrad(other, grad)));
+      other.addGrad(std::move(reduceGrad(other, grad)));
     }
-    return ret;
   }
 };
 
@@ -70,18 +64,16 @@ class FuncSub : public Function<FuncSub> {
     return op::sub(self, other, alpha);
   }
 
-  static TensorList backward(AutogradContext* ctx, const Tensor& grad) {
+  static void backward(AutogradContext* ctx, const Tensor& grad) {
     auto& self = ctx->savedInputs[0];
     auto& other = ctx->savedInputs[1];
 
-    TensorList ret;
     if (self.requiresGrad()) {
-      ret.push_back(std::move(reduceGrad(self, grad)));
+      self.addGrad(std::move(reduceGrad(self, grad)));
     }
     if (other.requiresGrad()) {
-      ret.push_back(std::move(reduceGrad(other, op::neg(grad))));
+      other.addGrad(std::move(reduceGrad(other, op::neg(grad))));
     }
-    return ret;
   }
 };
 
@@ -89,18 +81,16 @@ class FuncMul : public Function<FuncMul> {
  public:
   static Tensor forward(AutogradContext* ctx, const Tensor& self, const Tensor& other) { return op::mul(self, other); }
 
-  static TensorList backward(AutogradContext* ctx, const Tensor& grad) {
+  static void backward(AutogradContext* ctx, const Tensor& grad) {
     auto& self = ctx->savedInputs[0];
     auto& other = ctx->savedInputs[1];
 
-    TensorList ret;
     if (self.requiresGrad()) {
-      ret.push_back(std::move(reduceGrad(self, op::mul(grad, other))));
+      self.addGrad(std::move(reduceGrad(self, op::mul(grad, other))));
     }
     if (other.requiresGrad()) {
-      ret.push_back(std::move(reduceGrad(other, op::mul(grad, self))));
+      other.addGrad(std::move(reduceGrad(other, op::mul(grad, self))));
     }
-    return ret;
   }
 };
 
@@ -108,18 +98,16 @@ class FuncDiv : public Function<FuncDiv> {
  public:
   static Tensor forward(AutogradContext* ctx, const Tensor& self, const Tensor& other) { return op::div(self, other); }
 
-  static TensorList backward(AutogradContext* ctx, const Tensor& grad) {
+  static void backward(AutogradContext* ctx, const Tensor& grad) {
     auto& self = ctx->savedInputs[0];
     auto& other = ctx->savedInputs[1];
 
-    TensorList ret;
     if (self.requiresGrad()) {
-      ret.push_back(std::move(reduceGrad(self, op::div(grad, other))));
+      self.addGrad(std::move(reduceGrad(self, op::div(grad, other))));
     }
     if (other.requiresGrad()) {
-      ret.push_back(std::move(reduceGrad(other, op::divBackwardP2(grad, self, other))));
+      other.addGrad(std::move(reduceGrad(other, op::divBackwardP2(grad, self, other))));
     }
-    return ret;
   }
 };
 
@@ -127,18 +115,16 @@ class FuncPow : public Function<FuncPow> {
  public:
   static Tensor forward(AutogradContext* ctx, const Tensor& self, const Tensor& other) { return op::pow(self, other); }
 
-  static TensorList backward(AutogradContext* ctx, const Tensor& grad) {
+  static void backward(AutogradContext* ctx, const Tensor& grad) {
     auto& self = ctx->savedInputs[0];
     auto& other = ctx->savedInputs[1];
 
-    TensorList ret;
     if (self.requiresGrad()) {
-      ret.push_back(std::move(reduceGrad(self, op::powBackwardP1(grad, self, other))));
+      self.addGrad(std::move(reduceGrad(self, op::powBackwardP1(grad, self, other))));
     }
     if (other.requiresGrad()) {
-      ret.push_back(std::move(reduceGrad(other, op::powBackwardP2(grad, self, other))));
+      other.addGrad(std::move(reduceGrad(other, op::powBackwardP2(grad, self, other))));
     }
-    return ret;
   }
 };
 
@@ -148,11 +134,9 @@ class FuncMaximum : public Function<FuncMaximum> {
     return op::maximum(self, other);
   }
 
-  static TensorList backward(AutogradContext* ctx, const Tensor& grad) {
-    TensorList ret;
+  static void backward(AutogradContext* ctx, const Tensor& grad) {
     // TODO
     NOT_IMPLEMENTED();
-    return ret;
   }
 };
 
@@ -162,11 +146,9 @@ class FuncMinimum : public Function<FuncMinimum> {
     return op::minimum(self, other);
   }
 
-  static TensorList backward(AutogradContext* ctx, const Tensor& grad) {
-    TensorList ret;
+  static void backward(AutogradContext* ctx, const Tensor& grad) {
     // TODO
     NOT_IMPLEMENTED();
-    return ret;
   }
 };
 

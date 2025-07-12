@@ -35,7 +35,7 @@ struct AutogradContext {
 
 struct FunctionBase : std::enable_shared_from_this<FunctionBase> {
   virtual ~FunctionBase() = default;
-  virtual TensorList backward(const Tensor& grad) = 0;
+  virtual void backward(const Tensor& grad) = 0;
 
   std::vector<std::weak_ptr<FunctionBase>> nextFunctions;
   std::shared_ptr<AutogradContext> ctx;
@@ -49,7 +49,7 @@ template <class T>
 struct Function {
   struct FunctionInstance : FunctionBase {
     explicit FunctionInstance(std::shared_ptr<AutogradContext> c) { ctx = std::move(c); }
-    TensorList backward(const Tensor& grad) override { return T::backward(ctx.get(), grad); }
+    void backward(const Tensor& grad) override { T::backward(ctx.get(), grad); }
   };
 
   template <typename X = T, typename... Args>
@@ -96,7 +96,7 @@ auto Function<T>::apply(Args&&... args) -> std::enable_if_t<std::is_same_v<X, T>
 
 class FuncLeaf : public FunctionBase {
  public:
-  TensorList backward(const Tensor& grad) override;
+  void backward(const Tensor& grad) override;
 };
 
 }  // namespace tinytorch

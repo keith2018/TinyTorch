@@ -22,16 +22,15 @@ namespace tinytorch::function {
       return output;                                                                                                  \
     }                                                                                                                 \
                                                                                                                       \
-    static TensorList backward(AutogradContext* ctx, const Tensor& grad) {                                            \
+    static void backward(AutogradContext* ctx, const Tensor& grad) {                                                  \
       auto& input = ctx->savedInputs[0];                                                                              \
       auto& target = ctx->savedInputs[1];                                                                             \
       auto reduction = ctx->popData().toEnum<LossReduction>();                                                        \
-      TensorList ret;                                                                                                 \
+                                                                                                                      \
       if (input.requiresGrad()) {                                                                                     \
-        ret.push_back(std::move(BACKWARD_OP(grad, input, target, reduction)));                                        \
+        input.addGrad(std::move(BACKWARD_OP(grad, input, target, reduction)));                                        \
       }                                                                                                               \
       ASSERT(!target.requiresGrad());                                                                                 \
-      return ret;                                                                                                     \
     }                                                                                                                 \
   };
 

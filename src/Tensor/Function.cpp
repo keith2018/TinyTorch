@@ -10,15 +10,14 @@
 
 namespace tinytorch {
 
-TensorList FuncLeaf::backward(const Tensor& grad) {
+void FuncLeaf::backward(const Tensor& grad) {
   auto owner = weakOwner.lock();
   if (owner == nullptr) {
-    ASSERT(false);
-    return {};
+    ASSERT(false && "backward error: FuncLeaf no owner");
+    return;
   }
 
-  owner->grad_ = grad;
-  return {};
+  owner->setGrad(grad);
 }
 
 }  // namespace tinytorch

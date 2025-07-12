@@ -15,6 +15,44 @@
 
 namespace tinytorch {
 
+void AutogradMeta::setGradFn(const std::shared_ptr<FunctionBase> &fn) {
+  ASSERT(fn != nullptr);
+  gradFn_ = fn;
+  fn->weakOwner = shared_from_this();
+}
+
+void AutogradMeta::setGrad(const Tensor &grad) { grad_ = grad; }
+
+void AutogradMeta::setGrad(Tensor &&grad) { grad_ = std::move(grad); }
+
+void AutogradMeta::addGrad(const Tensor &grad) {
+  if (grad_.defined()) {
+    op::addInplace(grad_, grad, 1);
+  } else {
+    grad_ = grad;
+  }
+}
+
+void AutogradMeta::addGrad(Tensor &&grad) {
+  if (grad_.defined()) {
+    op::addInplace(grad_, grad, 1);
+  } else {
+    grad_ = std::move(grad);
+  }
+}
+
+void AutogradMeta::zeroGrad(const Tensor &owner) {
+  if (!grad_.defined()) {
+    grad_ = Tensor::empty(owner.shape(), owner.options().noGrad());
+  }
+  op::fill(grad_, 0);
+}
+
+bool AutogradMeta::isLeaf() const {
+  ASSERT(gradFn_ != nullptr);
+  return typeid(*gradFn_) == typeid(FuncLeaf);
+}
+
 void AutogradMeta::backward(const Tensor &grad) {
   ASSERT(grad.defined());
 
@@ -27,23 +65,11 @@ void AutogradMeta::backward(const Tensor &grad) {
     buildBackwardGraph();
   }
 
-  std::unordered_map<FunctionBase *, Tensor> inputs;
-  inputs[gradFn_.get()] = grad;
-
-  for (auto &fn : backwardGraph_) {
-    auto outputs = fn->backward(inputs[fn.get()]);
-    ASSERT(outputs.size() == fn->nextFunctions.size());
-
-    for (size_t i = 0; i < fn->nextFunctions.size(); i++) {
-      auto nextFn = fn->nextFunctions[i].lock();
-      ASSERT(nextFn != nullptr);
-      auto it = inputs.find(nextFn.get());
-      if (it != inputs.end()) {
-        op::addInplace(it->second, outputs[i], 1);
-      } else {
-        inputs[nextFn.get()] = std::move(outputs[i]);
-      }
-    }
+  addGrad(grad);
+  for (auto &currFunc : backwardGraph_) {
+    auto owner = currFunc->weakOwner.lock();
+    ASSERT(owner != nullptr);
+    currFunc->backward(owner->grad_);
   }
 }
 

@@ -112,37 +112,43 @@ Tensor Tensor::clone() const {
 
 std::shared_ptr<FunctionBase> &Tensor::gradFn() const {
   ASSERT(gradMeta_ != nullptr);
-  return gradMeta_->gradFn_;
+  return gradMeta_->gradFn();
 }
 
 void Tensor::setGradFn(const std::shared_ptr<FunctionBase> &fn) const {
   ASSERT(gradMeta_ != nullptr);
   ASSERT(fn != nullptr);
-  gradMeta_->gradFn_ = fn;
-  fn->weakOwner = gradMeta_;
+  gradMeta_->setGradFn(fn);
 }
 
 const Tensor &Tensor::grad() const {
   ASSERT(gradMeta_ != nullptr);
-  return gradMeta_->grad_;
+  return gradMeta_->grad();
 }
 
 void Tensor::setGrad(const Tensor &grad) const {
   ASSERT(gradMeta_ != nullptr);
-  gradMeta_->grad_ = grad;
+  gradMeta_->setGrad(grad);
 }
 
 void Tensor::setGrad(Tensor &&grad) const {
   ASSERT(gradMeta_ != nullptr);
-  gradMeta_->grad_ = std::move(grad);
+  gradMeta_->setGrad(std::move(grad));
+}
+
+void Tensor::addGrad(const Tensor &grad) const {
+  ASSERT(gradMeta_ != nullptr);
+  gradMeta_->addGrad(grad);
+}
+
+void Tensor::addGrad(Tensor &&grad) const {
+  ASSERT(gradMeta_ != nullptr);
+  gradMeta_->addGrad(std::move(grad));
 }
 
 void Tensor::zeroGrad() const {
   ASSERT(gradMeta_ != nullptr);
-  if (!gradMeta_->grad_.defined()) {
-    gradMeta_->grad_ = empty(shape(), options().noGrad());
-  }
-  op::fill(gradMeta_->grad_, 0);
+  gradMeta_->zeroGrad(*this);
 }
 
 void Tensor::backward(const Tensor &grad) const {
@@ -167,8 +173,7 @@ bool Tensor::isLeaf() const {
     return false;
   }
   ASSERT(gradMeta_ != nullptr);
-  ASSERT(gradMeta_->gradFn_ != nullptr);
-  return typeid(*gradMeta_->gradFn_) == typeid(FuncLeaf);
+  return gradMeta_->isLeaf();
 }
 
 Tensor Tensor::to(DType type) const {

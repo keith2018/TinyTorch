@@ -15,13 +15,12 @@ namespace tinytorch::function {
   class CLASSNAME : public Function<CLASSNAME> {                              \
    public:                                                                    \
     static Tensor forward FORWARD_SIGNATURE { FORWARD_BODY }                  \
-    static TensorList backward(AutogradContext* ctx, const Tensor& grad) {    \
+    static void backward(AutogradContext* ctx, const Tensor& grad) {          \
       auto& self = ctx->savedInputs[0];                                       \
-      TensorList ret;                                                         \
+                                                                              \
       if (self.requiresGrad()) {                                              \
-        ret.push_back(std::move(op::reshape(grad, self.shape())));            \
+        self.addGrad(std::move(op::reshape(grad, self.shape())));             \
       }                                                                       \
-      return ret;                                                             \
     }                                                                         \
   }
 

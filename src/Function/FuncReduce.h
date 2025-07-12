@@ -15,15 +15,13 @@ class FuncSum : public Function<FuncSum> {
  public:
   static Tensor forward(AutogradContext* ctx, const Tensor& self) { return op::sum(self); }
 
-  static TensorList backward(AutogradContext* ctx, const Tensor& grad) {
+  static void backward(AutogradContext* ctx, const Tensor& grad) {
     auto& self = ctx->savedInputs[0];
 
-    TensorList ret;
     if (self.requiresGrad()) {
       auto selfGrad = op::mul(grad, Tensor::onesLike(self, self.options().noGrad()));
-      ret.push_back(std::move(selfGrad));
+      self.addGrad(std::move(selfGrad));
     }
-    return ret;
   }
 };
 
@@ -33,11 +31,9 @@ class FuncSumOnDim : public Function<FuncSumOnDim> {
     return op::sumOnDim(self, dim, keepDim);
   }
 
-  static TensorList backward(AutogradContext* ctx, const Tensor& grad) {
-    TensorList ret;
+  static void backward(AutogradContext* ctx, const Tensor& grad) {
     // TODO
     NOT_IMPLEMENTED();
-    return ret;
   }
 };
 
@@ -47,11 +43,9 @@ class FuncSumOnDims : public Function<FuncSumOnDims> {
     return op::sumOnDims(self, dims, keepDim);
   }
 
-  static TensorList backward(AutogradContext* ctx, const Tensor& grad) {
-    TensorList ret;
+  static void backward(AutogradContext* ctx, const Tensor& grad) {
     // TODO
     NOT_IMPLEMENTED();
-    return ret;
   }
 };
 

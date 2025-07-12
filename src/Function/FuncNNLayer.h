@@ -22,22 +22,20 @@ class FuncLinear : public Function<FuncLinear> {
     return output;
   }
 
-  static TensorList backward(AutogradContext* ctx, const Tensor& grad) {
+  static void backward(AutogradContext* ctx, const Tensor& grad) {
     auto& input = ctx->savedInputs[0];
     auto& weight = ctx->savedInputs[1];
     auto& bias = ctx->savedInputs[2];
 
-    TensorList ret;
     if (input.requiresGrad()) {
-      ret.push_back(std::move(op::matmul(grad, weight)));
+      input.addGrad(std::move(op::matmul(grad, weight)));
     }
     if (weight.requiresGrad()) {
-      ret.push_back(std::move(op::matmulTrans(grad, input, true, false)));
+      weight.addGrad(std::move(op::matmulTrans(grad, input, true, false)));
     }
     if (bias.defined() && bias.requiresGrad()) {
-      ret.push_back(std::move(op::sumOnDim(grad, 0, false)));
+      bias.addGrad(std::move(op::sumOnDim(grad, 0, false)));
     }
-    return ret;
   }
 };
 
@@ -60,21 +58,19 @@ class FuncDropout : public Function<FuncDropout> {
     return output;
   }
 
-  static TensorList backward(AutogradContext* ctx, const Tensor& grad) {
+  static void backward(AutogradContext* ctx, const Tensor& grad) {
     auto& input = ctx->savedInputs[0];
 
-    TensorList ret;
     if (input.requiresGrad()) {
       auto training = ctx->popData().toBool();
       if (training) {
         auto p = ctx->popData().toFloat();
         auto mask = ctx->popData().toTensor();
-        ret.push_back(std::move(op::dropout(grad, mask, 1.f - p)));
+        input.addGrad(std::move(op::dropout(grad, mask, 1.f - p)));
       } else {
-        ret.push_back(grad);
+        input.addGrad(grad);
       }
     }
-    return ret;
   }
 };
 
@@ -112,7 +108,7 @@ class FuncMaxPool : public Function<FuncMaxPool> {
     return output;
   }
 
-  static TensorList backward(AutogradContext* ctx, const Tensor& grad) {
+  static void backward(AutogradContext* ctx, const Tensor& grad) {
     auto& input = ctx->savedInputs[0];
 
     auto shape = input.shape();
@@ -130,7 +126,6 @@ class FuncMaxPool : public Function<FuncMaxPool> {
     auto outH = (height - kernelSize.h + 2 * padding.h) / stride.h + 1;
     auto outW = (width - kernelSize.w + 2 * padding.w) / stride.w + 1;
 
-    TensorList ret;
     if (input.requiresGrad()) {
       auto maxIndices = ctx->popData().toTensor();
 
@@ -140,9 +135,8 @@ class FuncMaxPool : public Function<FuncMaxPool> {
       gradCol.reshape({batch * outH * outW, channels * kernelSize.h * kernelSize.w});
       auto inputGrad = op::col2im(gradCol, shape, kernelSize, stride, padding);
       // TODO fuse
-      ret.push_back(std::move(inputGrad));
+      input.addGrad(std::move(inputGrad));
     }
-    return ret;
   }
 };
 
@@ -184,7 +178,7 @@ class FuncConv2D : public Function<FuncConv2D> {
     return ret;
   }
 
-  static TensorList backward(AutogradContext* ctx, const Tensor& grad) {
+  static void backward(AutogradContext* ctx, const Tensor& grad) {
     auto& input = ctx->savedInputs[0];
     auto& weight = ctx->savedInputs[1];
     auto& bias = ctx->savedInputs[2];
@@ -197,23 +191,21 @@ class FuncConv2D : public Function<FuncConv2D> {
     auto gradW = op::reshape(grad, IntArrayView{-1, outChannels});
     auto colW = op::reshape(weight, IntArrayView{outChannels, -1});
 
-    TensorList ret;
     if (input.requiresGrad()) {
       auto gradCol = op::matmul(gradW, colW);
       auto inputGrad = op::col2im(gradCol, input.shape(), kernelSize, stride, padding);
-      ret.push_back(std::move(inputGrad));
+      input.addGrad(std::move(inputGrad));
     }
     if (weight.requiresGrad()) {
       auto col = ctx->popData().toTensor();
       auto gradColW = op::matmulTrans(col, gradW, true, false);
       auto weightGrad = op::reshape(gradColW.permute(), weight.shape());
-      ret.push_back(std::move(weightGrad));
+      weight.addGrad(std::move(weightGrad));
     }
     if (bias.defined() && bias.requiresGrad()) {
       auto biasGrad = op::sumOnDim(gradW, 0, false);
-      ret.push_back(std::move(biasGrad));
+      bias.addGrad(std::move(biasGrad));
     }
-    return ret;
   }
 };
 
@@ -224,11 +216,9 @@ class FuncLayerNorm : public Function<FuncLayerNorm> {
     return op::layerNorm(input, weight, bias, eps);
   }
 
-  static TensorList backward(AutogradContext* ctx, const Tensor& grad) {
-    TensorList ret;
+  static void backward(AutogradContext* ctx, const Tensor& grad) {
     // TODO
     NOT_IMPLEMENTED();
-    return ret;
   }
 };
 

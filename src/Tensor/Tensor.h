@@ -14,7 +14,7 @@
 namespace tinytorch {
 
 struct FunctionBase;
-struct AutogradMeta;
+class AutogradMeta;
 
 class Tensor {
  public:
@@ -112,6 +112,8 @@ class Tensor {
   const Tensor& grad() const;
   void setGrad(const Tensor& grad) const;
   void setGrad(Tensor&& grad) const;
+  void addGrad(const Tensor& grad) const;
+  void addGrad(Tensor&& grad) const;
   void zeroGrad() const;
 
   void backward(const Tensor& grad) const;
