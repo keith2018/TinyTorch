@@ -17,15 +17,18 @@ enum class LossReduction : int8_t {
 };
 
 namespace nn {
-class Loss : public Module {
+
+class Loss {
  public:
   explicit Loss(const LossReduction reduction = LossReduction::MEAN) : reduction_(reduction) {}
-  ~Loss() override = default;
+  virtual ~Loss() = default;
 
- private:
-  std::vector<TensorPtr> parameters() override { return {}; }
-  void resetParameters() override {}
-  void zeroGrad() override {}
+  virtual Tensor forward(Tensor &input, Tensor &target) = 0;
+
+  template <typename... Args>
+  Tensor operator()(Args &&...args) {
+    return forward(std::forward<Args>(args)...);
+  }
 
  protected:
   LossReduction reduction_;

@@ -21,7 +21,6 @@ class Module {
   virtual void zeroGrad();
 
   virtual Tensor forward(Tensor &input) { return {}; }
-  virtual Tensor forward(Tensor &input1, Tensor &input2) { return {}; }
 
   template <typename... Args>
   Tensor operator()(Args &&...args) {
