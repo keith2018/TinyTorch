@@ -34,8 +34,6 @@ class FuncSumOnDim : public Function<FuncSumOnDim> {
   }
 
   static TensorList backward(AutogradContext* ctx, const Tensor& grad) {
-    auto& self = ctx->savedInputs[0];
-
     TensorList ret;
     // TODO
     NOT_IMPLEMENTED();
@@ -50,8 +48,6 @@ class FuncSumOnDims : public Function<FuncSumOnDims> {
   }
 
   static TensorList backward(AutogradContext* ctx, const Tensor& grad) {
-    auto& self = ctx->savedInputs[0];
-
     TensorList ret;
     // TODO
     NOT_IMPLEMENTED();

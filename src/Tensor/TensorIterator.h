@@ -10,7 +10,6 @@
 #include <utility>
 
 #include "Tensor.h"
-#include "Utils/Macros.h"
 
 namespace tinytorch {
 
@@ -82,7 +81,7 @@ class TensorIteratorCpu : public TensorIteratorBase {
     SizeVector dimSize(ndim_, 0);
     for (int64_t d = ndim_ - 1; d >= 0; d--) {
       dimSize[d] = shape_[d];
-      for (auto j = 0; j < nInputs; j++) {
+      for (size_t j = 0; j < nInputs; j++) {
         increment[j][d] = (strides_[j][d] == 0 ? 0 : stridesTmp[j]);
         stridesTmp[j] *= shapes_[j][d];
       }
@@ -95,13 +94,13 @@ class TensorIteratorCpu : public TensorIteratorBase {
 
       for (int64_t d = ndim_ - 1; d >= 0; d--) {
         coord[d]++;
-        for (auto j = 0; j < nInputs; j++) {
+        for (size_t j = 0; j < nInputs; j++) {
           offsets[j] += increment[j][d];
         }
         if (coord[d] < dimSize[d]) {
           break;
         }
-        for (auto j = 0; j < nInputs; j++) {
+        for (size_t j = 0; j < nInputs; j++) {
           offsets[j] -= coord[d] * increment[j][d];
         }
         coord[d] = 0;

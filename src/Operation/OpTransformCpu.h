@@ -16,7 +16,7 @@ namespace tinytorch::op {
 
 template <typename T>
 Tensor permuteOpCpuImpl(const Tensor& self, const IntArrayView dims) {
-  ASSERT(dims.size() == self.dim());
+  ASSERT(static_cast<int64_t>(dims.size()) == self.dim());
   auto retShape = SizeVector(self.shape());
   reorderIndices(retShape.data(), self.dim(), dims);
   auto ret = Tensor::empty(retShape.view(), self.options().noGrad());
@@ -72,11 +72,11 @@ Tensor transpose2dOpCpuImpl(const Tensor& self) {
 }
 
 inline void getSubIndices(int64_t* subIndices, const Tensor& t, ArrayView<Tensor> indices, int64_t idx) {
-  for (int64_t i = 0; i < indices.size(); i++) {
+  for (size_t i = 0; i < indices.size(); i++) {
     ASSERT(indices[i].dtype() == DType::Int64);
     auto* ptr = indices[i].dataPtr<int64_t>();
     auto ind = ptr[idx];
-    subIndices[i] = ind >= 0 ? ind : ind + t.shape(i);
+    subIndices[i] = ind >= 0 ? ind : ind + t.shape(static_cast<int64_t>(i));
   }
 }
 

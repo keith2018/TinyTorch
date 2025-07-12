@@ -15,7 +15,7 @@ namespace tinytorch::op {
 
 int64_t indicesToOffset(const IntArrayView strides, const int64_t* indices) {
   int64_t offset = 0;
-  for (int64_t i = 0; i < strides.size(); i++) {
+  for (size_t i = 0; i < strides.size(); i++) {
     offset += indices[i] * strides[i];
   }
   return offset;
@@ -29,7 +29,7 @@ void offsetToIndices(int64_t* indices, const IntArrayView shape, int64_t offset)
 }
 
 void reorderIndices(int64_t* indices, int64_t ndim, const IntArrayView order) {
-  ASSERT(ndim == order.size());
+  ASSERT(ndim == static_cast<int64_t>(order.size()));
   static SizeVector temp(MAX_TENSOR_DIM);
   for (auto i = 0; i < ndim; i++) {
     auto d = order[i];
@@ -197,7 +197,7 @@ Tensor concatOpImpl(ArrayView<Tensor> tensors, int64_t dim) {
   // shape of result tensor
   SizeVector retShape(tensors[0].shape());
   int64_t concatDimSize = tensors[0].shape(dim);
-  for (auto i = 1; i < tensors.size(); i++) {
+  for (size_t i = 1; i < tensors.size(); i++) {
     if (tensors[i].dim() != ndim) {
       LOGE("All tensors must have the same number of dimensions");
       ASSERT(false);
@@ -248,7 +248,7 @@ Tensor stackOpImpl(ArrayView<Tensor> tensors, int64_t dim) {
   }
 
   // check device & shapes
-  for (int64_t i = 1; i < tensors.size(); i++) {
+  for (size_t i = 1; i < tensors.size(); i++) {
     auto& t = tensors[i];
     ASSERT(t.device() == t0.device());
     ASSERT(t.shape() == t0.shape());
@@ -263,7 +263,7 @@ Tensor stackOpImpl(ArrayView<Tensor> tensors, int64_t dim) {
   int64_t outerBlockSize = calcBlockSize(t0.shape(), 0, targetDim);
 
   T* retPtr = ret.dataPtr<T>();
-  for (int64_t i = 0; i < tensors.size(); i++) {
+  for (size_t i = 0; i < tensors.size(); i++) {
     const auto& t = tensors[i];
     const T* srcPtr = t.dataPtr<T>();
     auto* dstPtr = retPtr + i * innerBlockSize;

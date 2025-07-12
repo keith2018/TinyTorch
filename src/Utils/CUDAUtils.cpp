@@ -15,7 +15,7 @@ namespace tinytorch::cuda {
 
 constexpr int defaultKernelBlockSize = 512;
 
-size_t getDeviceCount() {
+int getDeviceCount() {
   static int cnt = -1;
   if (cnt == -1) {
     CUDA_CHECK(cudaGetDeviceCount(&cnt));
@@ -25,7 +25,7 @@ size_t getDeviceCount() {
 
 bool deviceAvailable() { return getDeviceCount() > 0; }
 
-static auto kMaxDevices = getDeviceCount();
+static int kMaxDevices = getDeviceCount();
 
 CudaDeviceGuard::CudaDeviceGuard(int newIndex) {
   if (newIndex < 0 || newIndex >= kMaxDevices) {

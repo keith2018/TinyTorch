@@ -75,7 +75,7 @@ const char* cublasGetErrorString(cublasStatus_t status);
 #define FETCH_FLOAT4(pointer) (reinterpret_cast<float4*>(&(pointer))[0])
 
 // device utils
-size_t getDeviceCount();
+int getDeviceCount();
 void setCurrentDevice(int device);
 int getCurrentDevice();
 

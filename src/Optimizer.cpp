@@ -39,7 +39,7 @@ Tensor Optimizer::getDecayedGrad(TensorPtr param) const {
 void Optimizer::initCache(std::vector<Tensor> &cache, bool setZero) {
   cache.resize(parameters_.size());
   if (setZero) {
-    for (auto i = 0; i < parameters_.size(); i++) {
+    for (size_t i = 0; i < parameters_.size(); i++) {
       cache[i] = Tensor::zeros(parameters_[i]->shape(), parameters_[i]->options());
     }
   }
@@ -61,7 +61,7 @@ SGD::SGD(std::vector<TensorPtr> &&parameters, float lr, float momentum, float da
 }
 
 void SGD::doStep() {
-  for (auto i = 0; i < parameters_.size(); i++) {
+  for (size_t i = 0; i < parameters_.size(); i++) {
     auto &param = parameters_[i];
     auto grad = getDecayedGrad(param);
     if (!grad.defined()) {
@@ -84,14 +84,14 @@ Adagrad::Adagrad(std::vector<TensorPtr> &&parameters, float lr, float lrDecay, f
                  float eps)
     : Optimizer(std::move(parameters), lr, weightDecay), lrDecay_(lrDecay), initAcc_(initAcc), eps_(eps) {
   stateSums_.resize(parameters_.size());
-  for (auto i = 0; i < parameters_.size(); i++) {
+  for (size_t i = 0; i < parameters_.size(); i++) {
     stateSums_[i] = Tensor::empty(parameters_[i]->shape(), parameters_[i]->options());
     stateSums_[i].fill(initAcc);
   }
 }
 
 void Adagrad::doStep() {
-  for (auto i = 0; i < parameters_.size(); i++) {
+  for (size_t i = 0; i < parameters_.size(); i++) {
     auto &param = parameters_[i];
     auto grad = getDecayedGrad(param);
     if (!grad.defined()) {
@@ -121,7 +121,7 @@ RMSprop::RMSprop(std::vector<TensorPtr> &&parameters, float lr, float alpha, flo
 }
 
 void RMSprop::doStep() {
-  for (auto i = 0; i < parameters_.size(); i++) {
+  for (size_t i = 0; i < parameters_.size(); i++) {
     auto &param = parameters_[i];
     auto grad = getDecayedGrad(param);
     if (!grad.defined()) {
@@ -155,7 +155,7 @@ AdaDelta::AdaDelta(std::vector<TensorPtr> &&parameters, float lr, float rho, flo
 }
 
 void AdaDelta::doStep() {
-  for (auto i = 0; i < parameters_.size(); i++) {
+  for (size_t i = 0; i < parameters_.size(); i++) {
     auto &param = parameters_[i];
     auto grad = getDecayedGrad(param);
     if (!grad.defined()) {
@@ -188,7 +188,7 @@ void Adam::doStep() {
   float b1t = 1.f - std::pow(beta1_, static_cast<float>(step_));
   float b2t = 1.f - std::pow(beta2_, static_cast<float>(step_));
 
-  for (auto i = 0; i < parameters_.size(); i++) {
+  for (size_t i = 0; i < parameters_.size(); i++) {
     auto &param = parameters_[i];
     auto grad = getDecayedGrad(param);
     if (!grad.defined()) {

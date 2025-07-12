@@ -225,10 +225,6 @@ class FuncLayerNorm : public Function<FuncLayerNorm> {
   }
 
   static TensorList backward(AutogradContext* ctx, const Tensor& grad) {
-    auto& input = ctx->savedInputs[0];
-    auto& weight = ctx->savedInputs[1];
-    auto& bias = ctx->savedInputs[2];
-
     TensorList ret;
     // TODO
     NOT_IMPLEMENTED();

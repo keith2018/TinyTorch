@@ -16,16 +16,18 @@ namespace tinytorch {
 template <typename T, size_t N = 5>
 class SmallVector {
  public:
+  using size_type = size_t;
+
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init)
   SmallVector() : size_(0), capacity_(N), data_(inlineData()) {}
 
-  explicit SmallVector(size_t size) : SmallVector() {
+  explicit SmallVector(size_type size) : SmallVector() {
     reserve(size);
     std::uninitialized_value_construct_n(data_, size);
     size_ = size;
   }
 
-  SmallVector(size_t size, const T& value) : SmallVector() {
+  SmallVector(size_type size, const T& value) : SmallVector() {
     reserve(size);
     std::uninitialized_fill_n(data_, size, value);
     size_ = size;
@@ -122,13 +124,13 @@ class SmallVector {
     size_ = 0;
   }
 
-  void reserve(size_t capacity) {
+  void reserve(size_type capacity) {
     if (capacity > capacity_) {
       growTo(capacity);
     }
   }
 
-  void resize(size_t size) {
+  void resize(size_type size) {
     if (size < size_) {
       std::destroy(data_ + size, data_ + size_);
     } else if (size > size_) {
@@ -138,7 +140,7 @@ class SmallVector {
     size_ = size;
   }
 
-  void resize(size_t size, const T& value) {
+  void resize(size_type size, const T& value) {
     if (size < size_) {
       std::destroy(data_ + size, data_ + size_);
     } else if (size > size_) {
@@ -149,13 +151,13 @@ class SmallVector {
   }
 
   T* insert(T* pos, const T& value) {
-    size_t idx = pos - data_;
+    size_type idx = pos - data_;
     if (size_ == capacity_) {
       grow();
     }
     if (idx < size_) {
       new (data_ + size_) T(std::move(data_[size_ - 1]));
-      for (size_t i = size_ - 1; i > idx; i--) {
+      for (size_type i = size_ - 1; i > idx; i--) {
         data_[i] = std::move(data_[i - 1]);
       }
       data_[idx] = value;
@@ -167,12 +169,12 @@ class SmallVector {
   }
 
   bool empty() const { return size_ == 0; }
-  size_t size() const { return size_; }
-  size_t capacity() const { return capacity_; }
+  size_type size() const { return size_; }
+  size_type capacity() const { return capacity_; }
   T* data() { return data_; }
   const T* data() const { return data_; }
-  T& operator[](size_t idx) { return data_[idx]; }
-  const T& operator[](size_t idx) const { return data_[idx]; }
+  T& operator[](size_type idx) { return data_[idx]; }
+  const T& operator[](size_type idx) const { return data_[idx]; }
   T* begin() { return data_; }
   T* end() { return data_ + size_; }
   const T* begin() const { return data_; }
@@ -188,7 +190,7 @@ class SmallVector {
   const T* inlineData() const noexcept { return reinterpret_cast<const T*>(inlineStorage_); }
 
   void grow() { growTo(capacity_ * 2); }
-  void growTo(size_t newCap) {
+  void growTo(size_type newCap) {
     T* newData = static_cast<T*>(operator new[](sizeof(T) * newCap, static_cast<std::align_val_t>(alignof(T))));
     std::uninitialized_move(data_, data_ + size_, newData);
     std::destroy(data_, data_ + size_);
@@ -199,8 +201,8 @@ class SmallVector {
     capacity_ = newCap;
   }
 
-  size_t size_;
-  size_t capacity_;
+  size_type size_;
+  size_type capacity_;
   T* data_;
   alignas(T) char inlineStorage_[sizeof(T) * N];
 };

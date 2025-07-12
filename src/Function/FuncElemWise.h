@@ -149,9 +149,6 @@ class FuncMaximum : public Function<FuncMaximum> {
   }
 
   static TensorList backward(AutogradContext* ctx, const Tensor& grad) {
-    auto& self = ctx->savedInputs[0];
-    auto& other = ctx->savedInputs[1];
-
     TensorList ret;
     // TODO
     NOT_IMPLEMENTED();
@@ -166,9 +163,6 @@ class FuncMinimum : public Function<FuncMinimum> {
   }
 
   static TensorList backward(AutogradContext* ctx, const Tensor& grad) {
-    auto& self = ctx->savedInputs[0];
-    auto& other = ctx->savedInputs[1];
-
     TensorList ret;
     // TODO
     NOT_IMPLEMENTED();

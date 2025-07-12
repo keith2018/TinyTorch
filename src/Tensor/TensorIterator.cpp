@@ -18,7 +18,7 @@ IntArrayView TensorIteratorBase::setupBroadcast() {
   for (auto t : inputs_) {
     ndim_ = std::max(ndim_, t->dim());
   }
-  ASSERT(ndim_ <= MAX_TENSOR_DIM);
+  ASSERT(ndim_ <= static_cast<int64_t>(MAX_TENSOR_DIM));
 
   SmallVector<IntArrayView> inputShapes;
   inputShapes.reserve(inputs_.size());
@@ -75,7 +75,8 @@ bool TensorIteratorBase::broadcastShape(SizeVector& ret, const SmallVector<IntAr
   for (auto i = 0; i < ndim; i++) {
     int64_t dim = 1;
     for (const auto& shape : shapes) {
-      int64_t d = i < ndim - shape.size() ? 1 : shape[i - (ndim - shape.size())];
+      auto idx = ndim - static_cast<int64_t>(shape.size());
+      int64_t d = i < idx ? 1 : shape[i - idx];
       if (d != 1 && dim != 1 && d != dim) {
         LOGE("Incompatible shapes for broadcasting");
         return false;
@@ -90,7 +91,7 @@ bool TensorIteratorBase::broadcastShape(SizeVector& ret, const SmallVector<IntAr
 void TensorIteratorBase::alignShape(SizeVector& ret, const Tensor& t, int64_t ndim) {
   auto shape = t.shape();
   ret.resize(ndim, 1);
-  for (auto i = 0; i < shape.size(); i++) {
+  for (size_t i = 0; i < shape.size(); i++) {
     ret[ndim - shape.size() + i] = shape[i];
   }
 }
@@ -99,7 +100,7 @@ void TensorIteratorBase::alignStrides(SizeVector& ret, const Tensor& t, int64_t 
   auto shape = t.shape();
   auto strides = t.strides();
   ret.resize(ndim, 0);
-  for (auto i = 0; i < shape.size(); i++) {
+  for (size_t i = 0; i < shape.size(); i++) {
     ret[ndim - shape.size() + i] = (shape[i] == 1 ? 0 : strides[i]);
   }
 }

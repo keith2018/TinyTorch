@@ -21,7 +21,7 @@ class ArrayView {
   using size_type = size_t;
 
   ArrayView() : data_(nullptr), size_(0) {}
-  ArrayView(const T* data, size_t size) : data_(data), size_(size) {}
+  ArrayView(const T* data, size_type size) : data_(data), size_(size) {}
   // NOLINTNEXTLINE(google-explicit-constructor)
   ArrayView(const std::vector<T>& vec) : data_(vec.data()), size_(vec.size()) {
     static_assert(!std::is_same_v<T, bool>, "ArrayView<bool> cannot be constructed from a std::vector<bool> bitfield.");
@@ -32,7 +32,7 @@ class ArrayView {
   ArrayView(const ArrayView& other) = default;
   ArrayView& operator=(const ArrayView& other) = default;
 
-  const T& operator[](size_t idx) const {
+  const T& operator[](size_type idx) const {
     ASSERT(idx < size_);
     return data_[idx];
   }
@@ -51,7 +51,7 @@ class ArrayView {
     if (size_ != other.size_) {
       return false;
     }
-    for (size_t i = 0; i < size_; i++) {
+    for (size_type i = 0; i < size_; i++) {
       if (!(data_[i] == other.data_[i])) {
         return false;
       }
@@ -61,7 +61,7 @@ class ArrayView {
 
   bool operator!=(const ArrayView& other) const { return !(*this == other); }
 
-  size_t size() const { return size_; }
+  size_type size() const { return size_; }
   bool empty() const { return size_ == 0; }
   const T* data() const { return data_; }
 
@@ -70,7 +70,7 @@ class ArrayView {
 
  private:
   const T* data_;
-  size_t size_;
+  size_type size_;
 };
 
 using IntArrayView = ArrayView<int64_t>;

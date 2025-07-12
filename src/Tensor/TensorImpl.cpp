@@ -55,13 +55,13 @@ void TensorImpl::reshape(const IntArrayView shape) {
 
   int64_t inferredIdx = -1;
   int64_t cnt = 1;
-  for (auto i = 0; i < shape.size(); i++) {
+  for (size_t i = 0; i < shape.size(); i++) {
     if (shape[i] == -1) {
       if (inferredIdx >= 0) {
         LOGE("Invalid shape: more than one idx to infer");
         return;
       }
-      inferredIdx = i;
+      inferredIdx = static_cast<int64_t>(i);
       retShape[i] = 0;
     } else {
       cnt *= shape[i];
@@ -118,9 +118,9 @@ void TensorImpl::unflatten(int64_t d, const IntArrayView shape) {
   }
   int64_t unflattenDims = 1;
   int64_t inferredIdx = -1;
-  for (int64_t i = 0; i < shape.size(); i++) {
+  for (size_t i = 0; i < shape.size(); i++) {
     if (shape[i] == -1) {
-      inferredIdx = d + i;
+      inferredIdx = d + static_cast<int64_t>(i);
       retShape.pushBack(0);
     } else {
       unflattenDims *= shape[i];

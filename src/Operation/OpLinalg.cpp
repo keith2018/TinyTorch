@@ -88,10 +88,10 @@ Tensor matmulOpImpl(const Tensor &self, const Tensor &other) {
 
     SizeVector aStrides(self.strides());
     SizeVector bStrides(other.strides());
-    while (aStrides.size() < retTensor.dim()) {
+    while (static_cast<int64_t>(aStrides.size()) < retTensor.dim()) {
       aStrides.insert(aStrides.begin(), 0);
     }
-    while (bStrides.size() < retTensor.dim()) {
+    while (static_cast<int64_t>(bStrides.size()) < retTensor.dim()) {
       bStrides.insert(bStrides.begin(), 0);
     }
 
@@ -102,10 +102,10 @@ Tensor matmulOpImpl(const Tensor &self, const Tensor &other) {
       for (auto i = retDimCnt - 3; i >= 0; i--) {
         int64_t index = tmp % retShape[i];
         tmp /= retShape[i];
-        if (self.shape().size() > i && self.shape()[i] != 1) {
+        if (static_cast<int64_t>(self.shape().size()) > i && self.shape()[i] != 1) {
           aOffset += index * aStrides[i];
         }
-        if (other.shape().size() > i && other.shape()[i] != 1) {
+        if (static_cast<int64_t>(other.shape().size()) > i && other.shape()[i] != 1) {
           bOffset += index * bStrides[i];
         }
       }

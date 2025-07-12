@@ -34,8 +34,6 @@ class FuncGelu : public Function<FuncGelu> {
   static Tensor forward(AutogradContext* ctx, const Tensor& self) { return op::gelu(self); }
 
   static TensorList backward(AutogradContext* ctx, const Tensor& grad) {
-    auto& self = ctx->savedInputs[0];
-
     TensorList ret;
     // TODO
     NOT_IMPLEMENTED();
@@ -48,8 +46,6 @@ class FuncSilu : public Function<FuncSilu> {
   static Tensor forward(AutogradContext* ctx, const Tensor& self) { return op::silu(self); }
 
   static TensorList backward(AutogradContext* ctx, const Tensor& grad) {
-    auto& self = ctx->savedInputs[0];
-
     TensorList ret;
     // TODO
     NOT_IMPLEMENTED();

@@ -34,7 +34,7 @@ void AutogradMeta::backward(const Tensor &grad) {
     auto outputs = fn->backward(inputs[fn.get()]);
     ASSERT(outputs.size() == fn->nextFunctions.size());
 
-    for (auto i = 0; i < fn->nextFunctions.size(); i++) {
+    for (size_t i = 0; i < fn->nextFunctions.size(); i++) {
       auto nextFn = fn->nextFunctions[i].lock();
       ASSERT(nextFn != nullptr);
       auto it = inputs.find(nextFn.get());
