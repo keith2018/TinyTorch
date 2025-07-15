@@ -19,7 +19,7 @@ namespace tinytorch::function {
       auto& self = ctx->savedInputs[0];                                       \
                                                                               \
       if (self.requiresGrad()) {                                              \
-        self.addGrad(std::move(op::reshape(grad, self.shape())));             \
+        self.addGrad(op::reshape(grad, self.shape()));                        \
       }                                                                       \
     }                                                                         \
   }

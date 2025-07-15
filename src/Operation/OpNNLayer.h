@@ -48,9 +48,11 @@ DEFINE_OP(dropout, DropoutOpFn);
 DEFINE_OP(layerNorm, LayerNormOpFn);
 
 void registerNNLayerCpu();
-void registerNNLayerCuda();
-
 STATIC_CALL(registerNNLayerCpu);
+
+#ifdef USE_CUDA
+void registerNNLayerCuda();
 STATIC_CALL(registerNNLayerCuda);
+#endif
 
 }  // namespace tinytorch::op

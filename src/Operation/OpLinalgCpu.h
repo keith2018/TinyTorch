@@ -8,6 +8,10 @@
 
 #include "OpLinalg.h"
 
+#ifdef __APPLE__
+#include <Accelerate/Accelerate.h>
+#endif
+
 namespace tinytorch::op {
 
 template <typename T>
@@ -111,6 +115,12 @@ Tensor col2imOpCpuImpl(const Tensor& self, const IntArrayView shape, Dim2D kerne
 
 template <typename T>
 void gemmCpuImpl(T* c, const T* a, const T* b, int64_t m, int64_t k, int64_t n, bool transA, bool transB) {
+#ifdef __APPLE__
+  CBLAS_TRANSPOSE ta = transA ? CblasTrans : CblasNoTrans;
+  CBLAS_TRANSPOSE tb = transB ? CblasTrans : CblasNoTrans;
+  cblas_sgemm(CblasRowMajor, ta, tb, (int)m, (int)n, (int)k, 1.0f, a, transA ? (int)m : (int)k, b,
+              transB ? (int)k : (int)n, 0.0f, c, (int)n);
+#else
   for (int i = 0; i < m * n; i++) {
     c[i] = 0;
   }
@@ -124,6 +134,7 @@ void gemmCpuImpl(T* c, const T* a, const T* b, int64_t m, int64_t k, int64_t n, 
       }
     }
   }
+#endif
 }
 
 template <>

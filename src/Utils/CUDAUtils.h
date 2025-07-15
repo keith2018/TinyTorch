@@ -6,9 +6,11 @@
 
 #pragma once
 
+#ifdef USE_CUDA
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
 #include <curand_kernel.h>
+#endif
 
 #include <cfloat>
 #include <iostream>
@@ -22,6 +24,8 @@ class Tensor;
 }  // namespace tinytorch
 
 namespace tinytorch::cuda {
+
+#ifdef USE_CUDA
 
 const char* curandGetErrorString(curandStatus_t status);
 const char* cublasGetErrorString(cublasStatus_t status);
@@ -78,8 +82,6 @@ const char* cublasGetErrorString(cublasStatus_t status);
 int getDeviceCount();
 void setCurrentDevice(int device);
 int getCurrentDevice();
-
-bool deviceAvailable();
 
 class CudaDeviceGuard {
  public:
@@ -164,5 +166,8 @@ template <>
 inline __host__ __device__ float Inf<float>() {
   return FLT_MAX;
 }
+#endif
+
+bool deviceAvailable();
 
 }  // namespace tinytorch::cuda

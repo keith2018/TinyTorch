@@ -181,9 +181,11 @@ DEFINE_OP(clampOut, TernaryOpOutFn)
 DEFINE_OP(clampInplace, TernaryOpInplaceFn)
 
 void registerElemWiseCpu();
-void registerElemWiseCuda();
-
 STATIC_CALL(registerElemWiseCpu);
+
+#ifdef USE_CUDA
+void registerElemWiseCuda();
 STATIC_CALL(registerElemWiseCuda);
+#endif
 
 }  // namespace tinytorch::op

@@ -21,7 +21,7 @@ class FuncSin : public Function<FuncSin> {
     auto& self = ctx->savedInputs[0];
 
     if (self.requiresGrad()) {
-      self.addGrad(std::move(op::sinBackwardP1(grad, self)));
+      self.addGrad(op::sinBackwardP1(grad, self));
     }
   }
 };
@@ -34,7 +34,7 @@ class FuncCos : public Function<FuncCos> {
     auto& self = ctx->savedInputs[0];
 
     if (self.requiresGrad()) {
-      self.addGrad(std::move(op::cosBackwardP1(grad, self)));
+      self.addGrad(op::cosBackwardP1(grad, self));
     }
   }
 };
@@ -50,10 +50,10 @@ class FuncAdd : public Function<FuncAdd> {
     auto& other = ctx->savedInputs[1];
 
     if (self.requiresGrad()) {
-      self.addGrad(std::move(reduceGrad(self, grad)));
+      self.addGrad(reduceGrad(self, grad));
     }
     if (other.requiresGrad()) {
-      other.addGrad(std::move(reduceGrad(other, grad)));
+      other.addGrad(reduceGrad(other, grad));
     }
   }
 };
@@ -69,10 +69,10 @@ class FuncSub : public Function<FuncSub> {
     auto& other = ctx->savedInputs[1];
 
     if (self.requiresGrad()) {
-      self.addGrad(std::move(reduceGrad(self, grad)));
+      self.addGrad(reduceGrad(self, grad));
     }
     if (other.requiresGrad()) {
-      other.addGrad(std::move(reduceGrad(other, op::neg(grad))));
+      other.addGrad(reduceGrad(other, op::neg(grad)));
     }
   }
 };
@@ -86,10 +86,10 @@ class FuncMul : public Function<FuncMul> {
     auto& other = ctx->savedInputs[1];
 
     if (self.requiresGrad()) {
-      self.addGrad(std::move(reduceGrad(self, op::mul(grad, other))));
+      self.addGrad(reduceGrad(self, op::mul(grad, other)));
     }
     if (other.requiresGrad()) {
-      other.addGrad(std::move(reduceGrad(other, op::mul(grad, self))));
+      other.addGrad(reduceGrad(other, op::mul(grad, self)));
     }
   }
 };
@@ -103,10 +103,10 @@ class FuncDiv : public Function<FuncDiv> {
     auto& other = ctx->savedInputs[1];
 
     if (self.requiresGrad()) {
-      self.addGrad(std::move(reduceGrad(self, op::div(grad, other))));
+      self.addGrad(reduceGrad(self, op::div(grad, other)));
     }
     if (other.requiresGrad()) {
-      other.addGrad(std::move(reduceGrad(other, op::divBackwardP2(grad, self, other))));
+      other.addGrad(reduceGrad(other, op::divBackwardP2(grad, self, other)));
     }
   }
 };
@@ -120,10 +120,10 @@ class FuncPow : public Function<FuncPow> {
     auto& other = ctx->savedInputs[1];
 
     if (self.requiresGrad()) {
-      self.addGrad(std::move(reduceGrad(self, op::powBackwardP1(grad, self, other))));
+      self.addGrad(reduceGrad(self, op::powBackwardP1(grad, self, other)));
     }
     if (other.requiresGrad()) {
-      other.addGrad(std::move(reduceGrad(other, op::powBackwardP2(grad, self, other))));
+      other.addGrad(reduceGrad(other, op::powBackwardP2(grad, self, other)));
     }
   }
 };

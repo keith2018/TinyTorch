@@ -23,8 +23,10 @@ GemmFunc<T> getGemmFunc(DeviceType deviceType) {
   switch (deviceType) {
     case DeviceType::CPU:
       return &gemmImpl<T, DeviceType::CPU>;
+#ifdef USE_CUDA
     case DeviceType::CUDA:
       return &gemmImpl<T, DeviceType::CUDA>;
+#endif
     default:
       return nullptr;
   }
@@ -46,11 +48,14 @@ DEFINE_OP(matmul, MatmulOpFn)
 DEFINE_OP(matmulTrans, MatmulTransOpFn)
 
 void registerLinalgCommon();
-void registerLinalgCpu();
-void registerLinalgCuda();
-
 STATIC_CALL(registerLinalgCommon);
+
+void registerLinalgCpu();
 STATIC_CALL(registerLinalgCpu);
+
+#ifdef USE_CUDA
+void registerLinalgCuda();
 STATIC_CALL(registerLinalgCuda);
+#endif
 
 }  // namespace tinytorch::op

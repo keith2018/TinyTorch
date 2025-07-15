@@ -28,13 +28,13 @@ class FuncLinear : public Function<FuncLinear> {
     auto& bias = ctx->savedInputs[2];
 
     if (input.requiresGrad()) {
-      input.addGrad(std::move(op::matmul(grad, weight)));
+      input.addGrad(op::matmul(grad, weight));
     }
     if (weight.requiresGrad()) {
-      weight.addGrad(std::move(op::matmulTrans(grad, input, true, false)));
+      weight.addGrad(op::matmulTrans(grad, input, true, false));
     }
     if (bias.defined() && bias.requiresGrad()) {
-      bias.addGrad(std::move(op::sumOnDim(grad, 0, false)));
+      bias.addGrad(op::sumOnDim(grad, 0, false));
     }
   }
 };
@@ -66,7 +66,7 @@ class FuncDropout : public Function<FuncDropout> {
       if (training) {
         auto p = ctx->popData().toFloat();
         auto mask = ctx->popData().toTensor();
-        input.addGrad(std::move(op::dropout(grad, mask, 1.f - p)));
+        input.addGrad(op::dropout(grad, mask, 1.f - p));
       } else {
         input.addGrad(grad);
       }

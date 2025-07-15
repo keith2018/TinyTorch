@@ -10,11 +10,14 @@
 
 #include "CachedAllocator.h"
 #include "Options.h"
+#ifdef USE_CUDA
 #include "Utils/CUDAUtils.h"
+#endif
 #include "Utils/Logger.h"
 
 namespace tinytorch {
 
+#ifdef USE_CUDA
 CPUPinnedAllocator::~CPUPinnedAllocator() {
 #ifndef NDEBUG
   ASSERT(allocatedPtrs_.empty() && "Memory leak detected in CPUPinnedAllocator!");
@@ -82,17 +85,24 @@ void CUDAAllocator::deallocate(void* ptr) {
   }
 #endif
 }
+#endif
 
 Allocator* getAllocator(const Options& options) {
   if (options.device_.isCpu()) {
     if (options.pinnedMemory_) {
+#ifdef USE_CUDA
       static CachedAllocator cachedPinnedAllocator(std::make_unique<CPUPinnedAllocator>());
       return &cachedPinnedAllocator;
+#else
+      ASSERT(false && "cuda not support");
+      return nullptr;
+#endif
     } else {
       static CachedAllocator cachedCpuAllocator(std::make_unique<CPUAllocator<>>());
       return &cachedCpuAllocator;
     }
   } else if (options.device_.isCuda()) {
+#ifdef USE_CUDA
     auto deviceCount = cuda::getDeviceCount();
     static std::vector<CachedAllocator> deviceAllocators;
     static std::once_flag flag;
@@ -108,6 +118,10 @@ Allocator* getAllocator(const Options& options) {
       return nullptr;
     }
     return &deviceAllocators[deviceIndex];
+#else
+    ASSERT(false && "cuda not support");
+    return nullptr;
+#endif
   }
   LOGE("getAllocator error: Unknown device type");
   return nullptr;

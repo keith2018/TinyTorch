@@ -126,11 +126,14 @@ DEFINE_OP(vstack, VStackOpFn)
 DEFINE_OP(hstack, HStackOpFn)
 
 void registerTransformCommon();
-void registerTransformCpu();
-void registerTransformCuda();
-
 STATIC_CALL(registerTransformCommon);
+
+void registerTransformCpu();
 STATIC_CALL(registerTransformCpu);
+
+#ifdef USE_CUDA
+void registerTransformCuda();
 STATIC_CALL(registerTransformCuda);
+#endif
 
 }  // namespace tinytorch::op

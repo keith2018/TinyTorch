@@ -103,8 +103,7 @@ void Sequential::setTraining(bool mode) {
   }
 }
 
-Linear::Linear(int64_t inFeatures, int64_t outFeatures, bool bias)
-    : inFeatures_(inFeatures), outFeatures_(outFeatures), useBias_(bias) {
+Linear::Linear(int64_t inFeatures, int64_t outFeatures, bool bias) : useBias_(bias) {
   Options options = options::requiresGrad(true);
   weights_ = Tensor::empty({outFeatures, inFeatures}, options);
   if (bias) {
@@ -153,12 +152,7 @@ Tensor LogSoftmax::forward(Tensor &input) { return function::logSoftmax(input, d
 Tensor MaxPool2D::forward(Tensor &input) { return function::maxPool2d(input, kernelSize_, stride_, padding_); }
 
 Conv2D::Conv2D(int64_t inFeatures, int64_t outFeatures, Dim2D kernelSize, Dim2D stride, Dim2D padding, bool bias)
-    : inFeatures_(inFeatures),
-      outFeatures_(outFeatures),
-      kernelSize_(kernelSize),
-      stride_(stride),
-      padding_(padding),
-      useBias_(bias) {
+    : kernelSize_(kernelSize), stride_(stride), padding_(padding), useBias_(bias) {
   Options options = options::requiresGrad(true);
   weights_ = Tensor::empty({outFeatures, inFeatures, kernelSize_.h, kernelSize_.w}, options);
   if (bias) {

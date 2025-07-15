@@ -13,6 +13,8 @@
 
 namespace tinytorch::cuda {
 
+#ifdef USE_CUDA
+
 constexpr int defaultKernelBlockSize = 512;
 
 int getDeviceCount() {
@@ -22,8 +24,6 @@ int getDeviceCount() {
   }
   return cnt;
 }
-
-bool deviceAvailable() { return getDeviceCount() > 0; }
 
 static int kMaxDevices = getDeviceCount();
 
@@ -216,6 +216,15 @@ const char* cublasGetErrorString(cublasStatus_t status) {
       return "CUBLAS_STATUS_LICENSE_ERROR";
   }
   return "Unknown cuBLAS error";
+}
+#endif
+
+bool deviceAvailable() {
+#ifdef USE_CUDA
+  return getDeviceCount() > 0;
+#else
+  return false;
+#endif
 }
 
 }  // namespace tinytorch::cuda

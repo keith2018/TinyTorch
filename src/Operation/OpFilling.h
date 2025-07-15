@@ -38,9 +38,11 @@ DEFINE_OP(fillRandNormal, FillOpRandNormalFn)
 DEFINE_OP(fillRandBernoulli, FillOpRandBernoulliFn)
 
 void registerFillCpu();
-void registerFillCuda();
-
 STATIC_CALL(registerFillCpu);
+
+#ifdef USE_CUDA
+void registerFillCuda();
 STATIC_CALL(registerFillCuda);
+#endif
 
 }  // namespace tinytorch::op

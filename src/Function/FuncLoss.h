@@ -28,7 +28,7 @@ namespace tinytorch::function {
       auto reduction = ctx->popData().toEnum<LossReduction>();                                                        \
                                                                                                                       \
       if (input.requiresGrad()) {                                                                                     \
-        input.addGrad(std::move(BACKWARD_OP(grad, input, target, reduction)));                                        \
+        input.addGrad(BACKWARD_OP(grad, input, target, reduction));                                                   \
       }                                                                                                               \
       ASSERT(!target.requiresGrad());                                                                                 \
     }                                                                                                                 \

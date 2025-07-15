@@ -6,7 +6,11 @@
 
 #include "Storage.h"
 
+#include <cstring>
+
+#ifdef USE_CUDA
 #include "Utils/CUDAUtils.h"
+#endif
 #include "Utils/Logger.h"
 
 namespace tinytorch {
@@ -35,6 +39,7 @@ void Storage::copyOnDevice(void* dst, const Device& dstDevice, const void* src, 
     return;
   }
 
+#ifdef USE_CUDA
   // CUDA -> CUDA
   if (dstDevice.isCuda() && srcDevice.isCuda()) {
     cuda::CudaDeviceGuard guard(dstDevice.index);
@@ -55,8 +60,8 @@ void Storage::copyOnDevice(void* dst, const Device& dstDevice, const void* src, 
     CUDA_CHECK(cudaMemcpy(dst, src, nbytes, cudaMemcpyDeviceToHost));
     return;
   }
-
-  LOGE("Unknown device type in deviceCopy");
+#endif
+  ASSERT(false && "Unknown device type in deviceCopy");
 }
 
 void Storage::copyOnDevice(void* dst, const void* src, const Device& device, int64_t nbytes) {

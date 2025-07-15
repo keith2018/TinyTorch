@@ -107,8 +107,6 @@ class Linear : public Module {
   Tensor &bias() { return bias_; }
 
  private:
-  int64_t inFeatures_;
-  int64_t outFeatures_;
   bool useBias_;
   Tensor weights_;
   Tensor bias_;
@@ -188,8 +186,6 @@ class Conv2D : public Module {
   Tensor &bias() { return bias_; }
 
  private:
-  int64_t inFeatures_;
-  int64_t outFeatures_;
   Dim2D kernelSize_;
   Dim2D stride_;
   Dim2D padding_;

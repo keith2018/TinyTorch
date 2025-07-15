@@ -15,7 +15,7 @@
 
 namespace tinytorch {
 
-struct AutogradMeta;
+class AutogradMeta;
 
 struct AutogradContext {
   std::deque<IValue> savedData;

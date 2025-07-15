@@ -90,6 +90,7 @@ void CPUAllocator<aligned>::deallocate(void* ptr) {
 #endif
 }
 
+#ifdef USE_CUDA
 class CPUPinnedAllocator : public Allocator {
  public:
   ~CPUPinnedAllocator() override;
@@ -115,6 +116,7 @@ class CUDAAllocator : public Allocator {
   std::unordered_set<void*> allocatedPtrs_;
 #endif
 };
+#endif
 
 struct Options;
 Allocator* getAllocator(const Options& options);

@@ -50,7 +50,8 @@ void AutogradMeta::zeroGrad(const Tensor &owner) {
 
 bool AutogradMeta::isLeaf() const {
   ASSERT(gradFn_ != nullptr);
-  return typeid(*gradFn_) == typeid(FuncLeaf);
+  auto &fn = *gradFn_;
+  return typeid(fn) == typeid(FuncLeaf);
 }
 
 void AutogradMeta::backward(const Tensor &grad) {

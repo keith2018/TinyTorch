@@ -24,9 +24,11 @@ DEFINE_OP(nllLoss, LossOpFn);
 DEFINE_OP(nllLossBackward, LossOpBackwardFn);
 
 void registerLossCpu();
-void registerLossCuda();
-
 STATIC_CALL(registerLossCpu);
+
+#ifdef USE_CUDA
+void registerLossCuda();
 STATIC_CALL(registerLossCuda);
+#endif
 
 }  // namespace tinytorch::op

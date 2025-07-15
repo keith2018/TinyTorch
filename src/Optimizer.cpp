@@ -83,6 +83,7 @@ void SGD::doStep() {
 Adagrad::Adagrad(std::vector<TensorPtr> &&parameters, float lr, float lrDecay, float weightDecay, float initAcc,
                  float eps)
     : Optimizer(std::move(parameters), lr, weightDecay), lrDecay_(lrDecay), initAcc_(initAcc), eps_(eps) {
+  UNUSED(initAcc_);
   stateSums_.resize(parameters_.size());
   for (size_t i = 0; i < parameters_.size(); i++) {
     stateSums_[i] = Tensor::empty(parameters_[i]->shape(), parameters_[i]->options());

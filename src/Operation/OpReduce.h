@@ -49,9 +49,11 @@ DEFINE_OP(varMeanOnDim, VarMeanOpDimFn)
 DEFINE_OP(varMeanOnDims, VarMeanOpMultiDimsFn)
 
 void registerReduceCpu();
-void registerReduceCuda();
-
 STATIC_CALL(registerReduceCpu);
+
+#ifdef USE_CUDA
+void registerReduceCuda();
 STATIC_CALL(registerReduceCuda);
+#endif
 
 }  // namespace tinytorch::op

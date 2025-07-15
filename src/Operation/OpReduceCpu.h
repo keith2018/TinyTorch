@@ -120,7 +120,7 @@ void ReducerCpu::reduceIdxDimImpl(Tensor &values, Tensor &indices, const Tensor 
     for (int64_t j = 0; j < dimSize; j++) {
       auto val = dataPtr[srcIdx];
       srcIdx += stride;
-      if (OP::template compare(val, targetVal)) {
+      if (OP::template compare<T>(val, targetVal)) {
         targetVal = val;
         targetIdx = j;
       }
