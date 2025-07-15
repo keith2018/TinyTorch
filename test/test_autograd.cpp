@@ -4,98 +4,104 @@
  *
  */
 
-#include <Torch.h>
-
+#include "TinyTorch.h"
+#include "Utils/MathUtils.h"
 #include "test.h"
 
-using namespace TinyTorch;
+using namespace tinytorch;
 
 TEST(TEST_Autograd, backward_01) {
-  Tensor x1({0.0140f, 0.5773f, 0.0469f}, true);
-  Tensor x2({0.3232f, 0.4903f, 0.9395f}, true);
-  auto y = Function::sin(x1) + (x1 * x2);
+  Options options = options::requiresGrad(true);
+  Tensor x1(Array1d<float>{0.0140f, 0.5773f, 0.0469f}, options);
+  Tensor x2(Array1d<float>{0.3232f, 0.4903f, 0.9395f}, options);
 
-  Tensor grad({0.4948f, 0.8746f, 0.7076f});
+  auto y = function::sin(x1) + (x1 * x2);
+
+  Tensor grad(Array1d<float>{0.4948f, 0.8746f, 0.7076f});
   y.backward(grad);
 
-  auto &x1Grad = x1.getGrad().data();
-  auto x1GradData = x1Grad.toList();
+  auto &x1Grad = x1.grad();
+  auto x1GradData = x1Grad.toList<float>();
   EXPECT_THAT(x1Grad.shape(), ElementsAre(3));
-  EXPECT_FLOAT_NEAR(x1GradData[0], 0.654671);
-  EXPECT_FLOAT_NEAR(x1GradData[1], 1.161678);
-  EXPECT_FLOAT_NEAR(x1GradData[2], 1.371612);
+  EXPECT_FLT_NEAR(x1GradData[0], 0.654671);
+  EXPECT_FLT_NEAR(x1GradData[1], 1.161678);
+  EXPECT_FLT_NEAR(x1GradData[2], 1.371612);
 
-  auto &x2Grad = x2.getGrad().data();
-  auto x2GradData = x2Grad.toList();
+  auto &x2Grad = x2.grad();
+  auto x2GradData = x2Grad.toList<float>();
   EXPECT_THAT(x2Grad.shape(), ElementsAre(3));
-  EXPECT_FLOAT_NEAR(x2GradData[0], 0.006927);
-  EXPECT_FLOAT_NEAR(x2GradData[1], 0.504907);
-  EXPECT_FLOAT_NEAR(x2GradData[2], 0.033186);
+  EXPECT_FLT_NEAR(x2GradData[0], 0.006927);
+  EXPECT_FLT_NEAR(x2GradData[1], 0.504907);
+  EXPECT_FLT_NEAR(x2GradData[2], 0.033186);
 }
 
 TEST(TEST_Autograd, backward_02) {
-  Tensor x({{1, -1}, {1, 1}}, true);
+  Options options = options::requiresGrad(true);
+  Tensor x(Array2d<float>{{1, -1}, {1, 1}}, options);
   auto y = x.pow(2).sum();
   y.backward();
-  auto &grad = x.getGrad().data();
+  auto &grad = x.grad();
   EXPECT_THAT(grad.shape(), ElementsAre(2, 2));
-  EXPECT_THAT(grad.toList(), ElementsAre(2, -2, 2, 2));
+  EXPECT_THAT(grad.toList<float>(), ElementsAre(2, -2, 2, 2));
 }
 
 TEST(TEST_Autograd, backward_03) {
-  auto x = Tensor::linspace(-PI, PI, 100);
-  auto y = Function::sin(x);
+  Options options = options::requiresGrad(true);
+  auto x = Tensor::linspace(-PI_FLT, PI_FLT, 100);
+  auto y = function::sin(x);
 
-  Tensor a(Array1d{1.5f}, true);
-  Tensor b(Array1d{2.2f}, true);
+  Tensor a(Array1d<float>{1.5f}, options);
+  Tensor b(Array1d<float>{2.2f}, options);
 
   auto yPred = a + b * x;
   auto loss = (yPred - y).pow(2).sum();
   loss.backward();
 
-  auto &gradA = a.getGrad().data();
+  auto &gradA = a.grad();
   EXPECT_THAT(gradA.shape(), ElementsAre(1));
-  EXPECT_FLOAT_NEAR(gradA.item(), 300.f);
+  EXPECT_FLT_NEAR(gradA.item<float>(), 300.f);
 
-  auto &gradB = b.getGrad().data();
+  auto &gradB = b.grad();
   EXPECT_THAT(gradB.shape(), ElementsAre(1));
-  EXPECT_FLOAT_NEAR(gradB.item(), 1278.851);
+  EXPECT_FLT_NEAR(gradB.item<float>(), 1278.851);
 }
 
 TEST(TEST_Autograd, backward_04) {
-  Tensor a(Array1d{1.5f}, true);
-  Tensor x(Array1d{1.f, 2.2f, 3.f});
+  Options options = options::requiresGrad(true);
+  Tensor a(Array1d<float>{1.5f}, options);
+  Tensor x(Array1d<float>{1.f, 2.2f, 3.f});
 
   auto y = a * x * a;
   y.backward(Tensor::onesLike(y));
 
-  auto grad = a.getGrad().data();
+  auto grad = a.grad();
   EXPECT_THAT(grad.shape(), ElementsAre(1));
-  EXPECT_THAT(grad.toList(), ElementsAre(18.6));
+  EXPECT_THAT(grad.toList<float>(), ElementsAre(18.6));
 
-  const float learningRate = 0.1f;
-  withNoGrad {
-    a -= learningRate * a.getGrad();
+  WithNoGrad {
+    constexpr float learningRate = 0.1f;
+    a -= learningRate * a.grad();
     a.zeroGrad();
   }
   y = a * x * a;
   y.backward(Tensor::onesLike(y));
 
-  grad = a.getGrad().data();
+  grad = a.grad();
   EXPECT_THAT(grad.shape(), ElementsAre(1));
-  EXPECT_THAT(grad.toList(), ElementsAre(-4.464));
+  EXPECT_THAT(grad.toList<float>(), ElementsAre(-4.464));
 }
 
 TEST(TEST_Autograd, backward_flatten) {
-  auto x1 = Tensor({{1, 2}, {3, 4}}, true);
-  auto x2 = Tensor({{1, 2}, {3, 4}}, true);
+  Options options = options::requiresGrad(true);
+  auto x1 = Tensor(Array2d<float>{{1, 2}, {3, 4}}, options);
+  auto x2 = Tensor(Array2d<float>{{1, 2}, {3, 4}}, options);
   auto x3 = x1 * x2;
-  auto y = Tensor::flatten(x3);
+  auto y = x3.flatten();
   y.backward(Tensor::onesLike(y));
-  auto &grad1 = x1.getGrad().data();
-  auto &grad2 = x2.getGrad().data();
+  auto &grad1 = x1.grad();
+  auto &grad2 = x2.grad();
 
-  EXPECT_THAT(y.data().toList(), ElementsAre(1, 4, 9, 16));
-  EXPECT_THAT(grad1.toList(), ElementsAre(1, 2, 3, 4));
-  EXPECT_THAT(grad2.toList(), ElementsAre(1, 2, 3, 4));
+  EXPECT_THAT(y.toList<float>(), ElementsAre(1, 4, 9, 16));
+  EXPECT_THAT(grad1.toList<float>(), ElementsAre(1, 2, 3, 4));
+  EXPECT_THAT(grad2.toList<float>(), ElementsAre(1, 2, 3, 4));
 }

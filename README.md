@@ -41,7 +41,7 @@ Tiny deep learning training framework implemented from scratch in C++ that follo
 ```c++
 #include "Torch.h"
 
-using namespace TinyTorch;
+using namespace tinytorch;
 
 // https://github.com/pytorch/examples/blob/main/mnist/main.py
 class Net : public nn::Module {
@@ -232,9 +232,6 @@ cd demo/bin
 cd build
 ctest
 ```
-
-## Dependencies
-- `OpenBLAS` (optional for `gemm` on CPU mode) [https://github.com/OpenMathLib/OpenBLAS](https://github.com/OpenMathLib/OpenBLAS)
 
 ## License
 This code is licensed under the MIT License (see [LICENSE](LICENSE)).

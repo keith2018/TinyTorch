@@ -1,31 +1,35 @@
 cmake_minimum_required(VERSION 3.10)
 project(TinyTorch)
 
-option(USE_CUDA "Use CUDA" ON)
-option(USE_BLAS "Use BLAS" ON)
+option(TINYTORCH_BUILD_DEMO "Whether or not to build demo" ON)
+option(TINYTORCH_BUILD_TEST "Whether or not to build the tests" OFF)
 
+option(TINYTORCH_USE_CUDA "Use CUDA" ON)
 if (APPLE)
-    set(USE_CUDA OFF)
+    set(TINYTORCH_USE_CUDA OFF)
 endif ()
 
-message(STATUS "USE_CUDA ${USE_CUDA}")
-message(STATUS "USE_BLAS ${USE_BLAS}")
+message(STATUS "TINYTORCH_BUILD_DEMO ${TINYTORCH_BUILD_DEMO}")
+message(STATUS "TINYTORCH_BUILD_TEST ${TINYTORCH_BUILD_TEST}")
+message(STATUS "TINYTORCH_USE_CUDA ${TINYTORCH_USE_CUDA}")
 
-if (${USE_CUDA})
+if (${TINYTORCH_USE_CUDA})
     add_definitions(-DUSE_CUDA)
 endif ()
 
-add_subdirectory(TinyTorch)
-add_subdirectory(demo)
+add_subdirectory(src)
 
-option(BUILD_TEST "Whether or not to build the tests" OFF)
-if (${BUILD_TEST})
+if (${TINYTORCH_BUILD_DEMO})
+    add_subdirectory(demo)
+endif ()
+
+if (${TINYTORCH_BUILD_TEST})
     message(STATUS "Building tests")
 
-    option(TEST_CUDA "Test CUDA" OFF)
-    message(STATUS "TEST_CUDA ${TEST_CUDA}")
+    option(TINYTORCH_TEST_CUDA "Test CUDA" OFF)
+    message(STATUS "TINYTORCH_TEST_CUDA ${TINYTORCH_TEST_CUDA}")
 
-    if (${TEST_CUDA})
+    if (${TINYTORCH_TEST_CUDA})
         add_definitions(-DDEFAULT_DEVICE_CUDA)
     endif ()
 

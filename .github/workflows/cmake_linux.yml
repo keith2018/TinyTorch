@@ -19,11 +19,8 @@ jobs:
         with:
           submodules: true
 
-      - name: Install OpenBLAS
-        run: sudo apt-get install -y libopenblas-dev
-
       - name: Configure CMake
-        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DUSE_CUDA=OFF -DTEST_CUDA=OFF -DBUILD_TEST=ON
+        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DTINYTORCH_USE_CUDA=OFF -DTINYTORCH_TEST_CUDA=OFF -DTINYTORCH_BUILD_TEST=ON
 
       - name: Build
         run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
@@ -31,8 +28,8 @@ jobs:
       - name: Test
         run: cd ${{github.workspace}}/build && ctest
 
-      - name: Demo
-        run: cd ${{github.workspace}}/demo/bin && ./TinyTorch_demo
+      # - name: Demo
+      #   run: cd ${{github.workspace}}/demo/bin && ./TinyTorch_demo
 
   build_linux_gpu:
     name: build_linux_gpu
@@ -43,17 +40,18 @@ jobs:
         run: rm -rf /opt/hostedtoolcache
 
       - name: cuda-toolkit
-        uses: Jimver/cuda-toolkit@v0.2.22
-
-      - name: Install OpenBLAS
-        run: sudo apt-get install -y libopenblas-dev
+        uses: Jimver/cuda-toolkit@v0.2.26
+        with:
+          cuda: '12.9.1'
+          use-github-cache: false
+          use-local-cache: false
 
       - uses: actions/checkout@v3
         with:
           submodules: true
 
       - name: Configure CMake
-        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DUSE_CUDA=ON -DTEST_CUDA=ON -DBUILD_TEST=ON
+        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DTINYTORCH_USE_CUDA=ON -DTINYTORCH_TEST_CUDA=ON -DTINYTORCH_BUILD_TEST=ON
 
       - name: Build
         run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
