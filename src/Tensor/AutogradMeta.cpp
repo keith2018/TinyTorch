@@ -12,6 +12,7 @@
 #include "Function.h"
 #include "Operations.h"
 #include "Tensor.h"
+#include "ankerl/unordered_dense.h"
 
 namespace tinytorch {
 
@@ -75,7 +76,7 @@ void AutogradMeta::backward(const Tensor &grad) {
 }
 
 void AutogradMeta::buildBackwardGraph() {
-  std::unordered_map<std::shared_ptr<FunctionBase>, int> deps;
+  ankerl::unordered_dense::map<std::shared_ptr<FunctionBase>, int> deps;
   std::deque<std::shared_ptr<FunctionBase>> q;
 
   std::set<std::shared_ptr<FunctionBase>> traversed = {gradFn_};
