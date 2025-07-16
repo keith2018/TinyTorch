@@ -20,6 +20,8 @@ else ()
     add_library(${PROJECT_NAME} ${TinyTorch_SRC_CPP})
 endif ()
 
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../third_party)
+
 if (CMAKE_BUILD_TYPE STREQUAL Debug)
     add_definitions(-DDEBUG)
     if (MSVC)

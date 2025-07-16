@@ -7,10 +7,10 @@
 #pragma once
 
 #include <memory>
-#include <unordered_set>
 
 #include "Device.h"
 #include "Utils/Macros.h"
+#include "ankerl/unordered_dense.h"
 
 namespace tinytorch {
 
@@ -41,7 +41,7 @@ class CPUAllocator : public Allocator {
  private:
   size_t alignment_;
 #ifndef NDEBUG
-  std::unordered_set<void*> allocatedPtrs_;
+  ankerl::unordered_dense::set<void*> allocatedPtrs_;
 #endif
 };
 
@@ -99,7 +99,7 @@ class CPUPinnedAllocator : public Allocator {
 
  private:
 #ifndef NDEBUG
-  std::unordered_set<void*> allocatedPtrs_;
+  ankerl::unordered_dense::set<void*> allocatedPtrs_;
 #endif
 };
 
@@ -113,7 +113,7 @@ class CUDAAllocator : public Allocator {
  private:
   DeviceIndex deviceIndex_;
 #ifndef NDEBUG
-  std::unordered_set<void*> allocatedPtrs_;
+  ankerl::unordered_dense::set<void*> allocatedPtrs_;
 #endif
 };
 #endif

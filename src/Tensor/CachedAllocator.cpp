@@ -9,7 +9,6 @@
 #include <array>
 #include <memory>
 #include <set>
-#include <unordered_map>
 
 #include "Utils/Logger.h"
 
@@ -285,7 +284,7 @@ class CachedAllocatorImpl : public Allocator {
 
   BlockPool largeBlocks;
   BlockPool smallBlocks;
-  std::unordered_map<void*, Block*> activeBlocks;
+  ankerl::unordered_dense::map<void*, Block*> activeBlocks;
 };
 
 CachedAllocator::CachedAllocator(std::unique_ptr<Allocator> base)
