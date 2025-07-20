@@ -44,11 +44,13 @@ class TensorImpl {
 
   template <typename T = void>
   T* dataPtr() {
+    ensureStorage();
     return static_cast<T*>(dataPtr_);
   }
 
   template <typename T = void>
   const T* dataPtr() const {
+    ensureStorage();
     return static_cast<T*>(dataPtr_);
   }
 
@@ -58,16 +60,19 @@ class TensorImpl {
   IntArrayView strides() const { return strides_.view(); }
   int64_t shape(int64_t d) { return shape_[d]; }
   int64_t stride(int64_t d) { return strides_[d]; }
-  const std::shared_ptr<Storage>& storage() const { return storage_; }
+  const std::shared_ptr<Storage>& storage() const {
+    ensureStorage();
+    return storage_;
+  }
+  void setStorage(const std::shared_ptr<Storage>& storage, int64_t offset = 0);
+  void copyOnWrite() const;
 
-  void copyOnWrite();
-
-  void reshape(IntArrayView shape);
-  void flatten(int64_t startDim = 0, int64_t endDim = -1);
-  void unflatten(int64_t dim, IntArrayView shape);
-  void squeeze(int64_t dim = -1);
-  void squeeze(IntArrayView dims);
-  void unsqueeze(int64_t dim);
+  void reshape_(IntArrayView shape);
+  void flatten_(int64_t startDim = 0, int64_t endDim = -1);
+  void unflatten_(int64_t dim, IntArrayView shape);
+  void squeeze_(int64_t dim = -1);
+  void squeeze_(IntArrayView dims);
+  void unsqueeze_(int64_t dim);
 
   template <typename T>
   std::vector<T> toList() const;
@@ -76,17 +81,18 @@ class TensorImpl {
   T item() const;
 
  private:
+  void ensureStorage() const;
   static void computeStrides(SizeVector& strides, IntArrayView shape);
   static void computeNumel(int64_t& numel, IntArrayView shape);
 
   int64_t numel_ = 0;
   int64_t storageOffset_ = 0;  // bytes
-  void* dataPtr_ = nullptr;
+  mutable void* dataPtr_ = nullptr;
 
   Options options_;
   SizeVector shape_;
   SizeVector strides_;
-  std::shared_ptr<Storage> storage_;
+  mutable std::shared_ptr<Storage> storage_;
 };
 
 template <typename T>

@@ -44,7 +44,7 @@ void demo_optim() {
 
   auto* linearLayer = dynamic_cast<nn::Linear*>(&model[0]);
   auto biasData = linearLayer->bias().toList<float>();
-  auto weightData = linearLayer->weights().toList<float>();
+  auto weightData = linearLayer->weight().toList<float>();
   LOGD("Result: y = %f + %f x + %f x^2 + %f x^3", biasData[0], weightData[0], weightData[1], weightData[2]);
 
   timer.mark();

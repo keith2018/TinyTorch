@@ -11,8 +11,8 @@ using namespace tinytorch;
 
 TEST(TEST_Module, linear) {
   auto layer = nn::Linear(4, 4, true);
-  layer.weights().fill(1.2f);
-  layer.bias().fill(0.2f);
+  layer.weight().fill_(1.2f);
+  layer.bias().fill_(0.2f);
 
   auto input = Tensor(Array2d<float>{{1, 2, 3, 4}, {5, 6, 7, 8}});
   auto output = layer(input);
@@ -23,7 +23,7 @@ TEST(TEST_Module, linear) {
 
   EXPECT_FLOAT_EQ(loss.item<float>(), 4490.4165f);
   EXPECT_TRUE(
-      VectorNear(layer.weights().grad().toList<float>(),
+      VectorNear(layer.weight().grad().toList<float>(),
                  {346.306305, 433.741211, 521.176147, 608.611, 339.37558, 425.315826, 511.256042, 597.196289,
                   331.547913, 417.151703, 502.755493, 588.359314, 330.02002, 416.754913, 503.489807, 590.224731}));
   EXPECT_TRUE(VectorNear(layer.bias().grad().toList<float>(), {87.434906, 85.940239, 85.6037903, 86.7348938}));

@@ -115,16 +115,16 @@ Tensor matmulOpImpl(const Tensor &self, const Tensor &other) {
   } else {
     gemm(retPtr, selfPtr, otherPtr, m, k, n, false, false, self.device().index);
     if (prependA) {
-      retTensor.reshape({n});
+      retTensor.reshape_({n});
     }
   }
 
   // reduce dimension if necessary
   if (appendB) {
     if (prependA) {
-      retTensor.reshape({});
+      retTensor.reshape_({});
     } else {
-      retTensor.reshape({m});
+      retTensor.reshape_({m});
     }
   }
 

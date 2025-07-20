@@ -26,7 +26,7 @@ class Optimizer {
   float getLr() const { return lr_; }
   void setLr(float lr) { this->lr_ = lr; }
 
-  void zeroGrad();
+  void zeroGrad() const;
 
  protected:
   virtual Tensor getDecayedGrad(TensorPtr param) const;

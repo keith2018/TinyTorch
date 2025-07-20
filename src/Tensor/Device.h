@@ -31,6 +31,9 @@ struct Device {
 
   bool isCpu() const { return type == DeviceType::CPU; }
   bool isCuda() const { return type == DeviceType::CUDA; }
+
+  static Device cpu() { return {DeviceType::CPU}; }
+  static Device cuda(DeviceIndex i = 0) { return {DeviceType::CUDA, i}; }
 };
 
 namespace device {

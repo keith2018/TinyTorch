@@ -13,7 +13,16 @@ using namespace tinytorch;
 // https://github.com/pytorch/examples/blob/main/mnist/main.py
 class Net : public nn::Module {
  public:
-  Net() { registerModules({conv1, conv2, dropout1, dropout2, fc1, fc2}); }
+  Net() {
+    registerModules({
+        {"conv1", conv1},
+        {"conv2", conv2},
+        {"dropout1", dropout1},
+        {"dropout2", dropout2},
+        {"fc1", fc1},
+        {"fc2", fc2},
+    });
+  }
 
   Tensor forward(Tensor &x) override {
     x = conv1(x);
@@ -68,12 +77,6 @@ struct TrainArgs {
 
   // how many batches to wait before logging training status
   int32_t logInterval = 10;
-
-  // saving the current model
-  bool saveModel = false;
-
-  // load pretrained model
-  std::string pretrainedModelPath;
 };
 
 void train(TrainArgs &args, nn::Module &model, Device device, data::DataLoader &dataLoader, optim::Optimizer &optimizer,
@@ -117,9 +120,8 @@ void test(nn::Module &model, Device device, data::DataLoader &dataLoader) {
       auto target = batch[1].to(device);
       auto output = model(data);
       testLoss += function::nllLoss(output, target, LossReduction::SUM).item<float>();
-      // TODO
-      auto pred = op::maxOnDim(output, 1, true).second;
-      correct += static_cast<int>((pred == op::view(target, pred.shape())).to(DType::Float32).sum().item<float>());
+      auto pred = output.argmax(1, true);
+      correct += static_cast<int>((pred == target.view(pred.shape())).to(DType::Float32).sum().item<float>());
     }
   }
   auto total = dataLoader.dataset().size();
@@ -160,9 +162,6 @@ void demo_mnist() {
   auto testDataloader = data::DataLoader(testDataset, args.testBatchSize, true);
 
   auto model = Net();
-  if (!args.pretrainedModelPath.empty()) {
-    load(model, args.pretrainedModelPath.c_str());
-  }
   model.to(device);
 
   auto optimizer = optim::AdaDelta(model.parameters(), args.lr);
@@ -172,10 +171,6 @@ void demo_mnist() {
     train(args, model, device, trainDataloader, optimizer, epoch);
     test(model, device, testDataloader);
     scheduler.step();
-  }
-
-  if (args.saveModel) {
-    save(model, "mnist_cnn.model");
   }
 
   timer.mark();

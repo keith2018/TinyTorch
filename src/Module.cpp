@@ -11,50 +11,6 @@
 
 namespace tinytorch::nn {
 
-// NOLINTNEXTLINE(misc-no-recursion)
-std::vector<TensorPtr> Module::parameters() {
-  std::vector<TensorPtr> ret;
-  for (auto &module : subModules_) {
-    for (const auto &p : module.get().parameters()) {
-      ret.push_back(p);
-    }
-  }
-  return ret;
-}
-
-// NOLINTNEXTLINE(misc-no-recursion)
-std::vector<TensorPtr> Module::states() {
-  std::vector<TensorPtr> ret;
-  for (auto &module : subModules_) {
-    for (const auto &p : module.get().states()) {
-      ret.push_back(p);
-    }
-  }
-  return ret;
-}
-
-// NOLINTNEXTLINE(misc-no-recursion)
-void Module::resetParameters() {
-  for (auto &module : subModules_) {
-    module.get().resetParameters();
-  }
-}
-
-// NOLINTNEXTLINE(misc-no-recursion)
-void Module::zeroGrad() {
-  for (auto &module : subModules_) {
-    module.get().zeroGrad();
-  }
-}
-
-void Module::to(Device device) {
-  for (auto &module : subModules_) {
-    for (auto &p : module.get().states()) {
-      *p = p->to(device);
-    }
-  }
-}
-
 Tensor Sequential::forward(Tensor &input) {
   Tensor ret = {input};
   for (auto &module : modules_) {
@@ -64,78 +20,32 @@ Tensor Sequential::forward(Tensor &input) {
   return ret;
 }
 
-std::vector<TensorPtr> Sequential::parameters() {
-  std::vector<TensorPtr> ret;
-  for (auto &module : modules_) {
-    for (const auto &p : module->parameters()) {
-      ret.push_back(p);
-    }
-  }
-  return ret;
-}
-
-std::vector<TensorPtr> Sequential::states() {
-  std::vector<TensorPtr> ret;
-  for (auto &module : modules_) {
-    for (const auto &p : module->states()) {
-      ret.push_back(p);
-    }
-  }
-  return ret;
-}
-
-void Sequential::resetParameters() {
-  for (auto &module : modules_) {
-    module->resetParameters();
-  }
-}
-
-void Sequential::zeroGrad() {
-  for (auto &module : modules_) {
-    module->zeroGrad();
-  }
-}
-
-void Sequential::setTraining(bool mode) {
-  Module::setTraining(mode);
-  for (auto &module : modules_) {
-    module->train(mode);
-  }
-}
-
-Linear::Linear(int64_t inFeatures, int64_t outFeatures, bool bias) : useBias_(bias) {
-  Options options = options::requiresGrad(true);
-  weights_ = Tensor::empty({outFeatures, inFeatures}, options);
+Linear::Linear(int64_t inFeatures, int64_t outFeatures, bool bias, Options options) : useBias_(bias) {
+  options.requiresGrad(true);
+  weight_ = Tensor::empty({outFeatures, inFeatures}, options);
   if (bias) {
     bias_ = Tensor::empty({outFeatures}, options);
   }
   Linear::resetParameters();
 }
 
-Tensor Linear::forward(Tensor &input) { return function::linear(input, weights_, bias_); }
+Tensor Linear::forward(Tensor &input) { return function::linear(input, weight_, bias_); }
 
-std::vector<TensorPtr> Linear::parameters() {
+std::vector<std::pair<std::string, TensorPtr>> Linear::namedParameters_() {
   if (useBias_) {
-    return {&weights_, &bias_};
+    return {{"weight", &weight_}, {"bias", &bias_}};
   }
-  return {&weights_};
+  return {{"weight", &weight_}};
 }
 
-std::vector<TensorPtr> Linear::states() { return parameters(); }
+std::vector<std::pair<std::string, TensorPtr>> Linear::namedStates_() { return namedParameters_(); }
 
 void Linear::resetParameters() {
-  Initializer::kaimingUniform(weights_, std::sqrt(5.f));
+  Initializer::kaimingUniform(weight_, std::sqrt(5.f));
   if (useBias_) {
-    auto fanIn = Initializer::calculateFan(weights_).first;
+    auto fanIn = Initializer::calculateFan(weight_).first;
     const auto bound = fanIn > 0 ? 1.f / std::sqrt(static_cast<float>(fanIn)) : 0;
     Initializer::uniform(bias_, -bound, bound);
-  }
-}
-
-void Linear::zeroGrad() {
-  weights_.zeroGrad();
-  if (useBias_) {
-    bias_.zeroGrad();
   }
 }
 
@@ -143,39 +53,43 @@ Tensor Flatten::forward(Tensor &input) { return function::flatten(input, startDi
 
 Tensor Relu::forward(Tensor &input) { return function::relu(input); }
 
+Tensor Gelu::forward(Tensor &input) { return function::gelu(input); }
+
+Tensor Silu::forward(Tensor &input) { return function::silu(input); }
+
 Tensor Dropout::forward(Tensor &input) { return function::dropout(input, p_, training_); }
 
 Tensor Softmax::forward(Tensor &input) { return function::softmax(input, dim_); }
 
 Tensor LogSoftmax::forward(Tensor &input) { return function::logSoftmax(input, dim_); }
 
-Tensor MaxPool2D::forward(Tensor &input) { return function::maxPool2d(input, kernelSize_, stride_, padding_); }
+Tensor MaxPool2D::forward(Tensor &input) { return function::maxPool2d(input, kernel_, stride_, padding_); }
 
-Conv2D::Conv2D(int64_t inFeatures, int64_t outFeatures, Dim2D kernelSize, Dim2D stride, Dim2D padding, bool bias)
-    : kernelSize_(kernelSize), stride_(stride), padding_(padding), useBias_(bias) {
-  Options options = options::requiresGrad(true);
-  weights_ = Tensor::empty({outFeatures, inFeatures, kernelSize_.h, kernelSize_.w}, options);
+Conv2D::Conv2D(int64_t inFeatures, int64_t outFeatures, Dim2D kernel, Dim2D stride, Dim2D padding, bool bias,
+               Options options)
+    : kernel_(kernel), stride_(stride), padding_(padding), useBias_(bias) {
+  options.requiresGrad(true);
+  weight_ = Tensor::empty({outFeatures, inFeatures, kernel_.h, kernel_.w}, options);
   if (bias) {
     bias_ = Tensor::empty({outFeatures}, options);
   }
   Conv2D::resetParameters();
 }
 
-Tensor Conv2D::forward(Tensor &input) { return function::conv2d(input, weights_, bias_, stride_, padding_); }
+Tensor Conv2D::forward(Tensor &input) { return function::conv2d(input, weight_, bias_, stride_, padding_); }
 
-std::vector<TensorPtr> Conv2D::parameters() {
+std::vector<std::pair<std::string, TensorPtr>> Conv2D::namedParameters_() {
   if (useBias_) {
-    return {&weights_, &bias_};
+    return {{"weight", &weight_}, {"bias", &bias_}};
   }
-  return {&weights_};
+  return {{"weight", &weight_}};
 }
-
-std::vector<TensorPtr> Conv2D::states() { return parameters(); }
+std::vector<std::pair<std::string, TensorPtr>> Conv2D::namedStates_() { return namedParameters_(); }
 
 void Conv2D::resetParameters() {
-  Initializer::kaimingUniform(weights_, std::sqrt(5.f));
+  Initializer::kaimingUniform(weight_, std::sqrt(5.f));
   if (useBias_) {
-    auto fanIn = Initializer::calculateFan(weights_).first;
+    auto fanIn = Initializer::calculateFan(weight_).first;
     if (fanIn != 0) {
       const auto bound = 1.f / std::sqrt(static_cast<float>(fanIn));
       Initializer::uniform(bias_, -bound, bound);
@@ -183,10 +97,47 @@ void Conv2D::resetParameters() {
   }
 }
 
-void Conv2D::zeroGrad() {
-  weights_.zeroGrad();
+Embedding::Embedding(int64_t numEmbeddings, int64_t embeddingDim, Options options) {
+  options.requiresGrad(true);
+  weight_ = Tensor::empty({numEmbeddings, embeddingDim}, options);
+  Embedding::resetParameters();
+}
+
+Tensor Embedding::forward(Tensor &input) { return function::embedding(input, weight_); }
+
+std::vector<std::pair<std::string, TensorPtr>> Embedding::namedParameters_() { return {{"weight", &weight_}}; }
+
+std::vector<std::pair<std::string, TensorPtr>> Embedding::namedStates_() { return namedParameters_(); }
+
+void Embedding::resetParameters() { Initializer::normal(weight_); }
+
+LayerNorm::LayerNorm(IntArrayView normalizedShape, float eps, bool bias, Options options)
+    : normalizedShape_(normalizedShape), eps_(eps), useBias_(bias) {
+  options.requiresGrad(true);
+  weight_ = Tensor::empty(normalizedShape, options);
+  if (bias) {
+    bias_ = Tensor::empty(normalizedShape, options);
+  }
+  LayerNorm::resetParameters();
+}
+
+Tensor LayerNorm::forward(Tensor &input) {
+  return function::layerNorm(input, normalizedShape_.view(), weight_, bias_, eps_);
+}
+
+std::vector<std::pair<std::string, TensorPtr>> LayerNorm::namedParameters_() {
   if (useBias_) {
-    bias_.zeroGrad();
+    return {{"weight", &weight_}, {"bias", &bias_}};
+  }
+  return {{"weight", &weight_}};
+}
+
+std::vector<std::pair<std::string, TensorPtr>> LayerNorm::namedStates_() { return namedParameters_(); }
+
+void LayerNorm::resetParameters() {
+  Initializer::ones(weight_);
+  if (useBias_) {
+    Initializer::zeros(bias_);
   }
 }
 

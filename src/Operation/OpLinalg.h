@@ -34,7 +34,7 @@ GemmFunc<T> getGemmFunc(DeviceType deviceType) {
 
 using DotOpFn = Tensor (*)(const Tensor& self, const Tensor& other);
 using Im2ColOpFn = Tensor (*)(const Tensor& self, Dim2D kernel, Dim2D stride, Dim2D padding);
-using Col2ImOpFn = Tensor (*)(const Tensor& self, IntArrayView shape, Dim2D kernelSize, Dim2D stride, Dim2D padding);
+using Col2ImOpFn = Tensor (*)(const Tensor& self, IntArrayView shape, Dim2D kernel, Dim2D stride, Dim2D padding);
 using MatmulOpFn = Tensor (*)(const Tensor& self, const Tensor& other);
 using MatmulTransOpFn = Tensor (*)(const Tensor& self, const Tensor& other, bool transA, bool transB);
 

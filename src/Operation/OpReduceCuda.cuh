@@ -509,7 +509,7 @@ Tensor ReducerCuda::reduceDim(const Tensor& t, int64_t dim, bool keepDims) {
 
   if (keepDims) {
     const auto shapeKeepDims = getReduceShape(t, dim, true);
-    values.reshape(shapeKeepDims.view());
+    values.reshape_(shapeKeepDims.view());
   }
   return values;
 }
@@ -565,8 +565,8 @@ TensorPair ReducerCuda::reduceIdxDim(const Tensor& t, int64_t dim, bool keepDims
 
   if (keepDims) {
     const auto shapeKeepDims = getReduceShape(t, dim, true);
-    values.reshape(shapeKeepDims.view());
-    indices.reshape(shapeKeepDims.view());
+    values.reshape_(shapeKeepDims.view());
+    indices.reshape_(shapeKeepDims.view());
   }
   return {values, indices};
 }

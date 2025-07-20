@@ -47,48 +47,48 @@ void reorderIndices(int64_t* indices, int64_t ndim, const IntArrayView order) {
 
 Tensor reshapeOpImpl(const Tensor& self, const IntArrayView shape) {
   Tensor ret = self.clone();
-  ret.getImpl().reshape(shape);
+  ret.getImpl().reshape_(shape);
   return ret;
 }
 
 void reshapeOpInplaceImpl(Tensor& self, const IntArrayView shape) {
   // reshape inplace
-  self.getImpl().reshape(shape);
+  self.getImpl().reshape_(shape);
 }
 
 Tensor flattenOpImpl(const Tensor& self, int64_t startDim, int64_t endDim) {
   Tensor ret = self.clone();
-  ret.getImpl().flatten(startDim, endDim);
+  ret.getImpl().flatten_(startDim, endDim);
   return ret;
 }
 
 void flattenOpInplaceImpl(Tensor& self, int64_t startDim = 0, int64_t endDim = -1) {
-  self.getImpl().flatten(startDim, endDim);
+  self.getImpl().flatten_(startDim, endDim);
 }
 
 Tensor unflattenOpImpl(const Tensor& self, int64_t dim, const IntArrayView shape) {
   Tensor ret = self.clone();
-  ret.getImpl().unflatten(dim, shape);
+  ret.getImpl().unflatten_(dim, shape);
   return ret;
 }
 void unflattenOpInplaceImpl(Tensor& self, int64_t dim, const IntArrayView shape) {
-  self.getImpl().unflatten(dim, shape);
+  self.getImpl().unflatten_(dim, shape);
 }
 
 Tensor squeezeOpImpl(const Tensor& self, const IntArrayView dims) {
   Tensor ret = self.clone();
-  ret.getImpl().squeeze(dims);
+  ret.getImpl().squeeze_(dims);
   return ret;
 }
-void squeezeOpInplaceImpl(Tensor& self, const IntArrayView dims) { self.getImpl().squeeze(dims); }
+void squeezeOpInplaceImpl(Tensor& self, const IntArrayView dims) { self.getImpl().squeeze_(dims); }
 
 Tensor unsqueezeOpImpl(const Tensor& self, int64_t dim) {
   Tensor ret = self.clone();
-  ret.getImpl().unsqueeze(dim);
+  ret.getImpl().unsqueeze_(dim);
   return ret;
 }
 
-void unsqueezeOpInplaceImpl(Tensor& self, int64_t dim) { self.getImpl().unsqueeze(dim); }
+void unsqueezeOpInplaceImpl(Tensor& self, int64_t dim) { self.getImpl().unsqueeze_(dim); }
 
 inline std::pair<int64_t, int64_t> computeIndexAndStride(const Tensor& self, const IntArrayView indices) {
   auto len = static_cast<int64_t>(indices.size());

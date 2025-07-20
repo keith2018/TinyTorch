@@ -19,7 +19,7 @@ Optimizer::Optimizer(std::vector<TensorPtr> &&parameters, float lr, float weight
   }
 }
 
-void Optimizer::zeroGrad() {
+void Optimizer::zeroGrad() const {
   for (auto &param : parameters_) {
     param->zeroGrad();
   }
@@ -87,7 +87,7 @@ Adagrad::Adagrad(std::vector<TensorPtr> &&parameters, float lr, float lrDecay, f
   stateSums_.resize(parameters_.size());
   for (size_t i = 0; i < parameters_.size(); i++) {
     stateSums_[i] = Tensor::empty(parameters_[i]->shape(), parameters_[i]->options());
-    stateSums_[i].fill(initAcc);
+    stateSums_[i].fill_(initAcc);
   }
 }
 
@@ -101,7 +101,7 @@ void Adagrad::doStep() {
     auto &s = stateSums_[i];
     auto clr = lr_ / (1 + static_cast<float>(step_ - 1) * lrDecay_);
     s += grad * grad;
-    *param -= clr * grad / (op::sqrt(s) + eps_);
+    *param -= clr * grad / (s.sqrt() + eps_);
   }
 }
 
@@ -136,7 +136,7 @@ void RMSprop::doStep() {
       g = alpha_ * g + (1.f - alpha_) * grad;
       avg = v - g * g;
     } else {
-      avg = op::sqrt(v);
+      avg = v.sqrt();
     }
     avg += eps_;
     if (momentum_ != 0.f) {
@@ -165,7 +165,7 @@ void AdaDelta::doStep() {
     auto &v = squareAvg_[i];
     auto &u = accDelta_[i];
     v = rho_ * v + (1.f - rho_) * grad * grad;
-    auto delta = op::sqrt(u + eps_) / op::sqrt(v + eps_) * grad;
+    auto delta = (u + eps_).sqrt() / (v + eps_).sqrt() * grad;
     u = rho_ * u + (1.f - rho_) * delta * delta;
     *param -= lr_ * delta;
   }
@@ -206,7 +206,7 @@ void Adam::doStep() {
       vh = vMax = Tensor::maximum(vMax, vh);
     }
     // auto clr = lr_ * std::sqrt(b2t) / b1t;
-    *param -= lr_ * mh / (op::sqrt(vh) + eps_);
+    *param -= lr_ * mh / (vh.sqrt() + eps_);
   }
 }
 

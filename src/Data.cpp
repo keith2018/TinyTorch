@@ -35,7 +35,7 @@ DatasetMNIST::DatasetMNIST(const std::string& dir, MnistDataType type,
 
 std::vector<Tensor> DatasetMNIST::getItem(size_t idx) {
   auto img = Tensor(images_[idx]);
-  img.reshape({1, height_, width_});
+  img.reshape_({1, height_, width_});
 
   auto label = Tensor::scalar(labels_[idx], options::dtype(DType::Int64));
   if (transform_) {

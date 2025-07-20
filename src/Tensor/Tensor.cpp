@@ -42,7 +42,7 @@ Tensor Tensor::onesLike(const Tensor &t, Options options) { return ones(t.shape(
 
 Tensor Tensor::zeros(const IntArrayView shape, Options options) {
   Tensor ret(shape, options);
-  op::fill(ret, 0);
+  ret.fillZero_();
   return ret;
 }
 
@@ -56,7 +56,7 @@ Tensor Tensor::rand(const IntArrayView shape, Options options) {
 
 Tensor Tensor::randn(const IntArrayView shape, Options options) {
   Tensor ret(shape, options);
-  op::fillRandNormal(ret);
+  op::fillRandNormal(ret, 0.f, 1.f);
   return ret;
 }
 
@@ -199,14 +199,16 @@ Tensor Tensor::to(Device device) const {
   return ret;
 }
 
-void Tensor::fill(const Scalar &val) { op::fill(*this, val); }
-void Tensor::fillMasked(const Tensor &mask, const Scalar &val) { op::fillMaskedInplace(*this, mask, val); }
-void Tensor::fillLinSpace(const Scalar &start, const Scalar &step, int64_t steps) {
+void Tensor::fill_(const Scalar &val) { op::fill(*this, val); }
+void Tensor::fillMasked_(const Tensor &mask, const Scalar &val) { op::fillMaskedInplace(*this, mask, val); }
+void Tensor::fillZero_() { op::fill(*this, 0); }
+void Tensor::fillOne_() { op::fill(*this, 1); }
+void Tensor::fillLinSpace_(const Scalar &start, const Scalar &step, int64_t steps) {
   op::fillLinSpace(*this, start, step, steps);
 }
-void Tensor::fillUniform(float min, float max) { op::fillRandUniform(*this, min, max); }
-void Tensor::fillNormal() { op::fillRandNormal(*this); }
-void Tensor::fillBernoulli(float p) { op::fillRandBernoulli(*this, p); }
+void Tensor::fillUniform_(float min, float max) { op::fillRandUniform(*this, min, max); }
+void Tensor::fillNormal_(float mean, float stddev) { op::fillRandNormal(*this, mean, stddev); }
+void Tensor::fillBernoulli_(float p) { op::fillRandBernoulli(*this, p); }
 
 Tensor Tensor::operator+(const Tensor &other) const { return function::add(*this, other); }
 Tensor Tensor::operator-(const Tensor &other) const { return function::sub(*this, other); }
@@ -257,15 +259,57 @@ Tensor Tensor::operator!=(const Scalar &other) const { return op::ne(*this, scal
 
 Tensor Tensor::sin() const { return function::sin(*this); }
 Tensor Tensor::cos() const { return function::cos(*this); }
+Tensor Tensor::sqrt() const { return function::sqrt(*this); }
 Tensor Tensor::pow(const Scalar &exp) const { return function::pow(*this, scalar(exp, options().noGrad())); }
 Tensor Tensor::pow(const Tensor &exp) const { return function::pow(*this, exp); }
 
 Tensor Tensor::maximum(const Tensor &a, const Tensor &b) { return function::maximum(a, b); }
 Tensor Tensor::minimum(const Tensor &a, const Tensor &b) { return function::minimum(a, b); }
 
+Tensor Tensor::min() const { return function::min(*this); }
+Tensor Tensor::max() const { return function::max(*this); }
+Tensor Tensor::argmin() const { return function::argmin(*this); }
+Tensor Tensor::argmax() const { return function::argmax(*this); }
 Tensor Tensor::sum() const { return function::sum(*this); }
+Tensor Tensor::mean() const { return function::mean(*this); }
+Tensor Tensor::var(bool unbiased) const { return function::var(*this, unbiased); }
+TensorPair Tensor::varMean(bool unbiased) const { return function::varMean(*this, unbiased); }
 
-void Tensor::reshape(const IntArrayView shape) { inplaceSet(function::reshape(*this, shape)); }
+TensorPair Tensor::min(int64_t dim, bool keepDims) const { return function::min(*this, dim, keepDims); }
+TensorPair Tensor::max(int64_t dim, bool keepDims) const { return function::max(*this, dim, keepDims); }
+Tensor Tensor::argmin(int64_t dim, bool keepDims) const { return function::min(*this, dim, keepDims).second; }
+Tensor Tensor::argmax(int64_t dim, bool keepDims) const { return function::max(*this, dim, keepDims).second; }
+Tensor Tensor::sum(int64_t dim, bool keepDims) const { return function::sum(*this, dim, keepDims); }
+Tensor Tensor::mean(int64_t dim, bool keepDims) const { return function::mean(*this, dim, keepDims); }
+Tensor Tensor::var(int64_t dim, bool unbiased, bool keepDims) const {
+  return function::var(*this, dim, unbiased, keepDims);
+}
+TensorPair Tensor::varMean(int64_t dim, bool unbiased, bool keepDims) const {
+  return function::varMean(*this, dim, unbiased, keepDims);
+}
+
+Tensor Tensor::sum(IntArrayView dims, bool keepDims) const { return function::sum(*this, dims, keepDims); }
+Tensor Tensor::mean(IntArrayView dims, bool keepDims) const { return function::mean(*this, dims, keepDims); }
+Tensor Tensor::var(IntArrayView dims, bool unbiased, bool keepDims) const {
+  return function::var(*this, dims, unbiased, keepDims);
+}
+TensorPair Tensor::varMean(IntArrayView dims, bool unbiased, bool keepDims) const {
+  return function::varMean(*this, dims, unbiased, keepDims);
+}
+
+void Tensor::reshape_(const IntArrayView shape) { inplaceSet(function::reshape(*this, shape)); }
+void Tensor::permute_(const IntArrayView dims) { inplaceSet(function::permute(*this, dims)); }
+void Tensor::permute_() { inplaceSet(function::permute(*this)); }
+void Tensor::flatten_(int64_t startDim, int64_t endDim) { inplaceSet(function::flatten(*this, startDim, endDim)); }
+void Tensor::unflatten_(int64_t dim, IntArrayView shape) { inplaceSet(function::unflatten(*this, dim, shape)); }
+void Tensor::squeeze_(int64_t dim) { inplaceSet(function::squeeze(*this, dim)); }
+void Tensor::squeeze_(IntArrayView dims) { inplaceSet(function::squeeze(*this, dims)); }
+void Tensor::unsqueeze_(int64_t dim) { inplaceSet(function::unsqueeze(*this, dim)); }
+void Tensor::transpose_(int64_t dim0, int64_t dim1) { inplaceSet(function::transpose(*this, dim0, dim1)); }
+void Tensor::t_() { inplaceSet(function::transpose2d(*this)); }
+
+Tensor Tensor::reshape(const IntArrayView shape) const { return function::reshape(*this, shape); }
+Tensor Tensor::view(const IntArrayView shape) const { return function::view(*this, shape); }
 Tensor Tensor::permute(const IntArrayView dims) const { return function::permute(*this, dims); }
 Tensor Tensor::permute() const { return function::permute(*this); }
 Tensor Tensor::flatten(int64_t startDim, int64_t endDim) const { return function::flatten(*this, startDim, endDim); }
@@ -273,5 +317,7 @@ Tensor Tensor::unflatten(int64_t dim, IntArrayView shape) const { return functio
 Tensor Tensor::squeeze(int64_t dim) const { return function::squeeze(*this, dim); }
 Tensor Tensor::squeeze(IntArrayView dims) const { return function::squeeze(*this, dims); }
 Tensor Tensor::unsqueeze(int64_t dim) const { return function::unsqueeze(*this, dim); }
+Tensor Tensor::transpose(int64_t dim0, int64_t dim1) const { return function::transpose(*this, dim0, dim1); }
+Tensor Tensor::t() const { return function::transpose2d(*this); }
 
 }  // namespace tinytorch

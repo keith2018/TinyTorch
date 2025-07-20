@@ -332,9 +332,11 @@ Tensor dropoutOpCudaImpl(const Tensor& grad, const Tensor& mask, float p) {
 }
 
 template <typename T>
-Tensor layerNormOpCudaImpl(const Tensor& self, const Tensor& weight, const Tensor& bias, float eps) {
+Tensor layerNormOpCudaImpl(const Tensor& self, IntArrayView normalizedShape, const Tensor& weight, const Tensor& bias, float eps) {
   int64_t d = self.shape().back();
   int64_t n = self.numel() / d;
+  ASSERT(normalizedShape.size() == 1);
+  ASSERT(normalizedShape.front() == d);
   ASSERT(d <= 1024);
   Tensor out(self.shape(), self.options().noGrad());
 

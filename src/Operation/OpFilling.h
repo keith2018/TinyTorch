@@ -21,7 +21,7 @@ using FillOpMaskedInplaceFn = void (*)(Tensor& self, const Tensor& mask, const S
 using FillOpLinSpaceFn = void (*)(Tensor& self, const Scalar& start, const Scalar& step, int64_t steps);
 
 using FillOpRandUniformFn = void (*)(Tensor& self, float min, float max);
-using FillOpRandNormalFn = void (*)(Tensor& self);
+using FillOpRandNormalFn = void (*)(Tensor& self, float min, float stddev);
 using FillOpRandBernoulliFn = void (*)(Tensor& self, float p);
 
 DEFINE_OP(fill, FillOpFn)

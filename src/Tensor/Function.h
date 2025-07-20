@@ -80,18 +80,38 @@ auto Function<T>::apply(Args&&... args) -> std::enable_if_t<std::is_same_v<X, T>
     (collect(args), ...);
   }
 
+  using OutputType = forward_t<X, Args...>;
   if (requiresGrad) {
     auto ctx = std::make_shared<AutogradContext>(std::move(inputTensors));
     auto output = T::forward(ctx.get(), std::forward<Args>(args)...);
     auto fn = std::make_shared<FunctionInstance>(ctx);
     fn->nextFunctions = std::move(inputFns);
-    output.setRequiresGrad(true, fn);
-    return output;
+
+    if constexpr (std::is_same_v<OutputType, Tensor>) {
+      output.setRequiresGrad(true, fn);
+      return output;
+    } else if constexpr (std::is_same_v<OutputType, TensorPair>) {
+      output.first.setRequiresGrad(true, fn);
+      output.second.setRequiresGrad(true, fn);
+      return output;
+    } else {
+      static_assert(false, "Unsupported return type for T::forward");
+      return output;
+    }
   }
 
   auto output = T::forward(nullptr, std::forward<Args>(args)...);
-  ASSERT(!output.requiresGrad());
-  return output;
+  if constexpr (std::is_same_v<OutputType, Tensor>) {
+    ASSERT(!output.requiresGrad());
+    return output;
+  } else if constexpr (std::is_same_v<OutputType, TensorPair>) {
+    ASSERT(!output.first.requiresGrad());
+    ASSERT(!output.second.requiresGrad());
+    return output;
+  } else {
+    static_assert(false, "Unsupported return type for T::forward");
+    return output;
+  }
 }
 
 class FuncLeaf : public FunctionBase {
