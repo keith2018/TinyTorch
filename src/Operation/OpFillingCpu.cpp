@@ -21,12 +21,12 @@ void fillOpRandUniformCpuImpl(Tensor& self, float min, float max) {
   }
 }
 
-void fillOpRandNormalCpuImpl(Tensor& self) {
+void fillOpRandNormalCpuImpl(Tensor& self, float mean, float stddev) {
   ASSERT(self.dtype() == DType::Float32);
   self.copyOnWrite();
   auto* selfPtr = self.dataPtr<float>();
   auto generator = RandomGeneratorCPU::getGenerator();
-  std::normal_distribution distribution(0.0f, 1.0f);
+  std::normal_distribution distribution(mean, stddev);
   for (int64_t i = 0; i < self.numel(); i++) {
     selfPtr[i] = distribution(generator);
   }

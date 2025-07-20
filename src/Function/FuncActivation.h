@@ -30,21 +30,13 @@ class FuncRelu : public Function<FuncRelu> {
 class FuncGelu : public Function<FuncGelu> {
  public:
   static Tensor forward(AutogradContext* ctx, const Tensor& self) { return op::gelu(self); }
-
-  static void backward(AutogradContext* ctx, const Tensor& grad) {
-    // TODO
-    NOT_IMPLEMENTED();
-  }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
 };
 
 class FuncSilu : public Function<FuncSilu> {
  public:
   static Tensor forward(AutogradContext* ctx, const Tensor& self) { return op::silu(self); }
-
-  static void backward(AutogradContext* ctx, const Tensor& grad) {
-    // TODO
-    NOT_IMPLEMENTED();
-  }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
 };
 
 class FuncSoftmax : public Function<FuncSoftmax> {

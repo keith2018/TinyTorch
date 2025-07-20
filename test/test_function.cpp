@@ -266,7 +266,7 @@ TEST(TEST_Function, func_dropout) {
 
 TEST(TEST_Function, func_maxpool2d_01) {
   auto input = Tensor(Array2d<float>{{1, 2, 3, 4}, {5, 6, 7, 8}, {9, 10, 11, 12}, {13, 14, 15, 16}});
-  input.reshape({1, 1, 4, 4});
+  input.reshape_({1, 1, 4, 4});
   input.setRequiresGrad(true);
 
   auto output = function::maxPool2d(input, 2, 2);
@@ -291,7 +291,7 @@ TEST(TEST_Function, func_maxpool2d_01) {
 
 TEST(TEST_Function, func_maxpool2d_02) {
   auto input = Tensor(Array2d<float>{{1, 2, 3, 4}, {5, 6, 7, 8}, {9, 10, 11, 12}, {13, 14, 15, 16}});
-  input.reshape({1, 1, 4, 4});
+  input.reshape_({1, 1, 4, 4});
   input.setRequiresGrad(true);
 
   auto output = function::maxPool2d(input, 2, 2, 1);
@@ -304,11 +304,11 @@ TEST(TEST_Function, func_maxpool2d_02) {
 
 TEST(TEST_Function, func_conv2d_01) {
   auto input = Tensor(Array2d<float>{{1, 2, 3, 4}, {5, 6, 7, 8}, {9, 10, 11, 12}, {13, 14, 15, 16}});
-  input.reshape({1, 1, 4, 4});
+  input.reshape_({1, 1, 4, 4});
   input.setRequiresGrad(true);
 
   auto weight = Tensor(Array2d<float>{{1, 0}, {0, -1}});
-  weight.reshape({1, 1, 2, 2});
+  weight.reshape_({1, 1, 2, 2});
   weight.setRequiresGrad(true);
 
   auto bias = Tensor(Array1d<float>{2.f});
@@ -327,11 +327,11 @@ TEST(TEST_Function, func_conv2d_01) {
 TEST(TEST_Function, func_conv2d_02) {
   auto input = Tensor(Array1d<float>{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
                                      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16});
-  input.reshape({2, 1, 4, 4});
+  input.reshape_({2, 1, 4, 4});
   input.setRequiresGrad(true);
 
   auto weight = Tensor(Array2d<float>{{1, 2}, {0, -1}});
-  weight.reshape({1, 1, 2, 2});
+  weight.reshape_({1, 1, 2, 2});
   weight.setRequiresGrad(true);
 
   auto bias = Tensor(Array1d<float>{2.f});
@@ -351,11 +351,11 @@ TEST(TEST_Function, func_conv2d_02) {
 TEST(TEST_Function, func_conv2d_03) {
   auto input = Tensor(Array1d<float>{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
                                      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16});
-  input.reshape({1, 2, 4, 4});
+  input.reshape_({1, 2, 4, 4});
   input.setRequiresGrad(true);
 
   auto weight = Tensor(Array1d<float>{1, 2, 0, -1, 1, 2, 0, -1});
-  weight.reshape({1, 2, 2, 2});
+  weight.reshape_({1, 2, 2, 2});
   weight.setRequiresGrad(true);
 
   auto bias = Tensor(Array1d<float>{2.f});
@@ -376,7 +376,7 @@ TEST(TEST_Function, func_layerNorm) {
   auto input = Tensor(Array2d<float>{{1.4176, 0.1874, 0.8367}, {-0.1203, 2.5638, -1.2554}});
   auto w = Tensor(Array1d<float>{1.4072, -0.4768, -0.6006});
   auto b = Tensor(Array1d<float>{-0.1609, -0.4865, -0.6256});
-  auto y = function::layerNorm(input, w, b);
+  auto y = function::layerNorm(input, {input.shape().back()}, w, b);
   EXPECT_TRUE(y.shape() == input.shape());
   EXPECT_TRUE(VectorNear(y.toList<float>(), {1.5297, 0.1079, -0.6529, -0.6147, -1.1319, -0.0062}));
 }

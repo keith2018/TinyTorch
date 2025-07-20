@@ -15,6 +15,11 @@ namespace tinytorch {
 
 struct FunctionBase;
 class AutogradMeta;
+class Tensor;
+
+using TensorPair = std::pair<Tensor, Tensor>;
+using TensorList = std::vector<Tensor>;
+using TensorPtr = Tensor*;
 
 class Tensor {
  public:
@@ -131,12 +136,14 @@ class Tensor {
   Tensor to(Device device) const;
 
   // fill
-  void fill(const Scalar& val);
-  void fillMasked(const Tensor& mask, const Scalar& val);
-  void fillLinSpace(const Scalar& start, const Scalar& step, int64_t steps);
-  void fillUniform(float min, float max);
-  void fillNormal();
-  void fillBernoulli(float p);
+  void fill_(const Scalar& val);
+  void fillMasked_(const Tensor& mask, const Scalar& val);
+  void fillZero_();
+  void fillOne_();
+  void fillLinSpace_(const Scalar& start, const Scalar& step, int64_t steps);
+  void fillUniform_(float min, float max);
+  void fillNormal_(float mean = 0.f, float stddev = 1.f);
+  void fillBernoulli_(float p);
 
   // math
   Tensor operator+(const Tensor& other) const;
@@ -180,6 +187,7 @@ class Tensor {
 
   Tensor sin() const;
   Tensor cos() const;
+  Tensor sqrt() const;
   Tensor pow(const Scalar& exp) const;
   Tensor pow(const Tensor& exp) const;
 
@@ -187,10 +195,43 @@ class Tensor {
   static Tensor minimum(const Tensor& a, const Tensor& b);
 
   // reduce
+  Tensor min() const;
+  Tensor max() const;
+  Tensor argmin() const;
+  Tensor argmax() const;
   Tensor sum() const;
+  Tensor mean() const;
+  Tensor var(bool unbiased = true) const;
+  TensorPair varMean(bool unbiased = true) const;
+
+  TensorPair min(int64_t dim, bool keepDims = false) const;
+  TensorPair max(int64_t dim, bool keepDims = false) const;
+  Tensor argmin(int64_t dim, bool keepDims = false) const;
+  Tensor argmax(int64_t dim, bool keepDims = false) const;
+  Tensor sum(int64_t dim, bool keepDims = false) const;
+  Tensor mean(int64_t dim, bool keepDims = false) const;
+  Tensor var(int64_t dim, bool unbiased, bool keepDims = false) const;
+  TensorPair varMean(int64_t dim, bool unbiased, bool keepDims = false) const;
+
+  Tensor sum(IntArrayView dims, bool keepDims = false) const;
+  Tensor mean(IntArrayView dims, bool keepDims = false) const;
+  Tensor var(IntArrayView dims, bool unbiased = true, bool keepDims = false) const;
+  TensorPair varMean(IntArrayView dims, bool unbiased = true, bool keepDims = false) const;
 
   // transform
-  void reshape(IntArrayView shape);
+  void reshape_(IntArrayView shape);
+  void permute_(IntArrayView dims);
+  void permute_();
+  void flatten_(int64_t startDim = 0, int64_t endDim = -1);
+  void unflatten_(int64_t dim, IntArrayView shape);
+  void squeeze_(int64_t dim = -1);
+  void squeeze_(IntArrayView dims);
+  void unsqueeze_(int64_t dim);
+  void transpose_(int64_t dim0, int64_t dim1);
+  void t_();
+
+  Tensor reshape(IntArrayView shape) const;
+  Tensor view(IntArrayView shape) const;
   Tensor permute(IntArrayView dims) const;
   Tensor permute() const;
   Tensor flatten(int64_t startDim = 0, int64_t endDim = -1) const;
@@ -198,6 +239,8 @@ class Tensor {
   Tensor squeeze(int64_t dim = -1) const;
   Tensor squeeze(IntArrayView dims) const;
   Tensor unsqueeze(int64_t dim) const;
+  Tensor transpose(int64_t dim0, int64_t dim1) const;
+  Tensor t() const;
 
  private:
   void initAutogradMeta(const std::shared_ptr<FunctionBase>& fn = nullptr);
@@ -254,7 +297,7 @@ Tensor Tensor::arange(T start, T stop, T step, Options options) {
   options.dtype(TypeToDType_v<T>);
   auto steps = static_cast<int64_t>(std::ceil((stop - start) / step));
   Tensor ret({steps}, options);
-  ret.fillLinSpace(start, step, steps);
+  ret.fillLinSpace_(start, step, steps);
   return ret;
 }
 
@@ -267,7 +310,7 @@ Tensor Tensor::linspace(T start, T end, int64_t steps, Options options) {
     step = (end - start) / static_cast<T>(steps - 1);
   }
   Tensor ret({steps}, options);
-  ret.fillLinSpace(start, step, steps);
+  ret.fillLinSpace_(start, step, steps);
   return ret;
 }
 
@@ -282,9 +325,5 @@ T Tensor::item() const {
   ASSERT(defined());
   return impl_->item<T>();
 }
-
-using TensorPair = std::pair<Tensor, Tensor>;
-using TensorList = std::vector<Tensor>;
-using TensorPtr = Tensor*;
 
 }  // namespace tinytorch

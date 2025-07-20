@@ -29,7 +29,8 @@ using SoftmaxOpBackwardFn = Tensor (*)(const Tensor& grad, const Tensor& output,
 
 using DropoutOpFn = Tensor (*)(const Tensor& grad, const Tensor& mask, float p);
 
-using LayerNormOpFn = Tensor (*)(const Tensor& self, const Tensor& weight, const Tensor& bias, float eps);
+using LayerNormOpFn = Tensor (*)(const Tensor& self, IntArrayView normalizedShape, const Tensor& weight,
+                                 const Tensor& bias, float eps);
 
 // softmax
 DEFINE_OP(softmax, SoftmaxOpFn);

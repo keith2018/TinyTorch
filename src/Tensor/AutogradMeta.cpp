@@ -46,7 +46,7 @@ void AutogradMeta::zeroGrad(const Tensor &owner) {
   if (!grad_.defined()) {
     grad_ = Tensor::empty(owner.shape(), owner.options().noGrad());
   }
-  op::fill(grad_, 0);
+  grad_.fillZero_();
 }
 
 bool AutogradMeta::isLeaf() const {

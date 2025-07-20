@@ -24,9 +24,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/.
 
 if (CMAKE_BUILD_TYPE STREQUAL Debug)
     add_definitions(-DDEBUG)
-    if (MSVC)
-        set_source_files_properties(${TinyTorch_SRC_CPP} PROPERTIES COMPILE_FLAGS "/Wall")
-    else ()
+    if (NOT MSVC)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror -Wall")
     endif ()
 elseif (CMAKE_BUILD_TYPE STREQUAL Release)

@@ -12,10 +12,10 @@ using namespace tinytorch;
 TEST(TEST_Operation, basic_fill) {
   auto x = Tensor::randn({2, 3});
 
-  x.fill(-1);
+  x.fill_(-1);
   EXPECT_THAT(x.toList<float>(), ElementsAre(-1, -1, -1, -1, -1, -1));
 
-  x.fill(2);
+  x.fill_(2);
   EXPECT_THAT(x.toList<float>(), ElementsAre(2, 2, 2, 2, 2, 2));
 }
 
@@ -306,7 +306,7 @@ TEST(TEST_Operation, math_max_01) {
 
 TEST(TEST_Operation, math_max_02) {
   auto x = Tensor::arange<float>(0.f, 24.f, 1.f);
-  x.reshape({2, 3, 4});
+  x.reshape_({2, 3, 4});
 
   auto y = op::maxOnDim(x, 0, true).first;
   EXPECT_THAT(y.shape(), ElementsAre(1, 3, 4));
@@ -339,7 +339,7 @@ TEST(TEST_Operation, math_argmin_02) {
   Tensor x(Array1d<float>{3.14, 7.89, 1.23, 4.56, 9.01, 2.34, 5.67, 8.90, 0.12, 6.78, 3.45,
                           7.12, 1.56, 4.89, 9.34, 2.67, 5.89, 8.23, 0.45, 6.12, 3.78, 7.45,
                           1.89, 4.23, 9.56, 2.12, 5.34, 8.67, 0.78, 6.45, 3.12, 7.78});
-  x.reshape({2, 2, 2, 4});
+  x.reshape_({2, 2, 2, 4});
   auto y = op::minOnDim(x, (2), true).second;
   EXPECT_THAT(y.shape(), ElementsAre(2, 2, 1, 4));
   EXPECT_THAT(y.toList<int64_t>(), ElementsAre(0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1, 1, 0, 1, 1));
@@ -362,7 +362,7 @@ TEST(TEST_Operation, math_argmax_01) {
 TEST(TEST_Operation, math_argmax_02) {
   Tensor x(Array1d<float>{1, 2, 3, 5, 6,  7,  9,  10, 11, 2, 3, 4, 6,  7,  8,  10, 11, 12,
                           5, 6, 7, 9, 10, 11, 13, 14, 15, 6, 7, 8, 10, 11, 12, 14, 15, 16});
-  x.reshape({4, 9});
+  x.reshape_({4, 9});
 
   auto y = op::maxOnDim(x, 1, false).second;
   EXPECT_THAT(y.shape(), ElementsAre(4));
@@ -445,7 +445,7 @@ TEST(TEST_Operation, math_var_02) {
   Tensor x(Array1d<float>{3.14, 7.89, 1.23, 4.56, 9.01, 2.34, 5.67, 8.90, 0.12, 6.78, 3.45,
                           7.12, 1.56, 4.89, 9.34, 2.67, 5.89, 8.23, 0.45, 6.12, 3.78, 7.45,
                           1.89, 4.23, 9.56, 2.12, 5.34, 8.67, 0.78, 6.45, 3.12, 7.78});
-  x.reshape({2, 2, 2, 4});
+  x.reshape_({2, 2, 2, 4});
 
   auto y = op::varMeanOnDim(x, 0, true, true).first;
   EXPECT_THAT(y.shape(), ElementsAre(1, 2, 2, 4));
@@ -571,7 +571,7 @@ TEST(TEST_Operation, basic_permute) {
   EXPECT_THAT(y.toList<float>(), ElementsAre(1, 2, 3, 4, 5, 6));
 
   x = Tensor::arange<float>(0.f, 8.f);
-  x.reshape({1, 2, 2, 2});
+  x.reshape_({1, 2, 2, 2});
 
   y = op::permute(x, IntArrayView{0, 3, 1, 2});
   EXPECT_THAT(y.shape(), ElementsAre(1, 2, 2, 2));
@@ -798,7 +798,7 @@ TEST(TEST_Operation, math_dot) {
 
 TEST(TEST_Operation, basic_im2col_col2im) {
   auto input = Tensor(Array2d<float>{{1, 2, 3, 4}, {5, 6, 7, 8}, {9, 10, 11, 12}, {13, 14, 15, 16}});
-  input.reshape({1, 1, 4, 4});
+  input.reshape_({1, 1, 4, 4});
   auto col = op::im2col(input, 2, 2, 0);
   EXPECT_THAT(col.shape(), ElementsAre(4, 4));
   EXPECT_THAT(col.toList<float>(), ElementsAre(1, 2, 5, 6, 3, 4, 7, 8, 9, 10, 13, 14, 11, 12, 15, 16));
@@ -854,11 +854,11 @@ TEST(TEST_Operation, math_matmul) {
 
   // broadcast
   auto a = Tensor::arange<float>(0, 2 * 2 * 4);
-  a.reshape({2, 2, 4});
+  a.reshape_({2, 2, 4});
   auto b = Tensor::arange<float>(0, 2 * 2 * 4);
-  b.reshape({1, 2, 4, 2});
+  b.reshape_({1, 2, 4, 2});
   auto c = Tensor::arange<float>(0, 1 * 2 * 4);
-  c.reshape({1, 4, 2});
+  c.reshape_({1, 4, 2});
   auto d = op::matmul(a, b);
   auto e = op::matmul(a, c);
 

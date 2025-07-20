@@ -80,7 +80,7 @@ void fillOpRandUniformCudaImpl(Tensor& self, float min, float max) {
   CUDA_LAUNCH_KERNEL(kFillRandUniform, params, selfPtr, min, max, seed, seq, n);
 }
 
-void fillOpRandNormalCudaImpl(Tensor& self) {
+void fillOpRandNormalCudaImpl(Tensor& self, float mean, float stddev) {
   ASSERT(self.dtype() == DType::Float32);
   self.copyOnWrite();
   auto* selfPtr = self.dataPtr<float>();
@@ -89,7 +89,7 @@ void fillOpRandNormalCudaImpl(Tensor& self) {
   int64_t n = self.numel();
 
   auto params = cuda::getKernelLaunchParams(self.device().index, n, 4);
-  CUDA_LAUNCH_KERNEL(kFillRandNormal, params, selfPtr, 0.f, 1.f, seed, seq, n);
+  CUDA_LAUNCH_KERNEL(kFillRandNormal, params, selfPtr, mean, stddev, seed, seq, n);
 }
 
 void fillOpRandBernoulliCudaImpl(Tensor& self, float p) {

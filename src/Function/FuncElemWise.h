@@ -39,6 +39,12 @@ class FuncCos : public Function<FuncCos> {
   }
 };
 
+class FuncSqrt : public Function<FuncSqrt> {
+ public:
+  static Tensor forward(AutogradContext* ctx, const Tensor& self) { return op::sqrt(self); }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
+};
+
 class FuncAdd : public Function<FuncAdd> {
  public:
   static Tensor forward(AutogradContext* ctx, const Tensor& self, const Tensor& other, const Scalar& alpha) {
@@ -133,11 +139,7 @@ class FuncMaximum : public Function<FuncMaximum> {
   static Tensor forward(AutogradContext* ctx, const Tensor& self, const Tensor& other) {
     return op::maximum(self, other);
   }
-
-  static void backward(AutogradContext* ctx, const Tensor& grad) {
-    // TODO
-    NOT_IMPLEMENTED();
-  }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
 };
 
 class FuncMinimum : public Function<FuncMinimum> {
@@ -145,11 +147,7 @@ class FuncMinimum : public Function<FuncMinimum> {
   static Tensor forward(AutogradContext* ctx, const Tensor& self, const Tensor& other) {
     return op::minimum(self, other);
   }
-
-  static void backward(AutogradContext* ctx, const Tensor& grad) {
-    // TODO
-    NOT_IMPLEMENTED();
-  }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
 };
 
 inline Tensor add(const Tensor& self, const Tensor& other, const Scalar& alpha = 1) {
@@ -163,6 +161,7 @@ inline Tensor div(const Tensor& self, const Tensor& other) { return FuncDiv::app
 
 inline Tensor sin(const Tensor& self) { return FuncSin::apply(self); }
 inline Tensor cos(const Tensor& self) { return FuncCos::apply(self); }
+inline Tensor sqrt(const Tensor& self) { return FuncSqrt::apply(self); }
 inline Tensor pow(const Tensor& self, const Tensor& other) { return FuncPow::apply(self, other); }
 
 inline Tensor maximum(const Tensor& self, const Tensor& other) { return FuncMaximum::apply(self, other); }

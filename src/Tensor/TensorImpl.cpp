@@ -14,12 +14,7 @@ TensorImpl::TensorImpl(const IntArrayView shape, Options options) : options_(opt
   ASSERT(shape.size() <= MAX_TENSOR_DIM);
   computeNumel(numel_, shape);
   computeStrides(strides_, shape);
-
-  int64_t nbytes = numel_ * static_cast<int64_t>(dtypeSize(options.dtype_));
-  Allocator* allocator = getAllocator(options);
   storageOffset_ = 0;
-  storage_ = std::make_shared<Storage>(nbytes, options.device_, allocator);
-  dataPtr_ = static_cast<uint8_t*>(storage_->data()) + storageOffset_;
 }
 
 TensorImpl::TensorImpl(const IntArrayView shape, Options options, const std::shared_ptr<Storage>& storage,
@@ -36,14 +31,23 @@ TensorImpl::TensorImpl(const IntArrayView shape, Options options, const std::sha
   dataPtr_ = static_cast<uint8_t*>(storage_->data()) + storageOffset_;
 }
 
-void TensorImpl::copyOnWrite() {
+void TensorImpl::setStorage(const std::shared_ptr<Storage>& storage, int64_t offset) {
+  int64_t nbytes = numel_ * static_cast<int64_t>(dtypeSize(options_.dtype_));
+  ASSERT(offset + nbytes <= storage->size());
+  storage_ = storage;
+  storageOffset_ = offset;
+  dataPtr_ = static_cast<uint8_t*>(storage_->data()) + storageOffset_;
+}
+
+void TensorImpl::copyOnWrite() const {
+  ensureStorage();
   if (storage_ && storage_.use_count() > 1) {
     storage_ = storage_->clone();
     dataPtr_ = static_cast<uint8_t*>(storage_->data()) + storageOffset_;
   }
 }
 
-void TensorImpl::reshape(const IntArrayView shape) {
+void TensorImpl::reshape_(const IntArrayView shape) {
   // set as scalar
   if (shape.empty() && numel_ == 1) {
     shape_.clear();
@@ -88,7 +92,7 @@ void TensorImpl::reshape(const IntArrayView shape) {
   computeStrides(strides_, shape_.view());
 }
 
-void TensorImpl::flatten(int64_t startDim, int64_t endDim) {
+void TensorImpl::flatten_(int64_t startDim, int64_t endDim) {
   SizeVector retShape;
   for (int64_t i = 0; i < startDim; i++) {
     retShape.pushBack(shape_[i]);
@@ -105,10 +109,10 @@ void TensorImpl::flatten(int64_t startDim, int64_t endDim) {
     retShape.pushBack(shape_[i]);
   }
 
-  reshape(retShape.view());
+  reshape_(retShape.view());
 }
 
-void TensorImpl::unflatten(int64_t d, const IntArrayView shape) {
+void TensorImpl::unflatten_(int64_t d, const IntArrayView shape) {
   if (d < 0) {
     d += dim();
   }
@@ -141,10 +145,10 @@ void TensorImpl::unflatten(int64_t d, const IntArrayView shape) {
     retShape.pushBack(shape_[i]);
   }
 
-  reshape(retShape.view());
+  reshape_(retShape.view());
 }
 
-void TensorImpl::squeeze(int64_t d) {
+void TensorImpl::squeeze_(int64_t d) {
   if (d < -dim() || d >= dim()) {
     LOGE("Invalid dim");
     return;
@@ -166,10 +170,10 @@ void TensorImpl::squeeze(int64_t d) {
     retShape.pushBack(shape_[i]);
   }
 
-  reshape(retShape.view());
+  reshape_(retShape.view());
 }
 
-void TensorImpl::squeeze(const IntArrayView dims) {
+void TensorImpl::squeeze_(const IntArrayView dims) {
   if (dims.empty()) {
     // squeeze all dimensions with size 1
     SizeVector retShape;
@@ -178,7 +182,7 @@ void TensorImpl::squeeze(const IntArrayView dims) {
         retShape.pushBack(d);
       }
     }
-    reshape(retShape.view());
+    reshape_(retShape.view());
   } else {
     SizeVector retShape;
     for (int64_t i = 0; i < dim(); ++i) {
@@ -197,11 +201,11 @@ void TensorImpl::squeeze(const IntArrayView dims) {
         retShape.pushBack(shape_[i]);
       }
     }
-    reshape(retShape.view());
+    reshape_(retShape.view());
   }
 }
 
-void TensorImpl::unsqueeze(int64_t d) {
+void TensorImpl::unsqueeze_(int64_t d) {
   if (d > dim() || d < -dim() - 1) {
     LOGE("Invalid axis");
     return;
@@ -218,7 +222,16 @@ void TensorImpl::unsqueeze(int64_t d) {
     retShape.pushBack(shape_[i]);
   }
 
-  reshape(retShape.view());
+  reshape_(retShape.view());
+}
+
+void TensorImpl::ensureStorage() const {
+  if (!storage_) {
+    int64_t nbytes = numel_ * static_cast<int64_t>(dtypeSize(options_.dtype_));
+    Allocator* allocator = getAllocator(options_);
+    storage_ = std::make_shared<Storage>(nbytes, options_.device_, allocator);
+    dataPtr_ = static_cast<uint8_t*>(storage_->data()) + storageOffset_;
+  }
 }
 
 void TensorImpl::computeStrides(SizeVector& strides, const IntArrayView shape) {
