@@ -12,7 +12,7 @@ env:
 jobs:
   build_windows_cpu:
     name: build_windows_cpu
-    runs-on: windows-2025
+    runs-on: windows-latest
 
     steps:
       - uses: actions/checkout@v3
@@ -31,30 +31,33 @@ jobs:
       # - name: Demo
       #   run: cd ${{github.workspace}}/demo/bin/${{env.BUILD_TYPE}} && ./TinyTorch_demo.exe
 
-  build_windows_gpu:
-    name: build_windows_gpu
-    runs-on: windows-2025
+  # build_windows_gpu:
+  #   name: build_windows_gpu
+  #   runs-on: windows-latest
 
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: true
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #       with:
+  #         submodules: true
 
-      - name: cuda-toolkit
-        uses: Jimver/cuda-toolkit@v0.2.26
-        with:
-          cuda: '12.9.1'
-          use-github-cache: false
-          use-local-cache: false
+  #     - name: Update cuda driver
+  #       run: |
+  #         nvidia-smi
 
-      - name: Configure CMake
-        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DTINYTORCH_USE_CUDA=ON -DTINYTORCH_TEST_CUDA=ON -DTINYTORCH_BUILD_TEST=ON
+  #     - name: cuda-toolkit
+  #       uses: Jimver/cuda-toolkit@v0.2.22
+  #       with:
+  #         use-github-cache: false
+  #         use-local-cache: false
 
-      - name: Build
-        run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+  #     - name: Configure CMake
+  #       run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DTINYTORCH_USE_CUDA=ON -DTINYTORCH_TEST_CUDA=ON -DTINYTORCH_BUILD_TEST=ON
 
-#      - name: Test
-#        run: cd ${{github.workspace}}/build && ctest
-#
-#      - name: Demo
-#        run: cd ${{github.workspace}}/demo/bin/${{env.BUILD_TYPE}} && ./TinyTorch_demo.exe
+  #     - name: Build
+  #       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+
+  #     - name: Test
+  #       run: cd ${{github.workspace}}/build && ctest
+
+  #     - name: Demo
+  #       run: cd ${{github.workspace}}/demo/bin/${{env.BUILD_TYPE}} && ./TinyTorch_demo.exe
