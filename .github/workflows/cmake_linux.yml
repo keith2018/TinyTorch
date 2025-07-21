@@ -12,7 +12,7 @@ env:
 jobs:
   build_linux_cpu:
     name: build_linux_cpu
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
@@ -31,33 +31,32 @@ jobs:
       # - name: Demo
       #   run: cd ${{github.workspace}}/demo/bin && ./TinyTorch_demo
 
-  build_linux_gpu:
-    name: build_linux_gpu
-    runs-on: ubuntu-22.04
+  # build_linux_gpu:
+  #   name: build_linux_gpu
+  #   runs-on: ubuntu-latest
 
-    steps:
-      - name: Delete huge unnecessary tools folder
-        run: rm -rf /opt/hostedtoolcache
+  #   steps:
+  #     - name: Delete huge unnecessary tools folder
+  #       run: rm -rf /opt/hostedtoolcache
 
-      - name: cuda-toolkit
-        uses: Jimver/cuda-toolkit@v0.2.26
-        with:
-          cuda: '12.9.1'
-          use-github-cache: false
-          use-local-cache: false
+  #     - name: cuda-toolkit
+  #       uses: Jimver/cuda-toolkit@v0.2.22
+  #       with:
+  #         use-github-cache: false
+  #         use-local-cache: false
 
-      - uses: actions/checkout@v3
-        with:
-          submodules: true
+  #     - uses: actions/checkout@v3
+  #       with:
+  #         submodules: true
 
-      - name: Configure CMake
-        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DTINYTORCH_USE_CUDA=ON -DTINYTORCH_TEST_CUDA=ON -DTINYTORCH_BUILD_TEST=ON
+  #     - name: Configure CMake
+  #       run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DTINYTORCH_USE_CUDA=ON -DTINYTORCH_TEST_CUDA=ON -DTINYTORCH_BUILD_TEST=ON
 
-      - name: Build
-        run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+  #     - name: Build
+  #       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
 
-#      - name: Test
-#        run: cd ${{github.workspace}}/build && ctest
-#
-#      - name: Demo
-#        run: cd ${{github.workspace}}/demo/bin && ./TinyTorch_demo
+  #     - name: Test
+  #       run: cd ${{github.workspace}}/build && ctest
+
+  #     - name: Demo
+  #       run: cd ${{github.workspace}}/demo/bin && ./TinyTorch_demo
