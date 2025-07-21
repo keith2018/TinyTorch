@@ -45,6 +45,9 @@ struct FunctionBase : std::enable_shared_from_this<FunctionBase> {
 template <typename X, typename... Args>
 using forward_t = decltype(X::forward(nullptr, std::declval<Args>()...));
 
+template <typename>
+constexpr bool always_false = false;
+
 template <class T>
 struct Function {
   struct FunctionInstance : FunctionBase {
@@ -95,7 +98,7 @@ auto Function<T>::apply(Args&&... args) -> std::enable_if_t<std::is_same_v<X, T>
       output.second.setRequiresGrad(true, fn);
       return output;
     } else {
-      static_assert(false, "Unsupported return type for T::forward");
+      static_assert(always_false<OutputType>, "Unsupported return type for T::forward");
       return output;
     }
   }
@@ -109,7 +112,7 @@ auto Function<T>::apply(Args&&... args) -> std::enable_if_t<std::is_same_v<X, T>
     ASSERT(!output.second.requiresGrad());
     return output;
   } else {
-    static_assert(false, "Unsupported return type for T::forward");
+    static_assert(always_false<OutputType>, "Unsupported return type for T::forward");
     return output;
   }
 }
