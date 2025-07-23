@@ -19,7 +19,7 @@ Tensor permuteOpCpuImpl(const Tensor& self, const IntArrayView dims) {
   ASSERT(static_cast<int64_t>(dims.size()) == self.dim());
   auto retShape = SizeVector(self.shape());
   reorderIndices(retShape.data(), self.dim(), dims);
-  auto ret = Tensor::empty(retShape.view(), self.options().noGrad());
+  auto ret = Tensor::empty(retShape, self.options().noGrad());
 
   const T* selfPtr = self.dataPtr<T>();
   T* retPtr = ret.dataPtr<T>();
@@ -41,7 +41,7 @@ Tensor permuteAllOpCpuImpl(const Tensor& self) {
   SizeVector dims(self.dim());
   std::iota(dims.begin(), dims.end(), 0);
   std::reverse(dims.begin(), dims.end());
-  return permuteOpCpuImpl<T>(self, dims.view());
+  return permuteOpCpuImpl<T>(self, dims);
 }
 
 template <typename T>
@@ -62,7 +62,7 @@ Tensor transposeOpCpuImpl(const Tensor& self, int64_t dim0, int64_t dim1) {
   std::iota(dims.begin(), dims.end(), 0);
   dims[dim0] = dim1;
   dims[dim1] = dim0;
-  return permuteOpCpuImpl<T>(self, dims.view());
+  return permuteOpCpuImpl<T>(self, dims);
 }
 
 template <typename T>
@@ -107,7 +107,7 @@ Tensor indexAdvanceOpCpuImpl(const Tensor& self, ArrayView<Tensor> indices) {
   for (auto i = len; i < self.dim(); i++) {
     retShape.pushBack(self.shape(i));
   }
-  auto ret = Tensor::empty(retShape.view(), self.options().noGrad());
+  auto ret = Tensor::empty(retShape, self.options().noGrad());
   const T* selfPtr = self.dataPtr<T>();
   T* retPtr = ret.dataPtr<T>();
 

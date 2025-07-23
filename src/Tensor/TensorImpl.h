@@ -8,8 +8,7 @@
 
 #include "Options.h"
 #include "Storage.h"
-#include "Utils/ArrayView.h"
-#include "Utils/SmallVector.h"
+#include "Utils/VectorUtils.h"
 
 namespace tinytorch {
 
@@ -56,10 +55,10 @@ class TensorImpl {
 
   Options& options() { return options_; }
   const Options& options() const { return options_; }
-  IntArrayView shape() const { return shape_.view(); }
-  IntArrayView strides() const { return strides_.view(); }
-  int64_t shape(int64_t d) { return shape_[d]; }
-  int64_t stride(int64_t d) { return strides_[d]; }
+  IntArrayView shape() const { return shape_; }
+  IntArrayView strides() const { return strides_; }
+  int64_t shape(int64_t d) { return shape_[d < 0 ? (d + dim()) : d]; }
+  int64_t stride(int64_t d) { return strides_[d < 0 ? (d + dim()) : d]; }
   const std::shared_ptr<Storage>& storage() const {
     ensureStorage();
     return storage_;

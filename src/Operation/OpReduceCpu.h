@@ -142,8 +142,8 @@ std::pair<Tensor, Tensor> ReducerCpu::reduceIdxDim(const Tensor &t, int64_t dim,
   }
 
   const auto retShape = getReduceShape(t, dim, keepDims);
-  auto values = Tensor::empty(retShape.view(), t.options().noGrad());
-  auto indices = Tensor::empty(retShape.view(), getIndicesOptions(t));
+  auto values = Tensor::empty(retShape, t.options().noGrad());
+  auto indices = Tensor::empty(retShape, getIndicesOptions(t));
 
   if (dim == t.dim() - 1) {
     reduceIdxDimImpl<T, OP, true>(values, indices, t, dim, keepDims);
@@ -169,7 +169,7 @@ Tensor ReducerCpu::reduceMultiDim(const Tensor &t, const IntArrayView dims, bool
   }
 
   const auto retShape = getReduceShape(t, inAxis, keepDims);
-  auto ret = Tensor::zeros(retShape.view(), t.options().noGrad());
+  auto ret = Tensor::zeros(retShape, t.options().noGrad());
 
   const T *tPtr = t.dataPtr<T>();
   T *retPtr = ret.dataPtr<T>();

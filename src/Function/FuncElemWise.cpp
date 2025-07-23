@@ -30,7 +30,7 @@ Tensor reduceGrad(const Tensor &self, const Tensor &grad) {
     return grad;
   }
 
-  auto ret = op::sumOnDims(grad, dims.view(), true);
+  auto ret = op::sumOnDims(grad, dims, true);
   op::reshapeInplace(ret, self.shape());
   return ret;
 }

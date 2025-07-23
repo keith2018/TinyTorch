@@ -122,7 +122,7 @@ LayerNorm::LayerNorm(IntArrayView normalizedShape, float eps, bool bias, Options
 }
 
 Tensor LayerNorm::forward(Tensor &input) {
-  return function::layerNorm(input, normalizedShape_.view(), weight_, bias_, eps_);
+  return function::layerNorm(input, normalizedShape_, weight_, bias_, eps_);
 }
 
 std::vector<std::pair<std::string, TensorPtr>> LayerNorm::namedParameters_() {
