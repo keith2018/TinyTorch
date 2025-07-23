@@ -105,6 +105,7 @@ class Tensor {
   IntArrayView shape() const { return impl_->shape(); }
   IntArrayView strides() const { return impl_->strides(); }
   int64_t shape(int64_t d) const { return impl_->shape(d); }
+  int64_t size(int64_t d) const { return impl_->shape(d); }
   int64_t stride(int64_t d) const { return impl_->stride(d); }
   const std::shared_ptr<Storage>& storage() const { return impl_->storage(); }
 
@@ -264,7 +265,7 @@ Tensor::Tensor(const std::vector<T>& values, const IntArrayView shape)
 template <typename T>
 Tensor::Tensor(const Array1d<T>& values, Options options) {
   SizeVector shape = {static_cast<int64_t>(values.size())};
-  impl_ = std::make_shared<TensorImpl>(values, shape.view(), options);
+  impl_ = std::make_shared<TensorImpl>(values, shape, options);
   initAutogradMeta();
 }
 
@@ -274,7 +275,7 @@ Tensor::Tensor(const Array1d<T>& values) : Tensor(values, options::dtype(TypeToD
 template <typename T>
 Tensor::Tensor(const Array2d<T>& values, Options options) {
   SizeVector shape = {static_cast<int64_t>(values.size()), static_cast<int64_t>(values[0].size())};
-  impl_ = std::make_shared<TensorImpl>(flatten2d(values), shape.view(), options);
+  impl_ = std::make_shared<TensorImpl>(flatten2d(values), shape, options);
   initAutogradMeta();
 }
 
@@ -285,7 +286,7 @@ template <typename T>
 Tensor::Tensor(const Array3d<T>& values, Options options) {
   SizeVector shape = {static_cast<int64_t>(values.size()), static_cast<int64_t>(values[0].size()),
                       static_cast<int64_t>(values[0][0].size())};
-  impl_ = std::make_shared<TensorImpl>(flatten3d(values), shape.view(), options);
+  impl_ = std::make_shared<TensorImpl>(flatten3d(values), shape, options);
   initAutogradMeta();
 }
 

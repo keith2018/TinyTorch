@@ -46,5 +46,7 @@ class NLLLoss : public Loss {
   Tensor forward(Tensor &input, Tensor &target) override;
 };
 
+// TODO CrossEntropyLoss
+
 }  // namespace nn
 }  // namespace tinytorch

@@ -474,7 +474,7 @@ Tensor ReducerCuda::reduceDim(const Tensor& t, int64_t dim, bool keepDims) {
   }
 
   const auto retShape = getReduceShape(t, dim, false);
-  auto values = Tensor::empty(retShape.view(), t.options().noGrad());
+  auto values = Tensor::empty(retShape, t.options().noGrad());
 
   const auto blockSize = cuda::getKernelBlockSize(t.device().index);
 
@@ -509,7 +509,7 @@ Tensor ReducerCuda::reduceDim(const Tensor& t, int64_t dim, bool keepDims) {
 
   if (keepDims) {
     const auto shapeKeepDims = getReduceShape(t, dim, true);
-    values.reshape_(shapeKeepDims.view());
+    values.reshape_(shapeKeepDims);
   }
   return values;
 }
@@ -526,8 +526,8 @@ TensorPair ReducerCuda::reduceIdxDim(const Tensor& t, int64_t dim, bool keepDims
   }
 
   const auto retShape = getReduceShape(t, dim, false);
-  auto values = Tensor::empty(retShape.view(), t.options().noGrad());
-  auto indices = Tensor::empty(retShape.view(), getIndicesOptions(t));
+  auto values = Tensor::empty(retShape, t.options().noGrad());
+  auto indices = Tensor::empty(retShape, getIndicesOptions(t));
 
   const auto blockSize = cuda::getKernelBlockSize(t.device().index);
 
@@ -565,8 +565,8 @@ TensorPair ReducerCuda::reduceIdxDim(const Tensor& t, int64_t dim, bool keepDims
 
   if (keepDims) {
     const auto shapeKeepDims = getReduceShape(t, dim, true);
-    values.reshape_(shapeKeepDims.view());
-    indices.reshape_(shapeKeepDims.view());
+    values.reshape_(shapeKeepDims);
+    indices.reshape_(shapeKeepDims);
   }
   return {values, indices};
 }
@@ -628,7 +628,7 @@ Tensor reduceOpSumDimsCudaImpl(const Tensor& t, const IntArrayView dims, bool ke
   }
 
   const auto retShape = getReduceShape(t, inAxis, keepDims);
-  auto ret = Tensor::zeros(retShape.view(), t.options().noGrad());
+  auto ret = Tensor::zeros(retShape, t.options().noGrad());
 
   auto ctxT = cuda::getTensorCudaCtx(t);
 
@@ -729,7 +729,7 @@ TensorPair reduceOpVarMeanDimsCudaImpl(const Tensor& t, IntArrayView dims, bool 
   auto meanVal = op::meanOnDims(t, dims, true);
 
   auto retShape = getReduceShape(t, inAxis, keepDims);
-  auto varVal = Tensor::zeros(retShape.view(), t.options().noGrad());
+  auto varVal = Tensor::zeros(retShape, t.options().noGrad());
 
   auto ctxT = cuda::getTensorCudaCtx(t);
   const T* meanPtr = meanVal.dataPtr<T>();

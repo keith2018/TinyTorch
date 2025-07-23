@@ -11,7 +11,7 @@
 #include <utility>
 
 #include "Tensor.h"
-#include "Utils/ArrayView.h"
+#include "Utils/VectorUtils.h"
 
 namespace tinytorch {
 

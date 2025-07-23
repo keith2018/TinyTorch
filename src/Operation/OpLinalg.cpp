@@ -61,7 +61,7 @@ Tensor matmulOpImpl(const Tensor &self, const Tensor &other) {
   }
 
   // check shape broadcast compatible
-  SizeVector retShape = broadcastShape(shapeA.view(), shapeB.view(), 2);
+  SizeVector retShape = broadcastShape(shapeA, shapeB, 2);
   if (retShape.empty()) {
     ASSERT(false && "matmul error: shape not aligned");
     return {};
@@ -74,7 +74,7 @@ Tensor matmulOpImpl(const Tensor &self, const Tensor &other) {
 
   retShape[retDimCnt - 2] = m;
   retShape[retDimCnt - 1] = n;
-  Tensor retTensor = Tensor::empty(retShape.view(), self.options().noGrad());
+  Tensor retTensor = Tensor::empty(retShape, self.options().noGrad());
 
   const T *selfPtr = self.dataPtr<T>();
   const T *otherPtr = other.dataPtr<T>();

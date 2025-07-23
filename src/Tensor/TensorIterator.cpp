@@ -45,7 +45,7 @@ IntArrayView TensorIteratorBase::setupBroadcast() {
 
   needBroadcast_ = false;
   for (size_t i = 0; i < nInputs; i++) {
-    if (inputs_[i]->shape() != shape_.view()) {
+    if (inputs_[i]->shape() != shape_) {
       needBroadcast_ = true;
       break;
     }
@@ -67,7 +67,7 @@ IntArrayView TensorIteratorBase::setupBroadcast() {
   }
 
   // TODO coalesce dimensions
-  return shape_.view();
+  return shape_;
 }
 
 bool TensorIteratorBase::broadcastShape(SizeVector& ret, const SmallVector<IntArrayView>& shapes, int64_t ndim) {
