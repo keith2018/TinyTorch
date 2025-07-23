@@ -188,7 +188,7 @@ Tensor permuteOpCudaImpl(const Tensor& self, const IntArrayView dims) {
   ASSERT(dims.size() == self.dim());
   auto retShape = SizeVector(self.shape());
   reorderIndices(retShape.data(), self.dim(), dims);
-  auto ret = Tensor::empty(retShape.view(), self.options().noGrad());
+  auto ret = Tensor::empty(retShape, self.options().noGrad());
 
   auto ctxSelf = cuda::getTensorCudaCtx(self);
   auto ctxRet = cuda::getTensorCudaCtx(ret);
@@ -208,7 +208,7 @@ Tensor permuteAllOpCudaImpl(const Tensor& self) {
   SizeVector dims(self.dim());
   std::iota(dims.begin(), dims.end(), 0);
   std::reverse(dims.begin(), dims.end());
-  return permuteOpCudaImpl<T>(self, dims.view());
+  return permuteOpCudaImpl<T>(self, dims);
 }
 
 template <typename T>
@@ -229,7 +229,7 @@ Tensor transposeOpCudaImpl(const Tensor& self, int64_t dim0, int64_t dim1) {
   std::iota(dims.begin(), dims.end(), 0);
   dims[dim0] = dim1;
   dims[dim1] = dim0;
-  return permuteOpCudaImpl<T>(self, dims.view());
+  return permuteOpCudaImpl<T>(self, dims);
 }
 
 template <typename T>
@@ -237,7 +237,7 @@ Tensor transpose2dOpCudaImpl(const Tensor& self) {
   ASSERT(self.dim() == 2);
 
   SizeVector retShape = {self.shape(1), self.shape(0)};
-  auto ret = Tensor::empty(retShape.view(), self.options().noGrad());
+  auto ret = Tensor::empty(retShape, self.options().noGrad());
   cudaTranspose2d(ret.dataPtr<T>(), self.dataPtr<T>(), retShape[0], retShape[1], self.device());
   return ret;
 }
@@ -251,7 +251,7 @@ Tensor indexAdvanceOpCudaImpl(const Tensor& self, ArrayView<Tensor> indices) {
   for (auto i = len; i < self.dim(); i++) {
     retShape.pushBack(self.shape(i));
   }
-  auto ret = Tensor::empty(retShape.view(), self.options().noGrad());
+  auto ret = Tensor::empty(retShape, self.options().noGrad());
   const auto* selfPtr = self.dataPtr<T>();
   auto* retPtr = ret.dataPtr<T>();
 

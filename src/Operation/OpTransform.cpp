@@ -111,7 +111,7 @@ Tensor indexOpImpl(const Tensor& self, const IntArrayView indices) {
     retShape.pushBack(self.shape(i));
   }
   // create tensor with shared storage
-  auto ret = Tensor(retShape.view(), self.options(), self.storage(), dataIdx * sizeof(T));
+  auto ret = Tensor(retShape, self.options(), self.storage(), dataIdx * sizeof(T));
   ASSERT(dimStride == ret.numel());
   return ret;
 }
@@ -163,7 +163,7 @@ std::vector<Tensor> splitOpImpl(const Tensor& self, int64_t splitSize, int64_t d
   SizeVector retShape(self.shape());
   retShape[dim] = splitSize;
   for (auto i = 0; i < sections; i++) {
-    retTensors[i] = Tensor::empty(retShape.view(), self.options().noGrad());
+    retTensors[i] = Tensor::empty(retShape, self.options().noGrad());
   }
 
   int64_t innerBlockSize = calcBlockSize(self.shape(), dim + 1, self.dim());
@@ -215,10 +215,10 @@ Tensor concatOpImpl(ArrayView<Tensor> tensors, int64_t dim) {
   }
   retShape[dim] = concatDimSize;
 
-  int64_t innerBlockSize = calcBlockSize(retShape.view(), dim + 1, ndim);
-  int64_t outerBlockSize = calcBlockSize(retShape.view(), 0, dim);
+  int64_t innerBlockSize = calcBlockSize(retShape, dim + 1, ndim);
+  int64_t outerBlockSize = calcBlockSize(retShape, 0, dim);
 
-  Tensor ret = Tensor::empty(retShape.view(), tensors[0].options().noGrad());
+  Tensor ret = Tensor::empty(retShape, tensors[0].options().noGrad());
   T* retPtr = ret.dataPtr<T>();
   int64_t offset = 0;
   for (const auto& t : tensors) {
@@ -257,7 +257,7 @@ Tensor stackOpImpl(ArrayView<Tensor> tensors, int64_t dim) {
   // shape of result tensor
   SizeVector retShape(t0.shape());
   retShape.insert(retShape.begin() + targetDim, static_cast<int64_t>(tensors.size()));
-  Tensor ret = Tensor::empty(retShape.view(), t0.options().noGrad());
+  Tensor ret = Tensor::empty(retShape, t0.options().noGrad());
 
   int64_t innerBlockSize = calcBlockSize(t0.shape(), targetDim, t0.dim());
   int64_t outerBlockSize = calcBlockSize(t0.shape(), 0, targetDim);

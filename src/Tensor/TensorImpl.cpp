@@ -81,7 +81,7 @@ void TensorImpl::reshape_(const IntArrayView shape) {
   }
   // check shape
   int64_t numel = 0;
-  computeNumel(numel, retShape.view());
+  computeNumel(numel, retShape);
   if (numel != numel_) {
     LOGE("Invalid shape: numel not equal");
     return;
@@ -89,7 +89,7 @@ void TensorImpl::reshape_(const IntArrayView shape) {
 
   // update shape & strides
   shape_ = std::move(retShape);
-  computeStrides(strides_, shape_.view());
+  computeStrides(strides_, shape_);
 }
 
 void TensorImpl::flatten_(int64_t startDim, int64_t endDim) {
@@ -109,7 +109,7 @@ void TensorImpl::flatten_(int64_t startDim, int64_t endDim) {
     retShape.pushBack(shape_[i]);
   }
 
-  reshape_(retShape.view());
+  reshape_(retShape);
 }
 
 void TensorImpl::unflatten_(int64_t d, const IntArrayView shape) {
@@ -145,7 +145,7 @@ void TensorImpl::unflatten_(int64_t d, const IntArrayView shape) {
     retShape.pushBack(shape_[i]);
   }
 
-  reshape_(retShape.view());
+  reshape_(retShape);
 }
 
 void TensorImpl::squeeze_(int64_t d) {
@@ -170,7 +170,7 @@ void TensorImpl::squeeze_(int64_t d) {
     retShape.pushBack(shape_[i]);
   }
 
-  reshape_(retShape.view());
+  reshape_(retShape);
 }
 
 void TensorImpl::squeeze_(const IntArrayView dims) {
@@ -182,7 +182,7 @@ void TensorImpl::squeeze_(const IntArrayView dims) {
         retShape.pushBack(d);
       }
     }
-    reshape_(retShape.view());
+    reshape_(retShape);
   } else {
     SizeVector retShape;
     for (int64_t i = 0; i < dim(); ++i) {
@@ -201,7 +201,7 @@ void TensorImpl::squeeze_(const IntArrayView dims) {
         retShape.pushBack(shape_[i]);
       }
     }
-    reshape_(retShape.view());
+    reshape_(retShape);
   }
 }
 
@@ -222,7 +222,7 @@ void TensorImpl::unsqueeze_(int64_t d) {
     retShape.pushBack(shape_[i]);
   }
 
-  reshape_(retShape.view());
+  reshape_(retShape);
 }
 
 void TensorImpl::ensureStorage() const {
