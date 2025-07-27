@@ -34,6 +34,13 @@ struct OpCpuSign {
   }
 };
 
+struct OpCpuLogicNot {
+  template <typename T>
+  static T apply(const T& a) {
+    return !a;
+  }
+};
+
 struct OpCpuSqrt {
   template <typename T>
   static T apply(const T& a) {
@@ -450,6 +457,39 @@ void ternaryOpInplaceCpuImpl(Tensor& self, const Tensor& p1, const Tensor& p2) {
   self.copyOnWrite();
   iterator.template forEach<T>(self,
                                [](const T& a, const T& b, const T& c) -> T { return OP::template apply<T>(a, b, c); });
+}
+
+template <typename T>
+Tensor addcmulOpCpuImpl(const Tensor& self, const Tensor& t1, const Tensor& t2, const Scalar& value) {
+  TensorIteratorCpu iterator(self, t1, t2);
+  auto outShape = iterator.setupBroadcast();
+  ASSERT(iterator.isBroadcastOk());
+  Tensor out(outShape, self.options().noGrad());
+  T val = value.to<T>();
+  iterator.template forEach<T>(out, [val](const T& a, const T& b, const T& c) -> T { return a + val * b * c; });
+  return out;
+}
+
+template <typename T>
+void addcmulOpOutCpuImpl(Tensor& out, const Tensor& self, const Tensor& t1, const Tensor& t2, const Scalar& value) {
+  TensorIteratorCpu iterator(self, t1, t2);
+  auto outShape = iterator.setupBroadcast();
+  ASSERT(iterator.isBroadcastOk());
+  ASSERT(outShape == out.shape());
+  out.copyOnWrite();
+  T val = value.to<T>();
+  iterator.template forEach<T>(out, [val](const T& a, const T& b, const T& c) -> T { return a + val * b * c; });
+}
+
+template <typename T>
+void addcmulOpInplaceCpuImpl(Tensor& self, const Tensor& t1, const Tensor& t2, const Scalar& value) {
+  TensorIteratorCpu iterator(self, t1, t2);
+  auto outShape = iterator.setupBroadcast();
+  ASSERT(iterator.isBroadcastOk());
+  ASSERT(outShape == self.shape());
+  self.copyOnWrite();
+  T val = value.to<T>();
+  iterator.template forEach<T>(self, [val](const T& a, const T& b, const T& c) -> T { return a + val * b * c; });
 }
 
 }  // namespace tinytorch::op

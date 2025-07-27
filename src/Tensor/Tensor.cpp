@@ -266,6 +266,10 @@ Tensor Tensor::pow(const Tensor &exp) const { return function::pow(*this, exp); 
 Tensor Tensor::maximum(const Tensor &a, const Tensor &b) { return function::maximum(a, b); }
 Tensor Tensor::minimum(const Tensor &a, const Tensor &b) { return function::minimum(a, b); }
 
+Tensor Tensor::matmul(const Tensor &other, bool transA, bool transB) const {
+  return function::matmul(*this, other, transA, transB);
+}
+
 Tensor Tensor::min() const { return function::min(*this); }
 Tensor Tensor::max() const { return function::max(*this); }
 Tensor Tensor::argmin() const { return function::argmin(*this); }

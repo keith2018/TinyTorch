@@ -11,7 +11,7 @@
 
 namespace tinytorch::nn {
 
-Tensor Sequential::forward(Tensor &input) {
+Tensor Sequential::forward(const Tensor &input) {
   Tensor ret = {input};
   for (auto &module : modules_) {
     ret = (*module)(ret);
@@ -29,7 +29,7 @@ Linear::Linear(int64_t inFeatures, int64_t outFeatures, bool bias, Options optio
   Linear::resetParameters();
 }
 
-Tensor Linear::forward(Tensor &input) { return function::linear(input, weight_, bias_); }
+Tensor Linear::forward(const Tensor &input) { return function::linear(input, weight_, bias_); }
 
 std::vector<std::pair<std::string, TensorPtr>> Linear::namedParameters_() {
   if (useBias_) {
@@ -37,8 +37,6 @@ std::vector<std::pair<std::string, TensorPtr>> Linear::namedParameters_() {
   }
   return {{"weight", &weight_}};
 }
-
-std::vector<std::pair<std::string, TensorPtr>> Linear::namedStates_() { return namedParameters_(); }
 
 void Linear::resetParameters() {
   Initializer::kaimingUniform(weight_, std::sqrt(5.f));
@@ -49,21 +47,21 @@ void Linear::resetParameters() {
   }
 }
 
-Tensor Flatten::forward(Tensor &input) { return function::flatten(input, startDim_, endDim_); }
+Tensor Flatten::forward(const Tensor &input) { return function::flatten(input, startDim_, endDim_); }
 
-Tensor Relu::forward(Tensor &input) { return function::relu(input); }
+Tensor Relu::forward(const Tensor &input) { return function::relu(input); }
 
-Tensor Gelu::forward(Tensor &input) { return function::gelu(input); }
+Tensor Gelu::forward(const Tensor &input) { return function::gelu(input); }
 
-Tensor Silu::forward(Tensor &input) { return function::silu(input); }
+Tensor Silu::forward(const Tensor &input) { return function::silu(input); }
 
-Tensor Dropout::forward(Tensor &input) { return function::dropout(input, p_, training_); }
+Tensor Dropout::forward(const Tensor &input) { return function::dropout(input, p_, training_); }
 
-Tensor Softmax::forward(Tensor &input) { return function::softmax(input, dim_); }
+Tensor Softmax::forward(const Tensor &input) { return function::softmax(input, dim_); }
 
-Tensor LogSoftmax::forward(Tensor &input) { return function::logSoftmax(input, dim_); }
+Tensor LogSoftmax::forward(const Tensor &input) { return function::logSoftmax(input, dim_); }
 
-Tensor MaxPool2D::forward(Tensor &input) { return function::maxPool2d(input, kernel_, stride_, padding_); }
+Tensor MaxPool2D::forward(const Tensor &input) { return function::maxPool2d(input, kernel_, stride_, padding_); }
 
 Conv2D::Conv2D(int64_t inFeatures, int64_t outFeatures, Dim2D kernel, Dim2D stride, Dim2D padding, bool bias,
                Options options)
@@ -76,7 +74,7 @@ Conv2D::Conv2D(int64_t inFeatures, int64_t outFeatures, Dim2D kernel, Dim2D stri
   Conv2D::resetParameters();
 }
 
-Tensor Conv2D::forward(Tensor &input) { return function::conv2d(input, weight_, bias_, stride_, padding_); }
+Tensor Conv2D::forward(const Tensor &input) { return function::conv2d(input, weight_, bias_, stride_, padding_); }
 
 std::vector<std::pair<std::string, TensorPtr>> Conv2D::namedParameters_() {
   if (useBias_) {
@@ -84,7 +82,6 @@ std::vector<std::pair<std::string, TensorPtr>> Conv2D::namedParameters_() {
   }
   return {{"weight", &weight_}};
 }
-std::vector<std::pair<std::string, TensorPtr>> Conv2D::namedStates_() { return namedParameters_(); }
 
 void Conv2D::resetParameters() {
   Initializer::kaimingUniform(weight_, std::sqrt(5.f));
@@ -103,11 +100,9 @@ Embedding::Embedding(int64_t numEmbeddings, int64_t embeddingDim, Options option
   Embedding::resetParameters();
 }
 
-Tensor Embedding::forward(Tensor &input) { return function::embedding(input, weight_); }
+Tensor Embedding::forward(const Tensor &input) { return function::embedding(input, weight_); }
 
 std::vector<std::pair<std::string, TensorPtr>> Embedding::namedParameters_() { return {{"weight", &weight_}}; }
-
-std::vector<std::pair<std::string, TensorPtr>> Embedding::namedStates_() { return namedParameters_(); }
 
 void Embedding::resetParameters() { Initializer::normal(weight_); }
 
@@ -121,9 +116,7 @@ LayerNorm::LayerNorm(IntArrayView normalizedShape, float eps, bool bias, Options
   LayerNorm::resetParameters();
 }
 
-Tensor LayerNorm::forward(Tensor &input) {
-  return function::layerNorm(input, normalizedShape_, weight_, bias_, eps_);
-}
+Tensor LayerNorm::forward(const Tensor &input) { return function::layerNorm(input, normalizedShape_, weight_, bias_, eps_); }
 
 std::vector<std::pair<std::string, TensorPtr>> LayerNorm::namedParameters_() {
   if (useBias_) {
@@ -131,8 +124,6 @@ std::vector<std::pair<std::string, TensorPtr>> LayerNorm::namedParameters_() {
   }
   return {{"weight", &weight_}};
 }
-
-std::vector<std::pair<std::string, TensorPtr>> LayerNorm::namedStates_() { return namedParameters_(); }
 
 void LayerNorm::resetParameters() {
   Initializer::ones(weight_);

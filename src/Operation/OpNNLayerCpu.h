@@ -10,6 +10,7 @@
 
 #include "OpNNLayer.h"
 #include "Tensor/TensorIterator.h"
+#include "Utils/RandomGenerator.h"
 
 namespace tinytorch::op {
 
@@ -154,17 +155,31 @@ Tensor logSoftmaxOpBackwardCpuImpl(const Tensor& grad, const Tensor& output, int
 }
 
 template <typename T>
-Tensor dropoutOpCpuImpl(const Tensor& grad, const Tensor& mask, float p) {
-  TensorIteratorCpu iterator(grad, mask);
+Tensor dropoutOpCpuImpl(const Tensor& self, float p) {
+  Tensor out(self.shape(), self.options().noGrad());
+  const auto* selfPtr = self.dataPtr<T>();
+  auto* outPtr = out.dataPtr<T>();
+  auto generator = RandomGeneratorCPU::getGenerator();
+  std::bernoulli_distribution distribution(p);
+  for (int64_t i = 0; i < self.numel(); i++) {
+    outPtr[i] = selfPtr[i] * distribution(generator) / p;
+  }
+  return out;
+}
+
+template <typename T>
+Tensor dropoutMaskedOpCpuImpl(const Tensor& self, const Tensor& mask, float p) {
+  TensorIteratorCpu iterator(self, mask);
   auto outShape = iterator.setupBroadcast();
   ASSERT(iterator.isBroadcastOk());
-  Tensor out(outShape, grad.options().noGrad());
+  Tensor out(outShape, self.options().noGrad());
   iterator.template forEach<T>(out, [p](const T& a, const T& b) -> T { return a * b / p; });
   return out;
 }
 
 template <typename T>
-Tensor layerNormOpCpuImpl(const Tensor& self, IntArrayView normalizedShape, const Tensor& weight, const Tensor& bias, float eps) {
+Tensor layerNormOpCpuImpl(const Tensor& self, IntArrayView normalizedShape, const Tensor& weight, const Tensor& bias,
+                          float eps) {
   int64_t d = self.shape().back();
   int64_t n = self.numel() / d;
   ASSERT(normalizedShape.size() == 1);

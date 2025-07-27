@@ -35,14 +35,14 @@ SizeVector broadcastShape(const IntArrayView t0, const IntArrayView t1, int64_t 
 }
 
 template <typename T>
-Tensor matmulOpImpl(const Tensor &self, const Tensor &other) {
-  if (self.dim() == 0 || other.dim() == 0) {
+Tensor matmulOpImplDetail(const Tensor &a, const Tensor &b) {
+  if (a.dim() == 0 || b.dim() == 0) {
     ASSERT(false && "matmul error: invalid shape");
     return {};
   }
 
-  SizeVector shapeA(self.shape());
-  SizeVector shapeB(other.shape());
+  SizeVector shapeA(a.shape());
+  SizeVector shapeB(b.shape());
   bool prependA = false;
   bool appendB = false;
   if (shapeA.size() == 1) {
@@ -74,20 +74,20 @@ Tensor matmulOpImpl(const Tensor &self, const Tensor &other) {
 
   retShape[retDimCnt - 2] = m;
   retShape[retDimCnt - 1] = n;
-  Tensor retTensor = Tensor::empty(retShape, self.options().noGrad());
+  Tensor retTensor = Tensor::empty(retShape, a.options().noGrad());
 
-  const T *selfPtr = self.dataPtr<T>();
-  const T *otherPtr = other.dataPtr<T>();
+  const T *selfPtr = a.dataPtr<T>();
+  const T *otherPtr = b.dataPtr<T>();
   T *retPtr = retTensor.dataPtr<T>();
 
-  auto gemm = getGemmFunc<T>(self.device().type);
+  auto gemm = getGemmFunc<T>(a.device().type);
 
   if (retDimCnt > 2) {
     // batched matrix multiply with broadcasting
     int64_t batchSize = retTensor.numel() / (m * n);
 
-    SizeVector aStrides(self.strides());
-    SizeVector bStrides(other.strides());
+    SizeVector aStrides(a.strides());
+    SizeVector bStrides(b.strides());
     while (static_cast<int64_t>(aStrides.size()) < retTensor.dim()) {
       aStrides.insert(aStrides.begin(), 0);
     }
@@ -102,18 +102,18 @@ Tensor matmulOpImpl(const Tensor &self, const Tensor &other) {
       for (auto i = retDimCnt - 3; i >= 0; i--) {
         int64_t index = tmp % retShape[i];
         tmp /= retShape[i];
-        if (static_cast<int64_t>(self.shape().size()) > i && self.shape()[i] != 1) {
+        if (static_cast<int64_t>(a.shape().size()) > i && a.shape()[i] != 1) {
           aOffset += index * aStrides[i];
         }
-        if (static_cast<int64_t>(other.shape().size()) > i && other.shape()[i] != 1) {
+        if (static_cast<int64_t>(b.shape().size()) > i && b.shape()[i] != 1) {
           bOffset += index * bStrides[i];
         }
       }
 
-      gemm(retPtr + batch * m * n, selfPtr + aOffset, otherPtr + bOffset, m, k, n, false, false, self.device().index);
+      gemm(retPtr + batch * m * n, selfPtr + aOffset, otherPtr + bOffset, m, k, n, false, false, a.device().index);
     }
   } else {
-    gemm(retPtr, selfPtr, otherPtr, m, k, n, false, false, self.device().index);
+    gemm(retPtr, selfPtr, otherPtr, m, k, n, false, false, a.device().index);
     if (prependA) {
       retTensor.reshape_({n});
     }
@@ -132,35 +132,34 @@ Tensor matmulOpImpl(const Tensor &self, const Tensor &other) {
 }
 
 template <typename T>
-Tensor matmulTransOpImpl(const Tensor &self, const Tensor &other, bool transA, bool transB) {
+Tensor matmulOpImpl(const Tensor &a, const Tensor &b, bool transA, bool transB) {
   // fast path
-  if (self.dim() == 2 && other.dim() == 2) {
+  if (a.dim() == 2 && b.dim() == 2) {
     // a[m, k], b[k, n] -> [m, n]
-    int64_t m = self.shape(transA ? 1 : 0);
-    int64_t k = self.shape(transA ? 0 : 1);
-    int64_t n = other.shape(transB ? 0 : 1);
-    if (k != other.shape(transB ? 1 : 0)) {
+    int64_t m = a.shape(transA ? 1 : 0);
+    int64_t k = a.shape(transA ? 0 : 1);
+    int64_t n = b.shape(transB ? 0 : 1);
+    if (k != b.shape(transB ? 1 : 0)) {
       ASSERT(false && "matmul error: shape not aligned");
       return {};
     }
-    Tensor retTensor = Tensor::empty({m, n}, self.options().noGrad());
+    Tensor retTensor = Tensor::empty({m, n}, a.options().noGrad());
 
-    const T *selfPtr = self.dataPtr<T>();
-    const T *otherPtr = other.dataPtr<T>();
+    const T *selfPtr = a.dataPtr<T>();
+    const T *otherPtr = b.dataPtr<T>();
     T *retPtr = retTensor.dataPtr<T>();
 
-    auto gemm = getGemmFunc<T>(self.device().type);
-    gemm(retPtr, selfPtr, otherPtr, m, k, n, transA, transB, self.device().index);
+    auto gemm = getGemmFunc<T>(a.device().type);
+    gemm(retPtr, selfPtr, otherPtr, m, k, n, transA, transB, a.device().index);
     return retTensor;
   }
 
   // slow path
-  return matmul(transA ? self.permute() : self, transB ? other.permute() : other);
+  return matmulOpImplDetail<T>(transA ? a.permute() : a, transB ? b.permute() : b);
 }
 
 void registerLinalgCommon() {
   REGISTER_OP_IMPL_ALL_DEVICES(matmul, Float32, &(matmulOpImpl<DTypeToType_t<DType::Float32>>));
-  REGISTER_OP_IMPL_ALL_DEVICES(matmulTrans, Float32, &(matmulTransOpImpl<DTypeToType_t<DType::Float32>>));
 }
 
 }  // namespace tinytorch::op

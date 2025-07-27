@@ -380,3 +380,31 @@ TEST(TEST_Function, func_layerNorm) {
   EXPECT_TRUE(y.shape() == input.shape());
   EXPECT_TRUE(VectorNear(y.toList<float>(), {1.5297, 0.1079, -0.6529, -0.6147, -1.1319, -0.0062}));
 }
+
+TEST(TEST_Function, func_sdpAttention) {
+  auto query = Tensor(Array1d<float>{0.6201, 0.5199, 0.2614, 0.9816, 0.9369, 0.8059, 0.8578, 0.7864, 0.8947, 0.4272,
+                                     0.7566, 0.2975, 0.4676, 0.1170, 0.1046, 0.7130});
+  query.reshape_({2, 2, 2, 2});
+  auto key = Tensor(Array1d<float>{0.8691, 0.8571, 0.9015, 0.3962, 0.7809, 0.0260, 0.7946, 0.6102, 0.0999, 0.9367,
+                                   0.3174, 0.1418, 0.6388, 0.4654, 0.5967, 0.3617});
+  key.reshape_({2, 2, 2, 2});
+  auto value = Tensor(Array1d<float>{0.9904, 0.8726, 0.8662, 0.3096, 0.4391, 0.9327, 0.5259, 0.6763, 0.6314, 0.8901,
+                                     0.6936, 0.2933, 0.0599, 0.3249, 0.3593, 0.8228});
+  value.reshape_({2, 2, 2, 2});
+
+  auto y = function::sdpAttention(query, key, value);
+  EXPECT_TRUE(y.shape() == value.shape());
+  EXPECT_TRUE(VectorNear(y.toList<float>(), {0.9331, 0.6129, 0.9380, 0.6349, 0.4899, 0.7828, 0.4897, 0.7833, 0.6609,
+                                             0.6070, 0.6617, 0.5993, 0.2079, 0.5711, 0.2054, 0.5670}));
+
+  y = function::sdpAttention(query, key, value, true);
+  EXPECT_TRUE(y.shape() == value.shape());
+  EXPECT_TRUE(VectorNear(y.toList<float>(), {0.9904, 0.8726, 0.9380, 0.6349, 0.4391, 0.9327, 0.4897, 0.7833, 0.6314,
+                                             0.8901, 0.6617, 0.5993, 0.0599, 0.3249, 0.2055, 0.5670}));
+
+  auto mask = Tensor(Array2d<uint8_t>{{0, 0}, {1, 0}}, options::dtype(DType::Bool));
+  y = function::sdpAttention(query, key, value, false, mask);
+  EXPECT_TRUE(y.shape() == value.shape());
+  EXPECT_TRUE(VectorNear(y.toList<float>(), {0.0000, 0.0000, 0.9904, 0.8726, 0.0000, 0.0000, 0.4391, 0.9327, 0.0000,
+                                             0.0000, 0.6314, 0.8901, 0.0000, 0.0000, 0.0599, 0.3249}));
+}

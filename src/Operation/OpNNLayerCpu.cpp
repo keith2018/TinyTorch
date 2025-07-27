@@ -8,22 +8,25 @@
 
 namespace tinytorch::op {
 
+#define REG_NN_LAYER_CPU_F32(NAME, FUNC) REGISTER_OP_IMPL(NAME, CPU, Float32, &(FUNC<DTypeToType_t<DType::Float32>>))
+
 void registerNNLayerCpu() {
   // softmax
-  REGISTER_OP_IMPL_DTYPE_TPL(softmax, CPU, softmaxOpCpuImpl);
-  REGISTER_OP_IMPL_DTYPE_TPL(softmaxOut, CPU, softmaxOpOutCpuImpl);
-  REGISTER_OP_IMPL_DTYPE_TPL(softmaxBackward, CPU, softmaxOpBackwardCpuImpl);
+  REG_NN_LAYER_CPU_F32(softmax, softmaxOpCpuImpl);
+  REG_NN_LAYER_CPU_F32(softmaxOut, softmaxOpOutCpuImpl);
+  REG_NN_LAYER_CPU_F32(softmaxBackward, softmaxOpBackwardCpuImpl);
 
   // logSoftmax
-  REGISTER_OP_IMPL_DTYPE_TPL(logSoftmax, CPU, logSoftmaxOpCpuImpl);
-  REGISTER_OP_IMPL_DTYPE_TPL(logSoftmaxOut, CPU, logSoftmaxOpOutCpuImpl);
-  REGISTER_OP_IMPL_DTYPE_TPL(logSoftmaxBackward, CPU, logSoftmaxOpBackwardCpuImpl);
+  REG_NN_LAYER_CPU_F32(logSoftmax, logSoftmaxOpCpuImpl);
+  REG_NN_LAYER_CPU_F32(logSoftmaxOut, logSoftmaxOpOutCpuImpl);
+  REG_NN_LAYER_CPU_F32(logSoftmaxBackward, logSoftmaxOpBackwardCpuImpl);
 
   // dropout
-  REGISTER_OP_IMPL_DTYPE_TPL(dropout, CPU, dropoutOpCpuImpl);
+  REG_NN_LAYER_CPU_F32(dropout, dropoutOpCpuImpl);
+  REG_NN_LAYER_CPU_F32(dropoutMasked, dropoutMaskedOpCpuImpl);
 
   // layerNorm
-  REGISTER_OP_IMPL_DTYPE_TPL(layerNorm, CPU, layerNormOpCpuImpl);
+  REG_NN_LAYER_CPU_F32(layerNorm, layerNormOpCpuImpl);
 }
 
 }  // namespace tinytorch::op

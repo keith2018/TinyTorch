@@ -19,6 +19,7 @@ class Tensor;
 
 using TensorPair = std::pair<Tensor, Tensor>;
 using TensorList = std::vector<Tensor>;
+using TensorListView = ArrayView<Tensor>;
 using TensorPtr = Tensor*;
 
 class Tensor {
@@ -194,6 +195,8 @@ class Tensor {
 
   static Tensor maximum(const Tensor& a, const Tensor& b);
   static Tensor minimum(const Tensor& a, const Tensor& b);
+
+  Tensor matmul(const Tensor& other, bool transA = false, bool transB = false) const;
 
   // reduce
   Tensor min() const;

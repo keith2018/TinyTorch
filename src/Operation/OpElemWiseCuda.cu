@@ -8,11 +8,21 @@
 
 namespace tinytorch::op {
 
+#define REG_ELEM_WISE_CUDA_BOOL(NAME, FUNC, OP) \
+  REGISTER_OP_IMPL(NAME, CUDA, Bool, &(FUNC<DTypeToType_t<DType::Bool>, OP>))
+
 #define REG_ELEM_WISE_CUDA_F32(NAME, FUNC, OP) \
   REGISTER_OP_IMPL(NAME, CUDA, Float32, &(FUNC<DTypeToType_t<DType::Float32>, OP>))
 
 #define REG_ELEM_WISE_CUDA_I64(NAME, FUNC, OP) \
   REGISTER_OP_IMPL(NAME, CUDA, Int64, &(FUNC<DTypeToType_t<DType::Int64>, OP>))
+
+void registerUnaryCudaBool() {
+  // logicNot
+  REG_ELEM_WISE_CUDA_BOOL(logicNot, unaryOpCudaImpl, OpCudaLogicNot);
+  REG_ELEM_WISE_CUDA_BOOL(logicNotOut, unaryOpOutCudaImpl, OpCudaLogicNot);
+  REG_ELEM_WISE_CUDA_BOOL(logicNotInplace, unaryOpInplaceCudaImpl, OpCudaLogicNot);
+}
 
 void registerUnaryCudaFloat32() {
   // abs
@@ -209,9 +219,15 @@ void registerTernaryCudaFloat32() {
   REG_ELEM_WISE_CUDA_F32(clamp, ternaryOpCudaImpl, OpCudaClamp);
   REG_ELEM_WISE_CUDA_F32(clampOut, ternaryOpOutCudaImpl, OpCudaClamp);
   REG_ELEM_WISE_CUDA_F32(clampInplace, ternaryOpInplaceCudaImpl, OpCudaClamp);
+
+  // addcmul
+  REGISTER_OP_IMPL(addcmul, CUDA, Float32, addcmulOpCudaImpl<DTypeToType_t<DType::Float32>>);
+  REGISTER_OP_IMPL(addcmulOut, CUDA, Float32, addcmulOpOutCudaImpl<DTypeToType_t<DType::Float32>>);
+  REGISTER_OP_IMPL(addcmulInplace, CUDA, Float32, addcmulOpInplaceCudaImpl<DTypeToType_t<DType::Float32>>);
 }
 
 void registerElemWiseCuda() {
+  registerUnaryCudaBool();
   registerUnaryCudaFloat32();
 
   registerBinaryCudaFloat32();
