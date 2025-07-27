@@ -15,7 +15,10 @@ template <typename T>
 __global__ void kFill(T* t, const T val, const int64_t n) {
   const auto index = (blockIdx.x * blockDim.x + threadIdx.x) * 4;
   if (index + 3 < n) {
-    FETCH_FLOAT4(t[index]) = make_float4(val, val, val, val);
+    t[index] = val;
+    t[index + 1] = val;
+    t[index + 2] = val;
+    t[index + 3] = val;
   } else {
     if (index < n) t[index] = val;
     if (index + 1 < n) t[index + 1] = val;
@@ -28,7 +31,10 @@ __global__ void kFill(T* t, const T* valPtr, const int64_t n) {
   const auto index = (blockIdx.x * blockDim.x + threadIdx.x) * 4;
   const T val = *valPtr;
   if (index + 3 < n) {
-    FETCH_FLOAT4(t[index]) = make_float4(val, val, val, val);
+    t[index] = val;
+    t[index + 1] = val;
+    t[index + 2] = val;
+    t[index + 3] = val;
   } else {
     if (index < n) t[index] = val;
     if (index + 1 < n) t[index + 1] = val;

@@ -88,9 +88,8 @@ class Module {
     }
   }
 
-  virtual Tensor forward(Tensor &input) { return {}; }
-
-  Tensor operator()(Tensor &input) { return forward(input); }
+  virtual Tensor forward(const Tensor &input) { return {}; }
+  Tensor operator()(const Tensor &input) { return forward(input); }
 
   void to(Device device) {
     auto allStates = namedStates();
@@ -112,7 +111,7 @@ class Module {
     }
   }
   virtual std::vector<std::pair<std::string, TensorPtr>> namedParameters_() { return {}; }
-  virtual std::vector<std::pair<std::string, TensorPtr>> namedStates_() { return {}; }
+  virtual std::vector<std::pair<std::string, TensorPtr>> namedStates_() { return namedParameters_(); }
 
   bool training_ = true;
   std::vector<std::pair<std::string, std::reference_wrapper<Module>>> subModules_;
@@ -178,14 +177,14 @@ class Sequential : public ModuleList {
 
   Sequential(std::initializer_list<std::shared_ptr<Module>> modules) : ModuleList(modules) {}
 
-  Tensor forward(Tensor &input) override;
+  Tensor forward(const Tensor &input) override;
 };
 
 class Linear : public Module {
  public:
   Linear(int64_t inFeatures, int64_t outFeatures, bool bias = true, Options options = {});
 
-  Tensor forward(Tensor &input) override;
+  Tensor forward(const Tensor &input) override;
   void resetParameters() override;
 
   Tensor &weight() { return weight_; }
@@ -193,7 +192,6 @@ class Linear : public Module {
 
  protected:
   std::vector<std::pair<std::string, TensorPtr>> namedParameters_() override;
-  std::vector<std::pair<std::string, TensorPtr>> namedStates_() override;
 
  private:
   bool useBias_;
@@ -205,7 +203,7 @@ class Flatten : public Module {
  public:
   explicit Flatten(int64_t startDim = 0, int64_t endDim = -1) : startDim_(startDim), endDim_(endDim) {}
 
-  Tensor forward(Tensor &input) override;
+  Tensor forward(const Tensor &input) override;
 
  private:
   int64_t startDim_;
@@ -214,24 +212,24 @@ class Flatten : public Module {
 
 class Relu : public Module {
  public:
-  Tensor forward(Tensor &input) override;
+  Tensor forward(const Tensor &input) override;
 };
 
 class Gelu : public Module {
  public:
-  Tensor forward(Tensor &input) override;
+  Tensor forward(const Tensor &input) override;
 };
 
 class Silu : public Module {
  public:
-  Tensor forward(Tensor &input) override;
+  Tensor forward(const Tensor &input) override;
 };
 
 class Dropout : public Module {
  public:
   explicit Dropout(float p = 0.5f) : p_(p) {}
 
-  Tensor forward(Tensor &input) override;
+  Tensor forward(const Tensor &input) override;
 
  private:
   float p_;
@@ -241,7 +239,7 @@ class Softmax : public Module {
  public:
   explicit Softmax(int64_t dim) : dim_(dim) {}
 
-  Tensor forward(Tensor &input) override;
+  Tensor forward(const Tensor &input) override;
 
  private:
   int64_t dim_;
@@ -251,7 +249,7 @@ class LogSoftmax : public Module {
  public:
   explicit LogSoftmax(int64_t dim) : dim_(dim) {}
 
-  Tensor forward(Tensor &input) override;
+  Tensor forward(const Tensor &input) override;
 
  private:
   int64_t dim_;
@@ -262,7 +260,7 @@ class MaxPool2D : public Module {
   explicit MaxPool2D(Dim2D kernel, std::optional<Dim2D> stride = std::nullopt, Dim2D padding = 0)
       : kernel_(kernel), stride_(stride.has_value() ? stride.value() : kernel), padding_(padding) {}
 
-  Tensor forward(Tensor &input) override;
+  Tensor forward(const Tensor &input) override;
 
  private:
   Dim2D kernel_;
@@ -275,7 +273,7 @@ class Conv2D : public Module {
   Conv2D(int64_t inFeatures, int64_t outFeatures, Dim2D kernel, Dim2D stride = 1, Dim2D padding = 0, bool bias = true,
          Options options = {});
 
-  Tensor forward(Tensor &input) override;
+  Tensor forward(const Tensor &input) override;
   void resetParameters() override;
 
   Tensor &weight() { return weight_; }
@@ -283,7 +281,6 @@ class Conv2D : public Module {
 
  protected:
   std::vector<std::pair<std::string, TensorPtr>> namedParameters_() override;
-  std::vector<std::pair<std::string, TensorPtr>> namedStates_() override;
 
  private:
   Dim2D kernel_;
@@ -299,14 +296,13 @@ class Embedding : public Module {
  public:
   Embedding(int64_t numEmbeddings, int64_t embeddingDim, Options options = {});
 
-  Tensor forward(Tensor &input) override;
+  Tensor forward(const Tensor &input) override;
   void resetParameters() override;
 
   Tensor &weight() { return weight_; }
 
  protected:
   std::vector<std::pair<std::string, TensorPtr>> namedParameters_() override;
-  std::vector<std::pair<std::string, TensorPtr>> namedStates_() override;
 
  private:
   Tensor weight_;
@@ -316,7 +312,7 @@ class LayerNorm : public Module {
  public:
   explicit LayerNorm(IntArrayView normalizedShape, float eps = 1e-5, bool bias = true, Options options = {});
 
-  Tensor forward(Tensor &input) override;
+  Tensor forward(const Tensor &input) override;
   void resetParameters() override;
 
   Tensor &weight() { return weight_; }
@@ -324,7 +320,6 @@ class LayerNorm : public Module {
 
  protected:
   std::vector<std::pair<std::string, TensorPtr>> namedParameters_() override;
-  std::vector<std::pair<std::string, TensorPtr>> namedStates_() override;
 
  private:
   SizeVector normalizedShape_;

@@ -11,6 +11,7 @@
 #include "Tensor/TensorIterator.cuh"
 #include "Utils/CUDAUtils.h"
 #include "Utils/MathUtils.h"
+#include "Utils/RandomGenerator.h"
 
 namespace tinytorch::op {
 
@@ -176,6 +177,28 @@ __global__ void kLogSoftmaxBackward(T* out, const T* output, const T* grad, int6
 }
 
 template <typename T>
+__global__ void kDropout(T* out, const T* self, const float p, const unsigned long seed, const unsigned long seq,
+                         const int64_t n) {
+  const auto index = (blockIdx.x * blockDim.x + threadIdx.x) * 4;
+  if (index < n) {
+    curandStatePhilox4_32_10_t state;
+    curand_init(seed, seq, index, &state);
+    const auto rand = curand_uniform4(&state);
+
+    if (index + 3 < n) {
+      out[index] = rand.x < p ? (self[index] / p) : 0.f;
+      out[index + 1] = rand.y < p ? (self[index + 1] / p) : 0.f;
+      out[index + 2] = rand.z < p ? (self[index + 2] / p) : 0.f;
+      out[index + 3] = rand.w < p ? (self[index + 3] / p) : 0.f;
+    } else {
+      if (index < n) out[index] = rand.x < p ? (self[index] / p) : 0.f;
+      if (index + 1 < n) out[index + 1] = rand.y < p ? (self[index + 1] / p) : 0.f;
+      if (index + 2 < n) out[index + 2] = rand.z < p ? (self[index + 2] / p) : 0.f;
+    }
+  }
+}
+
+template <typename T>
 __global__ void kLayerNormForward(T* out, const T* self, const T* weight, const T* bias, int64_t d, float eps) {
   __shared__ T warpShared[32];
 
@@ -322,17 +345,33 @@ Tensor logSoftmaxOpBackwardCudaImpl(const Tensor& grad, const Tensor& output, in
 }
 
 template <typename T>
-Tensor dropoutOpCudaImpl(const Tensor& grad, const Tensor& mask, float p) {
-  TensorIteratorCuda iterator(grad, mask);
+Tensor dropoutOpCudaImpl(const Tensor& self, float p) {
+  Tensor out(self.shape(), self.options().noGrad());
+  const auto* selfPtr = self.dataPtr<T>();
+  auto* outPtr = out.dataPtr<T>();
+
+  auto seed = RandomGeneratorCUDA::getSeed();
+  auto seq = RandomGeneratorCUDA::nextSequence();
+  int64_t n = self.numel();
+
+  auto params = cuda::getKernelLaunchParams(self.device().index, n, 4);
+  CUDA_LAUNCH_KERNEL(kDropout<T>, params, outPtr, selfPtr, p, seed, seq, n);
+  return out;
+}
+
+template <typename T>
+Tensor dropoutMaskedOpCudaImpl(const Tensor& self, const Tensor& mask, float p) {
+  TensorIteratorCuda iterator(self, mask);
   auto outShape = iterator.setupBroadcast();
   ASSERT(iterator.isBroadcastOk());
-  Tensor out(outShape, grad.options().noGrad());
+  Tensor out(outShape, self.options().noGrad());
   iterator.template forEach<T>(out, [p] __device__(const T& a, const T& b) -> T { return a * b / p; });
   return out;
 }
 
 template <typename T>
-Tensor layerNormOpCudaImpl(const Tensor& self, IntArrayView normalizedShape, const Tensor& weight, const Tensor& bias, float eps) {
+Tensor layerNormOpCudaImpl(const Tensor& self, IntArrayView normalizedShape, const Tensor& weight, const Tensor& bias,
+                           float eps) {
   int64_t d = self.shape().back();
   int64_t n = self.numel() / d;
   ASSERT(normalizedShape.size() == 1);

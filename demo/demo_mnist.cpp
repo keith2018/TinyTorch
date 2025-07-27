@@ -24,8 +24,8 @@ class Net : public nn::Module {
     });
   }
 
-  Tensor forward(Tensor &x) override {
-    x = conv1(x);
+  Tensor forward(const Tensor &input) override {
+    auto x = conv1(input);
     x = function::relu(x);
     x = conv2(x);
     x = function::relu(x);

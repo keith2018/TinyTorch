@@ -8,11 +8,21 @@
 
 namespace tinytorch::op {
 
+#define REG_ELEM_WISE_CPU_BOOL(NAME, FUNC, OP) \
+  REGISTER_OP_IMPL(NAME, CPU, Bool, &(FUNC<DTypeToType_t<DType::Bool>, OP>))
+
 #define REG_ELEM_WISE_CPU_F32(NAME, FUNC, OP) \
   REGISTER_OP_IMPL(NAME, CPU, Float32, &(FUNC<DTypeToType_t<DType::Float32>, OP>))
 
 #define REG_ELEM_WISE_CPU_I64(NAME, FUNC, OP) \
   REGISTER_OP_IMPL(NAME, CPU, Int64, &(FUNC<DTypeToType_t<DType::Int64>, OP>))
+
+void registerUnaryCpuBool() {
+  // logicNot
+  REG_ELEM_WISE_CPU_BOOL(logicNot, unaryOpCpuImpl, OpCpuLogicNot);
+  REG_ELEM_WISE_CPU_BOOL(logicNotOut, unaryOpOutCpuImpl, OpCpuLogicNot);
+  REG_ELEM_WISE_CPU_BOOL(logicNotInplace, unaryOpInplaceCpuImpl, OpCpuLogicNot);
+}
 
 void registerUnaryCpuFloat32() {
   // abs
@@ -209,9 +219,15 @@ void registerTernaryCpuFloat32() {
   REG_ELEM_WISE_CPU_F32(clamp, ternaryOpCpuImpl, OpCpuClamp);
   REG_ELEM_WISE_CPU_F32(clampOut, ternaryOpOutCpuImpl, OpCpuClamp);
   REG_ELEM_WISE_CPU_F32(clampInplace, ternaryOpInplaceCpuImpl, OpCpuClamp);
+
+  // addcmul
+  REGISTER_OP_IMPL(addcmul, CPU, Float32, addcmulOpCpuImpl<DTypeToType_t<DType::Float32>>);
+  REGISTER_OP_IMPL(addcmulOut, CPU, Float32, addcmulOpOutCpuImpl<DTypeToType_t<DType::Float32>>);
+  REGISTER_OP_IMPL(addcmulInplace, CPU, Float32, addcmulOpInplaceCpuImpl<DTypeToType_t<DType::Float32>>);
 }
 
 void registerElemWiseCpu() {
+  registerUnaryCpuBool();
   registerUnaryCpuFloat32();
 
   registerBinaryCpuFloat32();

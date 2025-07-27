@@ -8,22 +8,25 @@
 
 namespace tinytorch::op {
 
+#define REG_NN_LAYER_CUDA_F32(NAME, FUNC) REGISTER_OP_IMPL(NAME, CUDA, Float32, &(FUNC<DTypeToType_t<DType::Float32>>))
+
 void registerNNLayerCuda() {
   // softmax
-  REGISTER_OP_IMPL_DTYPE_TPL(softmax, CUDA, softmaxOpCudaImpl);
-  REGISTER_OP_IMPL_DTYPE_TPL(softmaxOut, CUDA, softmaxOpOutCudaImpl);
-  REGISTER_OP_IMPL_DTYPE_TPL(softmaxBackward, CUDA, softmaxOpBackwardCudaImpl);
+  REG_NN_LAYER_CUDA_F32(softmax, softmaxOpCudaImpl);
+  REG_NN_LAYER_CUDA_F32(softmaxOut, softmaxOpOutCudaImpl);
+  REG_NN_LAYER_CUDA_F32(softmaxBackward, softmaxOpBackwardCudaImpl);
 
   // logSoftmax
-  REGISTER_OP_IMPL_DTYPE_TPL(logSoftmax, CUDA, logSoftmaxOpCudaImpl);
-  REGISTER_OP_IMPL_DTYPE_TPL(logSoftmaxOut, CUDA, logSoftmaxOpOutCudaImpl);
-  REGISTER_OP_IMPL_DTYPE_TPL(logSoftmaxBackward, CUDA, logSoftmaxOpBackwardCudaImpl);
+  REG_NN_LAYER_CUDA_F32(logSoftmax, logSoftmaxOpCudaImpl);
+  REG_NN_LAYER_CUDA_F32(logSoftmaxOut, logSoftmaxOpOutCudaImpl);
+  REG_NN_LAYER_CUDA_F32(logSoftmaxBackward, logSoftmaxOpBackwardCudaImpl);
 
   // dropout
-  REGISTER_OP_IMPL_DTYPE_TPL(dropout, CUDA, dropoutOpCudaImpl);
+  REG_NN_LAYER_CUDA_F32(dropout, dropoutOpCudaImpl);
+  REG_NN_LAYER_CUDA_F32(dropoutMasked, dropoutMaskedOpCudaImpl);
 
   // layerNorm
-  REGISTER_OP_IMPL_DTYPE_TPL(layerNorm, CUDA, layerNormOpCudaImpl);
+  REG_NN_LAYER_CUDA_F32(layerNorm, layerNormOpCudaImpl);
 }
 
 }  // namespace tinytorch::op

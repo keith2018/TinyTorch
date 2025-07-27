@@ -63,6 +63,42 @@ class FuncTranspose2D : public Function<FuncTranspose2D> {
   static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
 };
 
+class FuncSplit : public Function<FuncSplit> {
+ public:
+  static std::vector<Tensor> forward(AutogradContext* ctx, const Tensor& self, int64_t splitSize, int64_t dim) {
+    return op::split(self, splitSize, dim);
+  }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
+};
+
+class FuncConcat : public Function<FuncConcat> {
+ public:
+  static Tensor forward(AutogradContext* ctx, ArrayView<Tensor> tensors, int64_t dim) {
+    return op::concat(tensors, dim);
+  }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
+};
+
+class FuncStack : public Function<FuncStack> {
+ public:
+  static Tensor forward(AutogradContext* ctx, ArrayView<Tensor> tensors, int64_t dim) {
+    return op::stack(tensors, dim);
+  }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
+};
+
+class FuncHStack : public Function<FuncHStack> {
+ public:
+  static Tensor forward(AutogradContext* ctx, ArrayView<Tensor> tensors) { return op::hstack(tensors); }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
+};
+
+class FuncVStack : public Function<FuncVStack> {
+ public:
+  static Tensor forward(AutogradContext* ctx, ArrayView<Tensor> tensors) { return op::vstack(tensors); }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
+};
+
 inline Tensor reshape(const Tensor& self, const IntArrayView shape) { return FuncReshape::apply(self, shape); }
 inline Tensor view(const Tensor& self, const IntArrayView shape) { return FuncView::apply(self, shape); }
 inline Tensor permute(const Tensor& self, const IntArrayView dims) { return FuncPermute::apply(self, dims); }
@@ -80,5 +116,12 @@ inline Tensor transpose(const Tensor& self, int64_t dim0, int64_t dim1) {
   return FuncTranspose::apply(self, dim0, dim1);
 }
 inline Tensor transpose2d(const Tensor& self) { return FuncTranspose2D::apply(self); }
+inline std::vector<Tensor> split(const Tensor& self, int64_t splitSize, int64_t dim = 0) {
+  return FuncSplit::apply(self, splitSize, dim);
+}
+inline Tensor concat(ArrayView<Tensor> tensors, int64_t dim = 0) { return FuncConcat::apply(tensors, dim); }
+inline Tensor stack(ArrayView<Tensor> tensors, int64_t dim = 0) { return FuncStack::apply(tensors, dim); }
+inline Tensor hstack(ArrayView<Tensor> tensors) { return FuncHStack::apply(tensors); }
+inline Tensor vstack(ArrayView<Tensor> tensors) { return FuncVStack::apply(tensors); }
 
 }  // namespace tinytorch::function

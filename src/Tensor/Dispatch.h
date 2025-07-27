@@ -79,7 +79,7 @@ DispatchKey getDispatchKeyFromArgs(First&& first, Rest&&... rest) {
     if (!fn) {                                                                                                     \
       std::cerr << "Error call op: " << #opname << ", no impl for dispatch key = " << key.toString() << std::endl; \
     }                                                                                                              \
-    ASSERT(fn&& #opname);                                                                                          \
+    ASSERT(fn && #opname);                                                                                         \
     return fn(std::forward<Args>(args)...);                                                                        \
   }                                                                                                                \
   struct opname##Register {                                                                                        \
@@ -127,10 +127,10 @@ void RegisterOpImpl(const std::vector<DispatchDevice>& devices, const std::vecto
 #define REGISTER_OP_IMPL_DTYPE_TPL(opname, device, fn)                             \
   REGISTER_OP_IMPL(opname, device, Float32, &(fn<DTypeToType_t<DType::Float32>>)); \
   REGISTER_OP_IMPL(opname, device, Int32, &(fn<DTypeToType_t<DType::Int32>>));     \
-  REGISTER_OP_IMPL(opname, device, Int64, &(fn<DTypeToType_t<DType::Int64>>));
+  REGISTER_OP_IMPL(opname, device, Int64, &(fn<DTypeToType_t<DType::Int64>>));     \
+  REGISTER_OP_IMPL(opname, device, Bool, &(fn<DTypeToType_t<DType::Bool>>));
 // REGISTER_OP_IMPL(opname, device, Float16, &(fn<DTypeToType_t<DType::Float16>>));
 // REGISTER_OP_IMPL(opname, device, BFloat16, &(fn<DTypeToType_t<DType::BFloat16>>));
-// REGISTER_OP_IMPL(opname, device, Bool, &(fn<DTypeToType_t<DType::Bool>>));
 
 #define REGISTER_OP_IMPL_ALL_DEVICES_DTYPE_TPL(opname, fn) \
   REGISTER_OP_IMPL_DTYPE_TPL(opname, CPU, fn)              \

@@ -14,7 +14,7 @@ namespace tinytorch::function {
 class FuncLinear : public Function<FuncLinear> {
  public:
   static Tensor forward(AutogradContext* ctx, const Tensor& input, const Tensor& weight, const Tensor& bias) {
-    auto output = op::matmulTrans(input, weight, false, true);
+    auto output = op::matmul(input, weight, false, true);
     if (bias.defined()) {
       op::addInplace(output, bias, 1);
     }
@@ -28,10 +28,10 @@ class FuncLinear : public Function<FuncLinear> {
     auto& bias = ctx->savedInputs[2];
 
     if (input.requiresGrad()) {
-      input.addGrad(op::matmul(grad, weight));
+      input.addGrad(op::matmul(grad, weight, false, false));
     }
     if (weight.requiresGrad()) {
-      weight.addGrad(op::matmulTrans(grad, input, true, false));
+      weight.addGrad(op::matmul(grad, input, true, false));
     }
     if (bias.defined() && bias.requiresGrad()) {
       bias.addGrad(op::sumOnDim(grad, 0, false));
@@ -49,7 +49,7 @@ class FuncDropout : public Function<FuncDropout> {
       return input.clone();
     }
     auto mask = Tensor::bernoulli(input.shape(), 1.f - p, input.options().noGrad());
-    auto output = op::dropout(input, mask, 1.f - p);
+    auto output = op::dropoutMasked(input, mask, 1.f - p);
     if (ctx) {
       ctx->pushData(p);
       ctx->pushData(mask);
@@ -66,7 +66,7 @@ class FuncDropout : public Function<FuncDropout> {
       if (training) {
         auto p = ctx->popData().toFloat();
         auto mask = ctx->popData().toTensor();
-        input.addGrad(op::dropout(grad, mask, 1.f - p));
+        input.addGrad(op::dropoutMasked(grad, mask, 1.f - p));
       } else {
         input.addGrad(grad);
       }
@@ -161,7 +161,7 @@ class FuncConv2D : public Function<FuncConv2D> {
     auto col = op::im2col(input, kernel, stride, padding);
 
     auto colW = op::reshape(weight, IntArrayView{outChannels, -1});
-    auto ret = op::matmulTrans(col, colW, false, true);
+    auto ret = op::matmul(col, colW, false, true);
     if (bias.defined()) {
       ASSERT(bias.dim() == 1);
       ASSERT(bias.shape()[0] == outChannels);
@@ -192,13 +192,13 @@ class FuncConv2D : public Function<FuncConv2D> {
     auto colW = op::reshape(weight, IntArrayView{outChannels, -1});
 
     if (input.requiresGrad()) {
-      auto gradCol = op::matmul(gradW, colW);
+      auto gradCol = op::matmul(gradW, colW, false, false);
       auto inputGrad = op::col2im(gradCol, input.shape(), kernel, stride, padding);
       input.addGrad(std::move(inputGrad));
     }
     if (weight.requiresGrad()) {
       auto col = ctx->popData().toTensor();
-      auto gradColW = op::matmulTrans(col, gradW, true, false);
+      auto gradColW = op::matmul(col, gradW, true, false);
       auto weightGrad = op::reshape(gradColW.permute(), weight.shape());
       weight.addGrad(std::move(weightGrad));
     }
@@ -227,6 +227,42 @@ class FuncLayerNorm : public Function<FuncLayerNorm> {
   static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
 };
 
+class FuncSDPAttention : public Function<FuncSDPAttention> {
+ public:
+  static Tensor forward(AutogradContext* ctx, const Tensor& query, const Tensor& key, const Tensor& value,
+                        bool isCausal, const Tensor& attnMask, float dropoutP, std::optional<float> scale) {
+    auto L = query.size(-2);
+    auto S = key.size(-2);
+    float scaleFactor = scale.has_value() ? scale.value() : (1.f / std::sqrt(static_cast<float>(query.size(-1))));
+    auto attnBias = Tensor::zeros({L, S}, query.options().noGrad());
+    if (isCausal) {
+      ASSERT(!attnMask.defined());
+      auto tempMask = Tensor::ones({L, S}, query.options().noGrad().dtype(DType::Bool));
+      tempMask = op::tril(tempMask, 0);
+      op::fillMaskedInplace(attnBias, op::logicNot(tempMask), -std::numeric_limits<float>::infinity());
+    }
+
+    if (attnMask.defined()) {
+      if (attnMask.dtype() == DType::Bool) {
+        op::fillMaskedInplace(attnBias, op::logicNot(attnMask), -std::numeric_limits<float>::infinity());
+      } else {
+        op::addInplace(attnBias, attnMask, 1);
+      }
+    }
+
+    auto attnWeight = op::matmul(query, op::transpose(key, -2, -1), false, false);
+    op::mulInplace(attnWeight, Tensor::scalar(scaleFactor, attnWeight.options()));
+    op::addInplace(attnWeight, attnBias, 1);
+    attnWeight = op::softmax(attnWeight, -1);
+    if (dropoutP > 0.f) {
+      attnWeight = op::dropout(attnWeight, dropoutP);
+    }
+    return op::matmul(attnWeight, value, false, false);
+    // TODO fuse
+  }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
+};
+
 inline Tensor linear(const Tensor& input, const Tensor& weight, const Tensor& bias = {}) {
   return FuncLinear::apply(input, weight, bias);
 }
@@ -249,6 +285,12 @@ inline Tensor embedding(const Tensor& input, const Tensor& weight) { return Func
 inline Tensor layerNorm(const Tensor& input, IntArrayView normalizedShape, const Tensor& weight, const Tensor& bias,
                         float eps = 1e-5f) {
   return FuncLayerNorm::apply(input, normalizedShape, weight, bias, eps);
+}
+
+inline Tensor sdpAttention(const Tensor& query, const Tensor& key, const Tensor& value, bool isCausal = false,
+                           const Tensor& attnMask = {}, float dropoutP = 0.f,
+                           std::optional<float> scale = std::nullopt) {
+  return FuncSDPAttention::apply(query, key, value, isCausal, attnMask, dropoutP, scale);
 }
 
 }  // namespace tinytorch::function

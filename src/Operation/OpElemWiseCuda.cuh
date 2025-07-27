@@ -33,6 +33,13 @@ struct OpCudaSign {
   }
 };
 
+struct OpCudaLogicNot {
+  template <typename T>
+  __device__ static T apply(const T& a) {
+    return !a;
+  }
+};
+
 struct OpCudaSqrt {
   template <typename T>
   __device__ static T apply(const T& a) {
@@ -478,6 +485,42 @@ void ternaryOpInplaceCudaImpl(Tensor& self, const Tensor& p1, const Tensor& p2) 
   self.copyOnWrite();
   iterator.template forEach<T>(
       self, [] __device__(const T& a, const T& b, const T& c) -> T { return OP::template apply<T>(a, b, c); });
+}
+
+template <typename T>
+Tensor addcmulOpCudaImpl(const Tensor& self, const Tensor& t1, const Tensor& t2, const Scalar& value) {
+  TensorIteratorCuda iterator(self, t1, t2);
+  auto outShape = iterator.setupBroadcast();
+  ASSERT(iterator.isBroadcastOk());
+  Tensor out(outShape, self.options().noGrad());
+  T val = value.to<T>();
+  iterator.template forEach<T>(out,
+                               [val] __device__(const T& a, const T& b, const T& c) -> T { return a + val * b * c; });
+  return out;
+}
+
+template <typename T>
+void addcmulOpOutCudaImpl(Tensor& out, const Tensor& self, const Tensor& t1, const Tensor& t2, const Scalar& value) {
+  TensorIteratorCuda iterator(self, t1, t2);
+  auto outShape = iterator.setupBroadcast();
+  ASSERT(iterator.isBroadcastOk());
+  ASSERT(outShape == out.shape());
+  out.copyOnWrite();
+  T val = value.to<T>();
+  iterator.template forEach<T>(out,
+                               [val] __device__(const T& a, const T& b, const T& c) -> T { return a + val * b * c; });
+}
+
+template <typename T>
+void addcmulOpInplaceCudaImpl(Tensor& self, const Tensor& t1, const Tensor& t2, const Scalar& value) {
+  TensorIteratorCuda iterator(self, t1, t2);
+  auto outShape = iterator.setupBroadcast();
+  ASSERT(iterator.isBroadcastOk());
+  ASSERT(outShape == self.shape());
+  self.copyOnWrite();
+  T val = value.to<T>();
+  iterator.template forEach<T>(self,
+                               [val] __device__(const T& a, const T& b, const T& c) -> T { return a + val * b * c; });
 }
 
 }  // namespace tinytorch::op

@@ -33,6 +33,12 @@ using TernaryOpFn = Tensor (*)(const Tensor& self, const Tensor& p1, const Tenso
 using TernaryOpOutFn = void (*)(Tensor& out, const Tensor& self, const Tensor& p1, const Tensor& p2);
 using TernaryOpInplaceFn = void (*)(Tensor& self, const Tensor& p1, const Tensor& p2);
 
+// addcmul
+using AddcmulOpFn = Tensor (*)(const Tensor& self, const Tensor& t1, const Tensor& t2, const Scalar& value);
+using AddcmulOpOutFn = void (*)(Tensor& out, const Tensor& self, const Tensor& t1, const Tensor& t2,
+                                const Scalar& value);
+using AddcmulOpInplaceFn = void (*)(Tensor& self, const Tensor& t1, const Tensor& t2, const Scalar& value);
+
 // abs
 DEFINE_OP(abs, UnaryOpFn)
 DEFINE_OP(absOut, UnaryOpOutFn)
@@ -47,6 +53,11 @@ DEFINE_OP(negInplace, UnaryOpInplaceFn)
 DEFINE_OP(sign, UnaryOpFn)
 DEFINE_OP(signOut, UnaryOpOutFn)
 DEFINE_OP(signInplace, UnaryOpInplaceFn)
+
+// logicNot
+DEFINE_OP(logicNot, UnaryOpFn)
+DEFINE_OP(logicNotOut, UnaryOpOutFn)
+DEFINE_OP(logicNotInplace, UnaryOpInplaceFn)
 
 // sqrt
 DEFINE_OP(sqrt, UnaryOpFn)
@@ -179,6 +190,11 @@ DEFINE_OP(clampMaxInplace, BinaryOpInplaceFn)
 DEFINE_OP(clamp, TernaryOpFn)
 DEFINE_OP(clampOut, TernaryOpOutFn)
 DEFINE_OP(clampInplace, TernaryOpInplaceFn)
+
+// addcmul
+DEFINE_OP(addcmul, AddcmulOpFn)
+DEFINE_OP(addcmulOut, AddcmulOpOutFn)
+DEFINE_OP(addcmulInplace, AddcmulOpInplaceFn)
 
 void registerElemWiseCpu();
 STATIC_CALL(registerElemWiseCpu);
