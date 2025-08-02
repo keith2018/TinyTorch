@@ -125,6 +125,7 @@ struct KernelLaunchParams {
 };
 
 int getMaxThreadsPerBlock(int device);
+size_t getMaxSharedMemoryPerBlock(int device);
 unsigned int getKernelBlockSize(int device);
 unsigned int getKernelGridSize(unsigned int blockSize, int64_t n, size_t batch = 1);
 KernelLaunchParams getKernelLaunchParams(int device, int64_t n, size_t batch = 1, size_t sharedMemBytes = 0);

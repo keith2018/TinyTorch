@@ -10,6 +10,7 @@
 
 #include "OpTransform.h"
 #include "Utils/CUDAUtils.h"
+#include "Utils/RandomGenerator.h"
 
 namespace tinytorch::op {
 
@@ -169,6 +170,134 @@ __global__ void kTriangle(T* ret, const T* t, const int64_t rows, const int64_t 
     } else {
       ret[index] = 0;
     }
+  }
+}
+
+template <typename T, bool largest, bool sorted>
+__global__ void kTopk(const T* selfPtr, T* valPtr, int64_t* idxPtr, int64_t n, int64_t k, int64_t outerSize,
+                      int64_t innerSize) {
+  auto outer = blockIdx.x;
+  auto inner = blockIdx.y;
+  if (outer >= outerSize || inner >= innerSize) {
+    return;
+  }
+
+  extern __shared__ char smem[];
+  struct Pair {
+    T v;
+    int64_t idx;
+  };
+  Pair* vec = reinterpret_cast<Pair*>(smem);
+
+  auto base = outer * n * innerSize + inner;
+  for (auto i = threadIdx.x; i < n; i += blockDim.x) {
+    vec[i].v = selfPtr[base + i * innerSize];
+    vec[i].idx = i;
+  }
+  __syncthreads();
+
+  if (threadIdx.x == 0) {
+    auto cmp = [](const Pair& a, const Pair& b) {
+      if constexpr (largest)
+        return a.v > b.v;
+      else
+        return a.v < b.v;
+    };
+    for (auto i = 0; i < k; i++) {
+      auto best = i;
+      for (auto j = i + 1; j < n; j++) {
+        if (cmp(vec[j], vec[best])) {
+          best = j;
+        }
+      }
+      if (best != i) {
+        Pair tmp = vec[i];
+        vec[i] = vec[best];
+        vec[best] = tmp;
+      }
+    }
+    if constexpr (sorted) {
+      for (auto i = 1; i < k; i++) {
+        Pair key = vec[i];
+        auto j = i - 1;
+        while (j >= 0 && cmp(key, vec[j])) {
+          vec[j + 1] = vec[j];
+          j--;
+        }
+        vec[j + 1] = key;
+      }
+    }
+    for (auto i = 0; i < k; i++) {
+      valPtr[(outer * k + i) * innerSize + inner] = vec[i].v;
+      idxPtr[(outer * k + i) * innerSize + inner] = vec[i].idx;
+    }
+  }
+}
+
+template <typename T, bool replacement>
+__global__ void kMultinomial(const T* selfPtr, int64_t* retPtr, const int64_t n, const int64_t numSamples,
+                             unsigned long seed, unsigned long seq) {
+  extern __shared__ float sData[];
+  float* sProb = sData;
+  float* sCdf = &sData[n];
+
+  const auto bIdx = blockIdx.x;
+  const auto tIdx = threadIdx.x;
+
+  // load probabilities for the current batch item
+  if (tIdx < n) {
+    sProb[tIdx] = selfPtr[bIdx * n + tIdx];
+  }
+  __syncthreads();
+
+  curandStatePhilox4_32_10_t state;
+  if (tIdx == 0) {
+    curand_init(seed, seq, bIdx, &state);
+  }
+
+  // draw numSamples for the current batch item
+  for (int s = 0; s < numSamples; s++) {
+    if (tIdx < n) {
+      sCdf[tIdx] = sProb[tIdx];
+    }
+    __syncthreads();
+
+    for (int offset = 1; offset < n; offset <<= 1) {
+      float val = 0.f;
+      if (tIdx >= offset) {
+        val = sCdf[tIdx - offset];
+      }
+      __syncthreads();
+      if (tIdx >= offset) {
+        sCdf[tIdx] += val;
+      }
+      __syncthreads();
+    }
+
+    if (tIdx == 0) {
+      int64_t sampleIdx = 0;
+      const float totalProb = (n > 0) ? sCdf[n - 1] : 0.f;
+      if (totalProb > 0.f) {
+        const float r = curand_uniform(&state) * totalProb;
+        int64_t low = 0, high = n - 1;
+        sampleIdx = n - 1;
+        while (low <= high) {
+          int64_t mid = low + (high - low) / 2;
+          if (r < sCdf[mid]) {
+            sampleIdx = mid;
+            high = mid - 1;
+          } else {
+            low = mid + 1;
+          }
+        }
+      }
+
+      retPtr[bIdx * numSamples + s] = sampleIdx;
+      if (!replacement && totalProb > 0.f) {
+        sProb[sampleIdx] = 0.f;
+      }
+    }
+    __syncthreads();
   }
 }
 
@@ -347,6 +476,99 @@ Tensor trilOpCudaImpl(const Tensor& self, int64_t diagonal = 0) {
 template <typename T>
 Tensor triuOpCudaImpl(const Tensor& self, int64_t diagonal = 0) {
   return triangleOpCudaImpl<T, false>(self, diagonal);
+}
+
+template <typename T>
+TensorPair topkOpCudaImpl(const Tensor& self, int64_t k, int64_t dim, bool largest, bool sorted) {
+  if (dim < 0) dim += self.dim();
+  ASSERT(dim >= 0 && dim < self.dim());
+
+  int64_t n = self.shape(dim);
+  ASSERT(k > 0 && k <= n);
+  ASSERT(k <= 1024);  // sort on shared memory
+
+  SizeVector retShape(self.shape());
+  retShape[dim] = k;
+  Tensor values = Tensor::empty(retShape, self.options().noGrad());
+  Tensor indices = Tensor::empty(retShape, self.options().noGrad().indices());
+
+  int64_t outerSize = 1;
+  int64_t innerSize = 1;
+  for (int64_t i = 0; i < dim; i++) {
+    outerSize *= self.shape(i);
+  }
+  for (int64_t i = dim + 1; i < self.dim(); i++) {
+    innerSize *= self.shape(i);
+  }
+
+  const auto* selfPtr = self.dataPtr<T>();
+  auto* valPtr = values.dataPtr<T>();
+  auto* idxPtr = indices.dataPtr<int64_t>();
+
+  dim3 grid(outerSize, innerSize);
+  auto block = cuda::getKernelBlockSize(self.device().index);
+  size_t smem = n * (sizeof(T) + sizeof(int64_t));
+  const auto stream = cuda::getCurrentCUDAStream(self.device().index).stream;
+
+  auto launch = [&](auto LARGEST, auto SORTED) {
+    kTopk<T, LARGEST, SORTED><<<grid, block, smem, stream>>>(selfPtr, valPtr, idxPtr, n, k, outerSize, innerSize);
+    CUDA_KERNEL_CHECK();
+  };
+  if (largest) {
+    if (sorted) {
+      launch(std::true_type{}, std::true_type{});
+    } else {
+      launch(std::true_type{}, std::false_type{});
+    }
+  } else {
+    if (sorted) {
+      launch(std::false_type{}, std::true_type{});
+    } else {
+      launch(std::false_type{}, std::false_type{});
+    }
+  }
+  return {values, indices};
+}
+
+template <typename T>
+Tensor multinomialOpCudaImpl(const Tensor& self, int64_t numSamples, bool replacement) {
+  ASSERT(self.dim() == 1 || self.dim() == 2);
+  ASSERT(self.dtype() == DType::Float32);
+
+  int64_t batch = (self.dim() == 2) ? self.shape(0) : 1;
+  int64_t n = (self.dim() == 2) ? self.shape(1) : self.shape(0);
+  ASSERT(n <= 1024);  // TODO
+
+  SizeVector retShape;
+  if (self.dim() == 2) {
+    retShape = {batch, numSamples};
+  } else {
+    retShape = {numSamples};
+  }
+
+  Tensor ret = Tensor::empty(retShape, self.options().noGrad().indices());
+  if (n == 0) {
+    return ret;
+  }
+
+  const T* selfPtr = self.dataPtr<T>();
+  auto* retPtr = ret.dataPtr<int64_t>();
+
+  auto seed = RandomGeneratorCUDA::getSeed();
+  auto seq = RandomGeneratorCUDA::nextSequence();
+
+  dim3 gridDim(batch);
+  dim3 blockDim(n);  // n <= 1024
+  size_t sharedMemSize = 2 * n * sizeof(float);
+  const auto stream = cuda::getCurrentCUDAStream(self.device().index).stream;
+  if (replacement) {
+    kMultinomial<T, true><<<gridDim, blockDim, sharedMemSize, stream>>>(selfPtr, retPtr, n, numSamples, seed, seq);
+  } else {
+    kMultinomial<T, false><<<gridDim, blockDim, sharedMemSize, stream>>>(selfPtr, retPtr, n, numSamples, seed, seq);
+  }
+  CUDA_KERNEL_CHECK();
+
+  return ret;
 }
 
 }  // namespace tinytorch::op

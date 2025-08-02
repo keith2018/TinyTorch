@@ -118,21 +118,26 @@ cublasHandle_t getCublasHandle(int device) {
   return handle;
 }
 
-int getMaxThreadsPerBlock(int device) {
-  static std::vector<int> cache(kMaxDevices, -1);
+const cudaDeviceProp& getDeviceProperties(int device) {
+  static std::vector<cudaDeviceProp> cache(kMaxDevices);
+  static std::vector<bool> isCached(kMaxDevices, false);
 
   if (device < 0 || device >= kMaxDevices) {
-    LOGE("getMaxThreadsPerBlock: invalid device: %d", device);
-    return 0;
+    LOGE("getDeviceProperties: invalid device: %d", device);
+    static cudaDeviceProp empty;
+    return empty;
   }
 
-  if (cache[device] == -1) {
-    cudaDeviceProp prop{};
-    CUDA_CHECK(cudaGetDeviceProperties(&prop, device));
-    cache[device] = prop.maxThreadsPerBlock;
+  if (!isCached[device]) {
+    CUDA_CHECK(cudaGetDeviceProperties(&cache[device], device));
+    isCached[device] = true;
   }
   return cache[device];
 }
+
+int getMaxThreadsPerBlock(int device) { return getDeviceProperties(device).maxThreadsPerBlock; }
+
+size_t getMaxSharedMemoryPerBlock(int device) { return getDeviceProperties(device).sharedMemPerBlock; }
 
 unsigned int getKernelBlockSize(int device) {
   auto maxSize = getMaxThreadsPerBlock(device);

@@ -70,6 +70,12 @@ using StackOpFn = Tensor (*)(ArrayView<Tensor> tensors, int64_t dim);
 using HStackOpFn = Tensor (*)(ArrayView<Tensor> tensors);
 using VStackOpFn = HStackOpFn;
 
+using NarrowOpFn = Tensor (*)(const Tensor& self, int64_t dim, int64_t start, int64_t length);
+
+using TopkOpFn = TensorPair (*)(const Tensor& self, int64_t k, int64_t dim, bool largest, bool sorted);
+
+using MultinomialOpFn = Tensor (*)(const Tensor& self, int64_t numSamples, bool replacement);
+
 // dtype cast
 DEFINE_OP(dtypeCast, CastOpFn)
 
@@ -124,6 +130,15 @@ DEFINE_OP(concat, ConcatOpFn)
 DEFINE_OP(stack, StackOpFn)
 DEFINE_OP(vstack, VStackOpFn)
 DEFINE_OP(hstack, HStackOpFn)
+
+// narrow
+DEFINE_OP(narrow, NarrowOpFn)
+
+// topk
+DEFINE_OP(topk, TopkOpFn)
+
+// multinomial
+DEFINE_OP(multinomial, MultinomialOpFn)
 
 void registerTransformCommon();
 STATIC_CALL(registerTransformCommon);

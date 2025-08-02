@@ -790,6 +790,75 @@ TEST(TEST_Operation, basic_hstack) {
   EXPECT_THAT(y.toList<float>(), ElementsAre(1, 4, 2, 5, 3, 6));
 }
 
+TEST(TEST_Operation, basic_narrow) {
+  Tensor x(Array2d<float>{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}});
+  auto y = op::narrow(x, 0, 0, 2);
+  EXPECT_THAT(y.shape(), ElementsAre(2, 3));
+  EXPECT_THAT(y.toList<float>(), ElementsAre(1, 2, 3, 4, 5, 6));
+
+  y = op::narrow(x, 1, 1, 2);
+  EXPECT_THAT(y.shape(), ElementsAre(3, 2));
+  EXPECT_THAT(y.toList<float>(), ElementsAre(2, 3, 5, 6, 8, 9));
+
+  y = op::narrow(x, -1, -1, 1);
+  EXPECT_THAT(y.shape(), ElementsAre(3, 1));
+  EXPECT_THAT(y.toList<float>(), ElementsAre(3, 6, 9));
+}
+
+TEST(TEST_Operation, basic_topk) {
+  Tensor x(Array1d<float>{1, 3, 2, 5, 4});
+  auto ret = op::topk(x, 3, 0, true, true);
+  EXPECT_THAT(ret.first.toList<float>(), ElementsAre(5, 4, 3));
+  EXPECT_THAT(ret.second.toList<int64_t>(), ElementsAre(3, 4, 1));
+
+  ret = op::topk(x, 2, 0, false, true);
+  EXPECT_THAT(ret.first.toList<float>(), ElementsAre(1, 2));
+  EXPECT_THAT(ret.second.toList<int64_t>(), ElementsAre(0, 2));
+
+  x = Tensor(Array2d<float>{{1, 4, 2}, {3, 5, 0}});
+  ret = op::topk(x, 1, 0, false, true);
+  EXPECT_THAT(ret.first.shape(), ElementsAre(1, 3));
+  EXPECT_THAT(ret.first.toList<float>(), ElementsAre(1, 4, 0));
+  EXPECT_THAT(ret.second.shape(), ElementsAre(1, 3));
+  EXPECT_THAT(ret.second.toList<int64_t>(), ElementsAre(0, 0, 1));
+}
+
+TEST(TEST_Operation, basic_multinomial) {
+  Tensor x(Array1d<float>{0, 10, 3, 0});
+  auto y = op::multinomial(x, 2, false);
+  EXPECT_THAT(y.shape(), ElementsAre(2));
+  auto yv = y.toList<int64_t>();
+  EXPECT_THAT(yv, Each(AllOf(Ge(1), Le(2))));
+  EXPECT_NE(yv[0], yv[1]);
+
+  y = op::multinomial(x, 4, true);
+  EXPECT_THAT(y.shape(), ElementsAre(4));
+  yv = y.toList<int64_t>();
+  EXPECT_THAT(yv, Each(AllOf(Ge(1), Le(2))));
+
+  x = Tensor(Array1d<float>{0.2f, 0.3f, 0.5f});
+  y = op::multinomial(x, 10000, true);
+  yv = y.toList<int64_t>();
+  auto cnt0 = std::count(yv.begin(), yv.end(), 0);
+  auto cnt1 = std::count(yv.begin(), yv.end(), 1);
+  auto cnt2 = std::count(yv.begin(), yv.end(), 2);
+  EXPECT_GT(cnt2, cnt1);
+  EXPECT_GT(cnt1, cnt0);
+
+  x = Tensor(Array2d<float>{{0.5, 0.5, 0}, {0.5, 0.5, 0}});
+  y = op::multinomial(x, 2, false);
+  EXPECT_THAT(y.shape(), ElementsAre(2, 2));
+  auto y2v = y.toList<int64_t>();
+  EXPECT_NE(y2v[0], y2v[1]);
+  EXPECT_NE(y2v[2], y2v[3]);
+
+  x = Tensor(Array1d<float>{0.1f, 0.2f, 0.7f});
+  y = op::multinomial(x, 3, false);
+  yv = y.toList<int64_t>();
+  std::sort(yv.begin(), yv.end());
+  EXPECT_THAT(yv, ElementsAre(0, 1, 2));
+}
+
 TEST(TEST_Operation, math_dot) {
   Array1d<float> d1 = {1, 2, 3};
   Array1d<float> d2 = {4, 5, 6};
