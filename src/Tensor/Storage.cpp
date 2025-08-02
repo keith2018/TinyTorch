@@ -23,7 +23,7 @@ Storage::Storage(int64_t nbytes, Device device, Allocator* allocator)
 
 std::shared_ptr<Storage> Storage::clone() const {
   auto newStorage = std::make_shared<Storage>(nbytes_, device_, allocator_);
-  copyOnDevice(newStorage->data_.get(), data_.get(), device_, nbytes_);
+  copyOnDevice(newStorage->data_.get(), data_.get(), nbytes_, device_);
   return newStorage;
 }
 
@@ -64,7 +64,7 @@ void Storage::copyOnDevice(void* dst, const Device& dstDevice, const void* src, 
   ASSERT(false && "Unknown device type in deviceCopy");
 }
 
-void Storage::copyOnDevice(void* dst, const void* src, const Device& device, int64_t nbytes) {
+void Storage::copyOnDevice(void* dst, const void* src, int64_t nbytes, const Device& device) {
   copyOnDevice(dst, device, src, device, nbytes);
 }
 

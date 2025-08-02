@@ -12,7 +12,6 @@ namespace tinytorch::op {
 
 SizeVector getReduceShape(const Tensor& t, int64_t dim, bool keepDims);
 SizeVector getReduceShape(const Tensor& t, const DimArray<int64_t>& inAxis, bool keepDims);
-Options getIndicesOptions(const Tensor& t);
 
 using ReduceOpFn = Tensor (*)(const Tensor& self);
 using ReduceOpDimFn = Tensor (*)(const Tensor& self, int64_t dim, bool keepDim);

@@ -25,7 +25,7 @@ struct Device {
   DeviceIndex index;
 
   // NOLINTNEXTLINE(google-explicit-constructor)
-  Device(DeviceType t, DeviceIndex i = -1) : type(t), index(i) {}
+  Device(DeviceType t, DeviceIndex i = 0) : type(t), index(i) {}
 
   bool operator==(const Device &other) const { return type == other.type && index == other.index; }
 

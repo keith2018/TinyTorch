@@ -73,6 +73,12 @@ struct Options {
     ret.requiresGrad_ = false;
     return ret;
   }
+
+  Options indices() const {
+    Options ret = *this;
+    ret.dtype_ = DType::Int64;
+    return ret;
+  }
 };
 
 namespace options {

@@ -27,7 +27,7 @@ class Storage {
 
   static void copyOnDevice(void* dst, const Device& dstDevice, const void* src, const Device& srcDevice,
                            int64_t nbytes);
-  static void copyOnDevice(void* dst, const void* src, const Device& device, int64_t nbytes);
+  static void copyOnDevice(void* dst, const void* src, int64_t nbytes, const Device& device);
 
  private:
   std::unique_ptr<void, std::function<void(void*)>> data_;

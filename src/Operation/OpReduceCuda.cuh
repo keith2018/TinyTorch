@@ -390,7 +390,7 @@ void ReducerCuda::reduceMerge(T* values, const T* input, const Device& device, i
     kReduceMerge<T, OP, IndexFunc><<<m * blocks, blockSize, 0, stream>>>(dTmp, dTmp, currBlocks, m);
     CUDA_KERNEL_CHECK();
   }
-  Storage::copyOnDevice(values, dTmp, device, m * sizeof(T));
+  Storage::copyOnDevice(values, dTmp, m * sizeof(T), device);
   allocator->deallocate(dTmp);
 }
 
@@ -419,10 +419,10 @@ void ReducerCuda::reduceIdxMerge(T* values, int64_t* indices, const T* input, co
     CUDA_KERNEL_CHECK();
   }
   if (values) {
-    Storage::copyOnDevice(values, tmpValues, device, m * sizeof(T));
+    Storage::copyOnDevice(values, tmpValues, m * sizeof(T), device);
   }
   if (indices) {
-    Storage::copyOnDevice(indices, tmpIndices, device, m * static_cast<int64_t>(sizeof(int64_t)));
+    Storage::copyOnDevice(indices, tmpIndices, m * static_cast<int64_t>(sizeof(int64_t)), device);
   }
   allocator->deallocate(tmpValues);
   allocator->deallocate(tmpIndices);
@@ -527,7 +527,7 @@ TensorPair ReducerCuda::reduceIdxDim(const Tensor& t, int64_t dim, bool keepDims
 
   const auto retShape = getReduceShape(t, dim, false);
   auto values = Tensor::empty(retShape, t.options().noGrad());
-  auto indices = Tensor::empty(retShape, getIndicesOptions(t));
+  auto indices = Tensor::empty(retShape, t.options().noGrad().indices());
 
   const auto blockSize = cuda::getKernelBlockSize(t.device().index);
 
@@ -585,7 +585,7 @@ Tensor reduceOpAllCudaImpl(const Tensor& t) {
 
 template <typename T, typename OP>
 Tensor reduceOpArgMinMaxCudaImpl(const Tensor& t) {
-  auto ret = Tensor::scalar(0, getIndicesOptions(t));
+  auto ret = Tensor::scalar(0, t.options().noGrad().indices());
   if (t.isScalar()) {
     return ret;
   }
@@ -598,7 +598,7 @@ Tensor reduceOpArgMinMaxCudaImpl(const Tensor& t) {
 template <typename T, typename OP>
 TensorPair reduceOpMinMaxDimCudaImpl(const Tensor& t, int64_t dim, bool keepDims = false) {
   if (t.isScalar()) {
-    return {t, Tensor::scalar(0, getIndicesOptions(t))};
+    return {t, Tensor::scalar(0, t.options().noGrad().indices())};
   }
   return ReducerCuda::reduceIdxDim<T, OP>(t, dim, keepDims);
 }
