@@ -103,7 +103,7 @@ Tensor indexAdvanceOpCpuImpl(const Tensor& self, ArrayView<Tensor> indices) {
   auto len = static_cast<int64_t>(indices.size());
   auto firstDim = indices[0].numel();
   auto dimStride = self.stride(len - 1);
-  SizeVector retShape = {firstDim};
+  SizeVector retShape(indices[0].shape());
   for (auto i = len; i < self.dim(); i++) {
     retShape.pushBack(self.shape(i));
   }
