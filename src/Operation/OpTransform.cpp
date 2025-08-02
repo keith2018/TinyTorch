@@ -126,7 +126,7 @@ void indexPutOpImpl(Tensor& self, const IntArrayView indices, const Tensor& val)
     ASSERT(dimStride == val.numel());
     T* selfPtr = self.dataPtr<T>();
     const T* valPtr = val.dataPtr<T>();
-    Storage::copyOnDevice(selfPtr + dataIdx, valPtr, self.device(), dimStride * sizeof(T));
+    Storage::copyOnDevice(selfPtr + dataIdx, valPtr, dimStride * sizeof(T), self.device());
   }
 }
 
@@ -176,7 +176,7 @@ std::vector<Tensor> splitOpImpl(const Tensor& self, int64_t splitSize, int64_t d
       int64_t srcOffset = outerIdx * dimSize * innerBlockSize + i * splitSize * innerBlockSize;
       int64_t dstOffset = outerIdx * splitSize * innerBlockSize;
       int64_t copySize = splitSize * innerBlockSize * sizeof(T);
-      Storage::copyOnDevice(retPtr + dstOffset, selfPtr + srcOffset, self.device(), copySize);
+      Storage::copyOnDevice(retPtr + dstOffset, selfPtr + srcOffset, copySize, self.device());
     }
   }
   return retTensors;
@@ -228,7 +228,7 @@ Tensor concatOpImpl(ArrayView<Tensor> tensors, int64_t dim) {
       int64_t dstOffset = outerIdx * concatDimSize * innerBlockSize + offset * innerBlockSize;
       int64_t srcOffset = outerIdx * currDimSize * innerBlockSize;
       int64_t copySize = currDimSize * innerBlockSize * sizeof(T);
-      Storage::copyOnDevice(retPtr + dstOffset, inPtr + srcOffset, t.device(), copySize);
+      Storage::copyOnDevice(retPtr + dstOffset, inPtr + srcOffset, copySize, t.device());
     }
     offset += currDimSize;
   }
@@ -269,7 +269,7 @@ Tensor stackOpImpl(ArrayView<Tensor> tensors, int64_t dim) {
     auto* dstPtr = retPtr + i * innerBlockSize;
 
     for (int64_t j = 0; j < outerBlockSize; j++) {
-      Storage::copyOnDevice(dstPtr, srcPtr, t0.device(), innerBlockSize * sizeof(T));
+      Storage::copyOnDevice(dstPtr, srcPtr, innerBlockSize * sizeof(T), t0.device());
       srcPtr += innerBlockSize;
       dstPtr += tensors.size() * innerBlockSize;
     }

@@ -163,6 +163,7 @@ void demo_mnist() {
 
   auto model = Net();
   model.to(device);
+  model.initParameters();
 
   auto optimizer = optim::AdaDelta(model.parameters(), args.lr);
   auto scheduler = optim::lr_scheduler::StepLR(optimizer, 1, args.gamma);

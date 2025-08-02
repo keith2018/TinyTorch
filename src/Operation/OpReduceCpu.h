@@ -143,7 +143,7 @@ std::pair<Tensor, Tensor> ReducerCpu::reduceIdxDim(const Tensor &t, int64_t dim,
 
   const auto retShape = getReduceShape(t, dim, keepDims);
   auto values = Tensor::empty(retShape, t.options().noGrad());
-  auto indices = Tensor::empty(retShape, getIndicesOptions(t));
+  auto indices = Tensor::empty(retShape, t.options().noGrad().indices());
 
   if (dim == t.dim() - 1) {
     reduceIdxDimImpl<T, OP, true>(values, indices, t, dim, keepDims);
@@ -195,9 +195,9 @@ Tensor reduceOpAllCpuImpl(const Tensor &t) {
 template <typename T, typename OP>
 Tensor reduceOpArgMinMaxCpuImpl(const Tensor &t) {
   if (t.isScalar()) {
-    return Tensor::scalar(0, getIndicesOptions(t));
+    return Tensor::scalar(0, t.options().noGrad().indices());
   }
-  auto ret = Tensor::empty({}, getIndicesOptions(t));
+  auto ret = Tensor::empty({}, t.options().noGrad().indices());
   const T *tPtr = t.dataPtr<T>();
   auto *retPtr = ret.dataPtr<int64_t>();
   ReducerCpu::reduceIdxAll<T, OP>(retPtr, tPtr, t.numel());
@@ -207,7 +207,7 @@ Tensor reduceOpArgMinMaxCpuImpl(const Tensor &t) {
 template <typename T, typename OP>
 TensorPair reduceOpMinMaxDimCpuImpl(const Tensor &t, int64_t dim, bool keepDims = false) {
   if (t.isScalar()) {
-    return {t, Tensor::scalar(0, getIndicesOptions(t))};
+    return {t, Tensor::scalar(0, t.options().noGrad().indices())};
   }
   return ReducerCpu::reduceIdxDim<T, OP>(t, dim, keepDims);
 }

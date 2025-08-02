@@ -38,10 +38,4 @@ SizeVector getReduceShape(const Tensor &t, const DimArray<int64_t> &inAxis, bool
   return retShape;
 }
 
-Options getIndicesOptions(const Tensor &t) {
-  Options options = t.options();
-  options.dtype(DType::Int64);
-  return options;
-}
-
 }  // namespace tinytorch::op

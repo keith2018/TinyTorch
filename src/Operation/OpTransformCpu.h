@@ -121,7 +121,7 @@ Tensor indexAdvanceOpCpuImpl(const Tensor& self, ArrayView<Tensor> indices) {
   for (int64_t i = 0; i < firstDim; i++) {
     getSubIndices(subIndices.data, self, indices, i);
     int64_t dataIdx = indicesToOffset(self.strides(), subIndices.data);
-    Storage::copyOnDevice(retPtr + (dimStride * i), selfPtr + dataIdx, self.device(), dimStride * sizeof(T));
+    Storage::copyOnDevice(retPtr + (dimStride * i), selfPtr + dataIdx, dimStride * sizeof(T), self.device());
   }
   return ret;
 }
@@ -158,7 +158,7 @@ void indexPutAdvanceOpCpuImpl(Tensor& self, ArrayView<Tensor> indices, const Ten
     for (int64_t i = 0; i < firstDim; i++) {
       getSubIndices(subIndices.data, self, indices, i);
       int64_t dataIdx = indicesToOffset(self.strides(), subIndices.data);
-      Storage::copyOnDevice(selfPtr + dataIdx, valPtr + (dimStride * i), self.device(), dimStride * sizeof(T));
+      Storage::copyOnDevice(selfPtr + dataIdx, valPtr + (dimStride * i), dimStride * sizeof(T), self.device());
     }
   }
 }

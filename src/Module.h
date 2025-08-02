@@ -14,6 +14,7 @@ namespace tinytorch::nn {
 
 class Module {
  public:
+  Module() = default;
   virtual ~Module() = default;
 
   void registerModules(const std::vector<std::pair<std::string, std::reference_wrapper<Module>>> &modules) {
@@ -73,6 +74,8 @@ class Module {
     return ret;
   }
 
+  void initParameters() { resetParameters(); }
+
   // NOLINTNEXTLINE(misc-no-recursion)
   virtual void resetParameters() {
     for (auto &[name, module] : subModules_) {
@@ -119,11 +122,7 @@ class Module {
 
 class ModuleList : public Module {
  public:
-  template <typename... Modules>
-  explicit ModuleList(Modules &&...modules) {
-    modules_.reserve(sizeof...(Modules));
-    pushBack(std::forward<Modules>(modules)...);
-  }
+  ModuleList() = default;
 
   ModuleList(std::initializer_list<std::shared_ptr<Module>> modules) {
     modules_.reserve(modules.size());
@@ -134,10 +133,9 @@ class ModuleList : public Module {
     }
   }
 
-  template <typename ModuleType,
-            typename = std::enable_if_t<!std::is_base_of_v<std::shared_ptr<Module>, std::decay_t<ModuleType>>>>
-  void pushBack(ModuleType &&module) {
-    auto ptr = std::make_shared<ModuleType>(std::forward<ModuleType>(module));
+  template <typename ModuleType, typename... Args>
+  void emplaceBack(Args &&...args) {
+    auto ptr = std::make_shared<ModuleType>(std::forward<Args>(args)...);
     registerModule(std::to_string(modules_.size()), *ptr);
     modules_.push_back(ptr);
   }
@@ -158,23 +156,18 @@ class ModuleList : public Module {
   size_t size() const { return modules_.size(); }
   bool empty() const { return modules_.empty(); }
 
+  auto begin() { return modules_.begin(); }
+  auto end() { return modules_.end(); }
+
+  auto begin() const { return modules_.begin(); }
+  auto end() const { return modules_.end(); }
+
  protected:
-  template <typename First, typename Second, typename... Rest>
-  void pushBack(First &&first, Second &&second, Rest &&...rest) {
-    pushBack(std::forward<First>(first));
-    pushBack(std::forward<Second>(second), std::forward<Rest>(rest)...);
-  }
-
-  void pushBack() {}
-
   std::vector<std::shared_ptr<Module>> modules_;
 };
 
 class Sequential : public ModuleList {
  public:
-  template <typename... Modules>
-  explicit Sequential(Modules &&...modules) : ModuleList(std::forward<Modules>(modules)...) {}
-
   Sequential(std::initializer_list<std::shared_ptr<Module>> modules) : ModuleList(modules) {}
 
   Tensor forward(const Tensor &input) override;

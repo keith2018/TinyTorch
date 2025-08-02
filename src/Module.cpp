@@ -26,7 +26,6 @@ Linear::Linear(int64_t inFeatures, int64_t outFeatures, bool bias, Options optio
   if (bias) {
     bias_ = Tensor::empty({outFeatures}, options);
   }
-  Linear::resetParameters();
 }
 
 Tensor Linear::forward(const Tensor &input) { return function::linear(input, weight_, bias_); }
@@ -71,7 +70,6 @@ Conv2D::Conv2D(int64_t inFeatures, int64_t outFeatures, Dim2D kernel, Dim2D stri
   if (bias) {
     bias_ = Tensor::empty({outFeatures}, options);
   }
-  Conv2D::resetParameters();
 }
 
 Tensor Conv2D::forward(const Tensor &input) { return function::conv2d(input, weight_, bias_, stride_, padding_); }
@@ -97,7 +95,6 @@ void Conv2D::resetParameters() {
 Embedding::Embedding(int64_t numEmbeddings, int64_t embeddingDim, Options options) {
   options.requiresGrad(true);
   weight_ = Tensor::empty({numEmbeddings, embeddingDim}, options);
-  Embedding::resetParameters();
 }
 
 Tensor Embedding::forward(const Tensor &input) { return function::embedding(input, weight_); }
@@ -113,10 +110,11 @@ LayerNorm::LayerNorm(IntArrayView normalizedShape, float eps, bool bias, Options
   if (bias) {
     bias_ = Tensor::empty(normalizedShape, options);
   }
-  LayerNorm::resetParameters();
 }
 
-Tensor LayerNorm::forward(const Tensor &input) { return function::layerNorm(input, normalizedShape_, weight_, bias_, eps_); }
+Tensor LayerNorm::forward(const Tensor &input) {
+  return function::layerNorm(input, normalizedShape_, weight_, bias_, eps_);
+}
 
 std::vector<std::pair<std::string, TensorPtr>> LayerNorm::namedParameters_() {
   if (useBias_) {
