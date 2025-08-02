@@ -99,6 +99,31 @@ class FuncVStack : public Function<FuncVStack> {
   static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
 };
 
+class FuncNarrow : public Function<FuncNarrow> {
+ public:
+  static Tensor forward(AutogradContext* ctx, const Tensor& self, int64_t dim, int64_t start, int64_t length) {
+    return op::narrow(self, dim, start, length);
+  }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
+};
+
+class FuncTopk : public Function<FuncTopk> {
+ public:
+  static TensorPair forward(AutogradContext* ctx, const Tensor& self, int64_t k, int64_t dim, bool largest,
+                            bool sorted) {
+    return op::topk(self, k, dim, largest, sorted);
+  }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
+};
+
+class FuncMultinomial : public Function<FuncMultinomial> {
+ public:
+  static Tensor forward(AutogradContext* ctx, const Tensor& self, int64_t numSamples, bool replacement) {
+    return op::multinomial(self, numSamples, replacement);
+  }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
+};
+
 inline Tensor reshape(const Tensor& self, const IntArrayView shape) { return FuncReshape::apply(self, shape); }
 inline Tensor view(const Tensor& self, const IntArrayView shape) { return FuncView::apply(self, shape); }
 inline Tensor permute(const Tensor& self, const IntArrayView dims) { return FuncPermute::apply(self, dims); }
@@ -123,5 +148,14 @@ inline Tensor concat(ArrayView<Tensor> tensors, int64_t dim = 0) { return FuncCo
 inline Tensor stack(ArrayView<Tensor> tensors, int64_t dim = 0) { return FuncStack::apply(tensors, dim); }
 inline Tensor hstack(ArrayView<Tensor> tensors) { return FuncHStack::apply(tensors); }
 inline Tensor vstack(ArrayView<Tensor> tensors) { return FuncVStack::apply(tensors); }
+inline Tensor narrow(const Tensor& self, int64_t dim, int64_t start, int64_t length) {
+  return FuncNarrow::apply(self, dim, start, length);
+}
+inline TensorPair topk(const Tensor& self, int64_t k, int64_t dim, bool largest = true, bool sorted = true) {
+  return FuncTopk::apply(self, k, dim, largest, sorted);
+}
+inline Tensor multinomial(const Tensor& self, int64_t numSamples, bool replacement = false) {
+  return FuncMultinomial::apply(self, numSamples, replacement);
+}
 
 }  // namespace tinytorch::function

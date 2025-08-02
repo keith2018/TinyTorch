@@ -68,6 +68,12 @@ void registerTransformCpu() {
   // tril/triu
   REGISTER_OP_IMPL_DTYPE_TPL(tril, CPU, trilOpCpuImpl);
   REGISTER_OP_IMPL_DTYPE_TPL(triu, CPU, triuOpCpuImpl);
+
+  // topk
+  REGISTER_OP_IMPL_DTYPE_TPL(topk, CPU, topkOpCpuImpl);
+
+  // multinomial
+  REGISTER_OP_IMPL_DTYPE_TPL(multinomial, CPU, multinomialOpCpuImpl);
 }
 
 }  // namespace tinytorch::op

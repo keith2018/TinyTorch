@@ -298,6 +298,43 @@ Tensor hstackOpImpl(ArrayView<Tensor> tensors) {
   }
 }
 
+template <typename T>
+Tensor narrowOpImpl(const Tensor& self, int64_t dim, int64_t start, int64_t length) {
+  if (dim < 0) dim += self.dim();
+  ASSERT(dim >= 0 && dim < self.dim());
+
+  if (start < 0) start += self.shape(dim);
+  ASSERT(start >= 0 && start < self.shape(dim));
+  ASSERT(length >= 0 && start + length <= self.shape(dim));
+
+  SizeVector retShape(self.shape());
+  retShape[dim] = length;
+
+  auto ret = Tensor::empty(retShape, self.options().noGrad());
+
+  const T* selfPtr = self.dataPtr<T>();
+  T* retPtr = ret.dataPtr<T>();
+
+  int64_t outerSize = 1;
+  int64_t innerSize = 1;
+  for (int64_t i = 0; i < dim; i++) {
+    outerSize *= self.shape(i);
+  }
+  for (int64_t i = dim + 1; i < self.dim(); i++) {
+    innerSize *= self.shape(i);
+  }
+
+  int64_t srcStride = self.shape(dim) * innerSize;
+  int64_t dstStride = length * innerSize;
+
+  for (int64_t o = 0; o < outerSize; o++) {
+    const T* srcBase = selfPtr + o * srcStride + start * innerSize;
+    T* dstBase = retPtr + o * dstStride;
+    Storage::copyOnDevice(dstBase, srcBase, sizeof(T) * length * innerSize, self.device());
+  }
+  return ret;
+}
+
 void registerTransformCommon() {
   // reshape/view
   REGISTER_OP_IMPL_ALL(reshape, &reshapeOpImpl);
@@ -336,6 +373,9 @@ void registerTransformCommon() {
   REGISTER_OP_IMPL_ALL_DEVICES_DTYPE_TPL(stack, stackOpImpl);
   REGISTER_OP_IMPL_ALL_DEVICES_DTYPE_TPL(vstack, vstackOpImpl);
   REGISTER_OP_IMPL_ALL_DEVICES_DTYPE_TPL(hstack, hstackOpImpl);
+
+  // narrow
+  REGISTER_OP_IMPL_ALL_DEVICES_DTYPE_TPL(narrow, narrowOpImpl);
 }
 
 }  // namespace tinytorch::op
