@@ -6,6 +6,14 @@
 
 #pragma once
 
+#include <thrust/copy.h>
+#include <thrust/device_ptr.h>
+#include <thrust/device_vector.h>
+#include <thrust/iterator/counting_iterator.h>
+#include <thrust/iterator/permutation_iterator.h>
+#include <thrust/iterator/transform_iterator.h>
+#include <thrust/sort.h>
+
 #include <numeric>
 
 #include "OpTransform.h"
@@ -173,132 +181,147 @@ __global__ void kTriangle(T* ret, const T* t, const int64_t rows, const int64_t 
   }
 }
 
-template <typename T, bool largest, bool sorted>
-__global__ void kTopk(const T* selfPtr, T* valPtr, int64_t* idxPtr, int64_t n, int64_t k, int64_t outerSize,
-                      int64_t innerSize) {
-  auto outer = blockIdx.x;
-  auto inner = blockIdx.y;
-  if (outer >= outerSize || inner >= innerSize) {
+template <typename T>
+__global__ void kPrepareProbabilities(const T* prob, float* floatProb, int64_t n, int64_t batch) {
+  int64_t batchIdx = blockIdx.x;
+  if (batchIdx >= batch) {
     return;
   }
 
-  extern __shared__ char smem[];
-  struct Pair {
-    T v;
-    int64_t idx;
-  };
-  Pair* vec = reinterpret_cast<Pair*>(smem);
+  const T* batchProb = prob + batchIdx * n;
+  float* batchFloatProb = floatProb + batchIdx * n;
 
-  auto base = outer * n * innerSize + inner;
-  for (auto i = threadIdx.x; i < n; i += blockDim.x) {
-    vec[i].v = selfPtr[base + i * innerSize];
-    vec[i].idx = i;
+  for (int64_t i = threadIdx.x; i < n; i += blockDim.x) {
+    batchFloatProb[i] = static_cast<float>(batchProb[i]);
+  }
+}
+
+inline __global__ void kMultinomialWithReplacement(const float* cdf, int64_t* output, int64_t batch, int64_t n,
+                                                   int64_t numSamples, uint64_t seed, uint64_t seq) {
+  int64_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+  int64_t totalSamples = batch * numSamples;
+  if (idx >= totalSamples) {
+    return;
+  }
+
+  int64_t batchIdx = idx / numSamples;
+
+  curandState state;
+  curand_init(seed, idx, seq, &state);
+
+  const float* batchCdf = cdf + batchIdx * n;
+  float total = batchCdf[n - 1];
+
+  if (total > 0) {
+    float r = curand_uniform(&state) * total;
+    int64_t left = 0, right = n - 1;
+    while (left < right) {
+      int64_t mid = left + (right - left) / 2;
+      if (batchCdf[mid] < r)
+        left = mid + 1;
+      else
+        right = mid;
+    }
+    output[idx] = left;
+  } else {
+    output[idx] = 0;
+  }
+}
+
+template <typename T>
+__global__ void kMultinomialNoReplacement(const T* prob, int64_t* output, float* workspace, int64_t batch, int64_t n,
+                                          int64_t numSamples, uint64_t seed, uint64_t seq) {
+  int64_t batchIdx = blockIdx.x;
+  if (batchIdx >= batch) {
+    return;
+  }
+
+  const T* batchProb = prob + batchIdx * n;
+  float* batchWorkspace = workspace + batchIdx * n;
+
+  for (int64_t i = threadIdx.x; i < n; i += blockDim.x) {
+    batchWorkspace[i] = static_cast<float>(batchProb[i]);
   }
   __syncthreads();
 
   if (threadIdx.x == 0) {
-    auto cmp = [](const Pair& a, const Pair& b) {
-      if constexpr (largest)
-        return a.v > b.v;
-      else
-        return a.v < b.v;
-    };
-    for (auto i = 0; i < k; i++) {
-      auto best = i;
-      for (auto j = i + 1; j < n; j++) {
-        if (cmp(vec[j], vec[best])) {
-          best = j;
+    curandState state;
+    curand_init(seed, batchIdx, seq, &state);
+
+    for (int64_t s = 0; s < numSamples; s++) {
+      float total = 0.f;
+      for (int64_t i = 0; i < n; ++i) total += batchWorkspace[i];
+
+      int64_t outputIdx = batchIdx * numSamples + s;
+      if (total > 0) {
+        float r = curand_uniform(&state) * total;
+        float cumSum = 0.f;
+        int64_t selectedIdx = 0;
+        for (int64_t i = 0; i < n; i++) {
+          cumSum += batchWorkspace[i];
+          if (cumSum >= r) {
+            selectedIdx = i;
+            break;
+          }
         }
+        output[outputIdx] = selectedIdx;
+        batchWorkspace[selectedIdx] = 0.f;
+      } else {
+        output[outputIdx] = 0;
       }
-      if (best != i) {
-        Pair tmp = vec[i];
-        vec[i] = vec[best];
-        vec[best] = tmp;
-      }
-    }
-    if constexpr (sorted) {
-      for (auto i = 1; i < k; i++) {
-        Pair key = vec[i];
-        auto j = i - 1;
-        while (j >= 0 && cmp(key, vec[j])) {
-          vec[j + 1] = vec[j];
-          j--;
-        }
-        vec[j + 1] = key;
-      }
-    }
-    for (auto i = 0; i < k; i++) {
-      valPtr[(outer * k + i) * innerSize + inner] = vec[i].v;
-      idxPtr[(outer * k + i) * innerSize + inner] = vec[i].idx;
     }
   }
 }
 
-template <typename T, bool replacement>
-__global__ void kMultinomial(const T* selfPtr, int64_t* retPtr, const int64_t n, const int64_t numSamples,
-                             unsigned long seed, unsigned long seq) {
-  extern __shared__ float sData[];
-  float* sProb = sData;
-  float* sCdf = &sData[n];
-
-  const auto bIdx = blockIdx.x;
-  const auto tIdx = threadIdx.x;
-
-  // load probabilities for the current batch item
-  if (tIdx < n) {
-    sProb[tIdx] = selfPtr[bIdx * n + tIdx];
+struct OpCudaGather {
+  template <typename T>
+  __device__ static void apply(const cuda::TensorCudaCtx& out, const cuda::TensorCudaCtx& self,
+                               const cuda::TensorCudaCtx&, int64_t i, int64_t offset) {
+    const T* selfPtr = static_cast<const T*>(self.data);
+    T* outPtr = static_cast<T*>(out.data);
+    outPtr[i] = selfPtr[offset];
   }
-  __syncthreads();
+};
 
-  curandStatePhilox4_32_10_t state;
-  if (tIdx == 0) {
-    curand_init(seed, seq, bIdx, &state);
+struct OpCudaScatter {
+  template <typename T>
+  __device__ static void apply(const cuda::TensorCudaCtx& out, const cuda::TensorCudaCtx&,
+                               const cuda::TensorCudaCtx& src, int64_t i, int64_t offset) {
+    T* outPtr = static_cast<T*>(out.data);
+    const T* srcPtr = static_cast<const T*>(src.data);
+    outPtr[offset] = srcPtr[i];
+  }
+};
+
+template <typename T, typename OP>
+__global__ void kGatherScatter(const cuda::TensorCudaCtx out, const cuda::TensorCudaCtx self,
+                               const cuda::TensorCudaCtx index, const cuda::TensorCudaCtx src,
+                               const DimArray<int64_t> indexStrides, const int64_t dim, const int64_t n) {
+  const int64_t i = blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= n) {
+    return;
   }
 
-  // draw numSamples for the current batch item
-  for (int s = 0; s < numSamples; s++) {
-    if (tIdx < n) {
-      sCdf[tIdx] = sProb[tIdx];
-    }
-    __syncthreads();
-
-    for (int offset = 1; offset < n; offset <<= 1) {
-      float val = 0.f;
-      if (tIdx >= offset) {
-        val = sCdf[tIdx - offset];
-      }
-      __syncthreads();
-      if (tIdx >= offset) {
-        sCdf[tIdx] += val;
-      }
-      __syncthreads();
-    }
-
-    if (tIdx == 0) {
-      int64_t sampleIdx = 0;
-      const float totalProb = (n > 0) ? sCdf[n - 1] : 0.f;
-      if (totalProb > 0.f) {
-        const float r = curand_uniform(&state) * totalProb;
-        int64_t low = 0, high = n - 1;
-        sampleIdx = n - 1;
-        while (low <= high) {
-          int64_t mid = low + (high - low) / 2;
-          if (r < sCdf[mid]) {
-            sampleIdx = mid;
-            high = mid - 1;
-          } else {
-            low = mid + 1;
-          }
-        }
-      }
-
-      retPtr[bIdx * numSamples + s] = sampleIdx;
-      if (!replacement && totalProb > 0.f) {
-        sProb[sampleIdx] = 0.f;
-      }
-    }
-    __syncthreads();
+  int64_t remain = i;
+  int64_t coord[MAX_TENSOR_DIM];
+#pragma unroll
+  for (int64_t d = 0; d < index.ndim; d++) {
+    coord[d] = remain / indexStrides.data[d];
+    remain = remain % indexStrides.data[d];
   }
+
+  const auto* idxPtr = static_cast<const int64_t*>(index.data);
+  int64_t idx = idxPtr[i];
+  if (idx < 0) idx += self.shape[dim];
+  coord[dim] = idx;
+
+  int64_t offset = 0;
+#pragma unroll
+  for (int64_t d = 0; d < self.ndim; d++) {
+    offset += coord[d] * self.strides[d];
+  }
+
+  OP::template apply<T>(out, self, src, i, offset);
 }
 
 template <typename T>
@@ -485,7 +508,6 @@ TensorPair topkOpCudaImpl(const Tensor& self, int64_t k, int64_t dim, bool large
 
   int64_t n = self.shape(dim);
   ASSERT(k > 0 && k <= n);
-  ASSERT(k <= 1024);  // sort on shared memory
 
   SizeVector retShape(self.shape());
   retShape[dim] = k;
@@ -505,45 +527,70 @@ TensorPair topkOpCudaImpl(const Tensor& self, int64_t k, int64_t dim, bool large
   auto* valPtr = values.dataPtr<T>();
   auto* idxPtr = indices.dataPtr<int64_t>();
 
-  dim3 grid(outerSize, innerSize);
-  auto block = cuda::getKernelBlockSize(self.device().index);
-  size_t smem = n * (sizeof(T) + sizeof(int64_t));
   const auto stream = cuda::getCurrentCUDAStream(self.device().index).stream;
+  auto policy = thrust::cuda::par.on(stream);
 
-  auto launch = [&](auto LARGEST, auto SORTED) {
-    kTopk<T, LARGEST, SORTED><<<grid, block, smem, stream>>>(selfPtr, valPtr, idxPtr, n, k, outerSize, innerSize);
-    CUDA_KERNEL_CHECK();
-  };
-  if (largest) {
-    if (sorted) {
-      launch(std::true_type{}, std::true_type{});
-    } else {
-      launch(std::true_type{}, std::false_type{});
-    }
-  } else {
-    if (sorted) {
-      launch(std::false_type{}, std::true_type{});
-    } else {
-      launch(std::false_type{}, std::false_type{});
+  Storage tmpValues(static_cast<int64_t>(n * sizeof(T)), self.device());
+  Storage tmpIndices(static_cast<int64_t>(n * sizeof(int64_t)), self.device());
+
+  auto* tmpValuesPtr = tmpValues.dataPtr<T>();
+  auto* tmpIndicesPtr = tmpIndices.dataPtr<int64_t>();
+
+  for (int64_t o = 0; o < outerSize; o++) {
+    for (int64_t in = 0; in < innerSize; in++) {
+      int64_t base = o * n * innerSize + in;
+
+      // init values & indices
+      thrust::device_ptr<T> dstPtr = thrust::device_pointer_cast(tmpValuesPtr);
+      auto inputIter =
+          thrust::make_transform_iterator(thrust::counting_iterator<int64_t>(0),
+                                          [=] __host__ __device__(int64_t i) { return selfPtr[base + i * innerSize]; });
+      thrust::copy(policy, inputIter, inputIter + n, dstPtr);
+      thrust::sequence(policy, thrust::device_pointer_cast(tmpIndicesPtr),
+                       thrust::device_pointer_cast(tmpIndicesPtr + n), 0);
+
+      // sort
+      if (largest) {
+        thrust::sort_by_key(policy, thrust::device_pointer_cast(tmpValuesPtr),
+                            thrust::device_pointer_cast(tmpValuesPtr + n), thrust::device_pointer_cast(tmpIndicesPtr),
+                            thrust::greater<T>());
+      } else {
+        thrust::sort_by_key(policy, thrust::device_pointer_cast(tmpValuesPtr),
+                            thrust::device_pointer_cast(tmpValuesPtr + n), thrust::device_pointer_cast(tmpIndicesPtr),
+                            thrust::less<T>());
+      }
+
+      // copy results
+      auto outputValIter = thrust::make_transform_iterator(
+          thrust::counting_iterator<int64_t>(0),
+          [=] __host__ __device__(int64_t i) -> T& { return valPtr[(o * k + i) * innerSize + in]; });
+
+      auto outputIdxIter = thrust::make_transform_iterator(
+          thrust::counting_iterator<int64_t>(0),
+          [=] __host__ __device__(int64_t i) -> int64_t& { return idxPtr[(o * k + i) * innerSize + in]; });
+      thrust::copy(policy, thrust::device_pointer_cast(tmpValuesPtr), thrust::device_pointer_cast(tmpValuesPtr + k),
+                   outputValIter);
+      thrust::copy(policy, thrust::device_pointer_cast(tmpIndicesPtr), thrust::device_pointer_cast(tmpIndicesPtr + k),
+                   outputIdxIter);
     }
   }
+
   return {values, indices};
 }
 
 template <typename T>
-Tensor multinomialOpCudaImpl(const Tensor& self, int64_t numSamples, bool replacement) {
+Tensor multinomialOpCudaImpl(const Tensor& self, int64_t nSamples, bool replacement) {
   ASSERT(self.dim() == 1 || self.dim() == 2);
   ASSERT(self.dtype() == DType::Float32);
 
   int64_t batch = (self.dim() == 2) ? self.shape(0) : 1;
   int64_t n = (self.dim() == 2) ? self.shape(1) : self.shape(0);
-  ASSERT(n <= 1024);  // TODO
 
   SizeVector retShape;
   if (self.dim() == 2) {
-    retShape = {batch, numSamples};
+    retShape = {batch, nSamples};
   } else {
-    retShape = {numSamples};
+    retShape = {nSamples};
   }
 
   Tensor ret = Tensor::empty(retShape, self.options().noGrad().indices());
@@ -557,18 +604,181 @@ Tensor multinomialOpCudaImpl(const Tensor& self, int64_t numSamples, bool replac
   auto seed = RandomGeneratorCUDA::getSeed();
   auto seq = RandomGeneratorCUDA::nextSequence();
 
-  dim3 gridDim(batch);
-  dim3 blockDim(n);  // n <= 1024
-  size_t sharedMemSize = 2 * n * sizeof(float);
   const auto stream = cuda::getCurrentCUDAStream(self.device().index).stream;
-  if (replacement) {
-    kMultinomial<T, true><<<gridDim, blockDim, sharedMemSize, stream>>>(selfPtr, retPtr, n, numSamples, seed, seq);
-  } else {
-    kMultinomial<T, false><<<gridDim, blockDim, sharedMemSize, stream>>>(selfPtr, retPtr, n, numSamples, seed, seq);
-  }
-  CUDA_KERNEL_CHECK();
+  auto blockSize = cuda::getKernelBlockSize(self.device().index);
 
+  Storage tmpProb(static_cast<int64_t>(batch * n * sizeof(float)), self.device());
+  auto* tmpPtr = tmpProb.dataPtr<float>();
+
+  if (replacement) {
+    kPrepareProbabilities<<<batch, blockSize, 0, stream>>>(selfPtr, tmpPtr, n, batch);
+    CUDA_KERNEL_CHECK();
+
+    for (int64_t b = 0; b < batch; b++) {
+      thrust::device_ptr<float> batchPtr(tmpPtr + b * n);
+      thrust::inclusive_scan(thrust::cuda::par.on(stream), batchPtr, batchPtr + n, batchPtr);
+    }
+
+    int64_t totalSamples = batch * nSamples;
+    auto gridSize = (totalSamples + blockSize - 1) / blockSize;
+    kMultinomialWithReplacement<<<gridSize, blockSize, 0, stream>>>(tmpPtr, retPtr, batch, n, nSamples, seed, seq);
+    CUDA_KERNEL_CHECK();
+  } else {
+    kMultinomialNoReplacement<<<batch, blockSize, 0, stream>>>(selfPtr, retPtr, tmpPtr, batch, n, nSamples, seed, seq);
+    CUDA_KERNEL_CHECK();
+  }
   return ret;
+}
+
+template <typename T>
+TensorPair sortOpCudaImpl(const Tensor& self, int64_t dim, bool descending) {
+  if (dim < 0) {
+    dim += self.dim();
+  }
+  ASSERT(dim >= 0 && dim < self.dim());
+
+  SizeVector retShape(self.shape());
+  Tensor values = Tensor::empty(retShape, self.options().noGrad());
+  Tensor indices = Tensor::empty(retShape, self.options().noGrad().indices());
+
+  int64_t outer = 1, inner = 1, n = self.shape(dim);
+  for (int64_t i = 0; i < dim; i++) {
+    outer *= self.shape(i);
+  }
+  for (int64_t i = dim + 1; i < self.dim(); i++) {
+    inner *= self.shape(i);
+  }
+
+  const T* selfPtr = self.dataPtr<T>();
+  T* valPtr = values.dataPtr<T>();
+  auto* idxPtr = indices.dataPtr<int64_t>();
+
+  const auto stream = cuda::getCurrentCUDAStream(self.device().index).stream;
+
+  thrust::copy(thrust::cuda::par.on(stream), selfPtr, selfPtr + self.numel(), valPtr);
+
+  auto initIndices = [=] __host__ __device__(int64_t idx) {
+    int64_t i = (idx % (n * inner)) / inner;
+    return i;
+  };
+  thrust::transform(thrust::cuda::par.on(stream), thrust::make_counting_iterator<int64_t>(0),
+                    thrust::make_counting_iterator<int64_t>(outer * n * inner), thrust::device_pointer_cast(idxPtr),
+                    initIndices);
+
+  for (int64_t seg = 0; seg < outer * inner; seg++) {
+    int64_t o = seg / inner;
+    int64_t in = seg % inner;
+
+    T* valSegmentStart = valPtr + o * n * inner + in;
+    int64_t* idxSegmentStart = idxPtr + o * n * inner + in;
+
+    auto valIter = thrust::make_permutation_iterator(
+        thrust::device_pointer_cast(valSegmentStart),
+        thrust::make_transform_iterator(thrust::make_counting_iterator<int64_t>(0),
+                                        [inner] __host__ __device__(int64_t i) { return i * inner; }));
+    auto idxIter = thrust::make_permutation_iterator(
+        thrust::device_pointer_cast(idxSegmentStart),
+        thrust::make_transform_iterator(thrust::make_counting_iterator<int64_t>(0),
+                                        [inner] __host__ __device__(int64_t i) { return i * inner; }));
+
+    if (descending) {
+      thrust::stable_sort_by_key(thrust::cuda::par.on(stream), valIter, valIter + n, idxIter, thrust::greater<T>());
+    } else {
+      thrust::stable_sort_by_key(thrust::cuda::par.on(stream), valIter, valIter + n, idxIter, thrust::less<T>());
+    }
+  }
+
+  return {values, indices};
+}
+
+template <typename T>
+Tensor cumsumOpCudaImpl(const Tensor& self, int64_t dim) {
+  if (dim < 0) {
+    dim += self.dim();
+  }
+  ASSERT(dim >= 0 && dim < self.dim());
+
+  Tensor ret = Tensor::empty(self.shape(), self.options().noGrad());
+  const T* selfPtr = self.dataPtr<T>();
+  T* retPtr = ret.dataPtr<T>();
+
+  int64_t outer = 1, inner = 1, n = self.shape(dim);
+  for (int64_t i = 0; i < dim; i++) {
+    outer *= self.shape(i);
+  }
+  for (int64_t i = dim + 1; i < self.dim(); i++) {
+    inner *= self.shape(i);
+  }
+
+  const auto stream = cuda::getCurrentCUDAStream(self.device().index).stream;
+
+  if (inner == 1) {
+    for (int64_t o = 0; o < outer; ++o) {
+      int64_t offset = o * n;
+      thrust::inclusive_scan(thrust::cuda::par.on(stream), selfPtr + offset, selfPtr + offset + n, retPtr + offset);
+    }
+  } else {
+    thrust::for_each_n(thrust::cuda::par.on(stream), thrust::counting_iterator<int64_t>(0), outer * inner,
+                       [=] __host__ __device__(int64_t row) {
+                         int64_t o = row / inner;
+                         int64_t inIdx = row % inner;
+                         int64_t base = o * n * inner + inIdx;
+
+                         T sum = 0;
+                         for (int64_t i = 0; i < n; ++i) {
+                           sum += selfPtr[base + i * inner];
+                           retPtr[base + i * inner] = sum;
+                         }
+                       });
+  }
+  return ret;
+}
+
+template <typename T, typename OP>
+void gatherScatterCudaImpl(const Tensor& self, int64_t dim, const Tensor& index, const Tensor* src, Tensor& out) {
+  if (dim < 0) {
+    dim += self.dim();
+  }
+  ASSERT(dim >= 0 && dim < self.dim());
+  ASSERT(index.dim() == self.dim());
+
+  DimArray<int64_t> indexStrides{};
+  int64_t stride = 1;
+  for (int64_t d = index.dim() - 1; d >= 0; d--) {
+    indexStrides.data[d] = stride;
+    stride *= index.shape()[d];
+  }
+
+  auto ctxOut = cuda::getTensorCudaCtx(out);
+  auto ctxSelf = cuda::getTensorCudaCtx(self);
+  auto ctxIndex = cuda::getTensorCudaCtx(index);
+  auto ctxSrc = src ? cuda::getTensorCudaCtx(*src) : cuda::TensorCudaCtx{};
+
+  auto params = cuda::getKernelLaunchParams(self.device().index, index.numel());
+  CUDA_LAUNCH_KERNEL((kGatherScatter<T, OP>), params, ctxOut, ctxSelf, ctxIndex, ctxSrc, indexStrides, dim,
+                     index.numel());
+}
+
+template <typename T>
+Tensor gatherOpCudaImpl(const Tensor& self, int64_t dim, const Tensor& index) {
+  Tensor ret = Tensor::empty(index.shape(), self.options().noGrad());
+  gatherScatterCudaImpl<T, OpCudaGather>(self, dim, index, nullptr, ret);
+  return ret;
+}
+
+template <typename T>
+Tensor scatterOpCudaImpl(const Tensor& self, int64_t dim, const Tensor& index, const Tensor& src) {
+  Tensor ret = self.clone();
+  ret.setRequiresGrad(false);
+  ret.copyOnWrite();
+  gatherScatterCudaImpl<T, OpCudaScatter>(ret, dim, index, &src, ret);
+  return ret;
+}
+
+template <typename T>
+void scatterOpInplaceCudaImpl(Tensor& self, int64_t dim, const Tensor& index, const Tensor& src) {
+  self.copyOnWrite();
+  gatherScatterCudaImpl<T, OpCudaScatter>(self, dim, index, &src, self);
 }
 
 }  // namespace tinytorch::op

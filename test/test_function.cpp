@@ -381,6 +381,14 @@ TEST(TEST_Function, func_layerNorm) {
   EXPECT_TRUE(VectorNear(y.toList<float>(), {1.5297, 0.1079, -0.6529, -0.6147, -1.1319, -0.0062}));
 }
 
+TEST(TEST_Function, func_rmsNorm) {
+  auto input = Tensor(Array2d<float>{{1.4176, 0.1874, 0.8367}, {-0.1203, 2.5638, -1.2554}});
+  auto w = Tensor(Array1d<float>{1.4072, -0.4768, -0.6006});
+  auto y = function::rmsNorm(input, {input.shape().back()}, w);
+  EXPECT_TRUE(y.shape() == input.shape());
+  EXPECT_TRUE(VectorNear(y.toList<float>(), {2.0855, -0.0934, -0.5254, -0.1026, -0.7410, 0.4571}));
+}
+
 TEST(TEST_Function, func_sdpAttention) {
   auto query = Tensor(Array1d<float>{0.6201, 0.5199, 0.2614, 0.9816, 0.9369, 0.8059, 0.8578, 0.7864, 0.8947, 0.4272,
                                      0.7566, 0.2975, 0.4676, 0.1170, 0.1046, 0.7130});

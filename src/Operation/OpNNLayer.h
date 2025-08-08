@@ -15,6 +15,11 @@ enum class SoftmaxType : int8_t {
   LogSoftmax
 };
 
+enum class NormType : int8_t {
+  LayerNorm,
+  RMSNorm
+};
+
 struct SoftmaxDimInfo {
   int64_t outerSize;
   int64_t dimSize;
@@ -33,6 +38,8 @@ using DropoutMaskedOpFn = Tensor (*)(const Tensor& self, const Tensor& mask, flo
 using LayerNormOpFn = Tensor (*)(const Tensor& self, IntArrayView normalizedShape, const Tensor& weight,
                                  const Tensor& bias, float eps);
 
+using RMSNormOpFn = Tensor (*)(const Tensor& self, IntArrayView normalizedShape, const Tensor& weight, float eps);
+
 // softmax
 DEFINE_OP(softmax, SoftmaxOpFn);
 DEFINE_OP(softmaxOut, SoftmaxOpOutFn);
@@ -49,6 +56,9 @@ DEFINE_OP(dropoutMasked, DropoutMaskedOpFn);
 
 // layerNorm
 DEFINE_OP(layerNorm, LayerNormOpFn);
+
+// rmsNorm
+DEFINE_OP(rmsNorm, RMSNormOpFn);
 
 void registerNNLayerCpu();
 STATIC_CALL(registerNNLayerCpu);

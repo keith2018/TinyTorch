@@ -56,7 +56,7 @@ struct Function {
   };
 
   template <typename X = T, typename... Args>
-  static auto apply(Args&&... args) -> std::enable_if_t<std::is_same_v<X, T>, forward_t<X, Args...>>;
+  static auto apply(Args&&... args);
 };
 
 inline void collectTensorInfo(const Tensor& t, bool& requiresGrad, TensorList& inputTensors,
@@ -105,7 +105,7 @@ inline void handleOutputTensor(TensorList& tl, bool shouldRequireGrad, const std
 
 template <class T>
 template <typename X, typename... Args>
-auto Function<T>::apply(Args&&... args) -> std::enable_if_t<std::is_same_v<X, T>, forward_t<X, Args...>> {
+auto Function<T>::apply(Args&&... args) {
   bool requiresGrad = false;
   TensorList inputTensors;
   std::vector<std::weak_ptr<FunctionBase>> inputFns;
@@ -125,21 +125,22 @@ auto Function<T>::apply(Args&&... args) -> std::enable_if_t<std::is_same_v<X, T>
 
   using OutputType = forward_t<X, Args...>;
   auto ctx = requiresGrad ? std::make_shared<AutogradContext>(std::move(inputTensors)) : nullptr;
-  auto output = T::forward(ctx.get(), std::forward<Args>(args)...);
 
-  std::shared_ptr<FunctionInstance> fnInst = nullptr;
-  if (requiresGrad) {
-    fnInst = std::make_shared<FunctionInstance>(std::move(ctx));
-    fnInst->nextFunctions = std::move(inputFns);
-  }
-
-  if constexpr (std::is_same_v<OutputType, Tensor> || std::is_same_v<OutputType, TensorPair> ||
-                std::is_same_v<OutputType, TensorList>) {
+  if constexpr (std::is_void_v<OutputType>) {
+    T::forward(ctx.get(), std::forward<Args>(args)...);
+  } else if constexpr (std::is_same_v<OutputType, Tensor> || std::is_same_v<OutputType, TensorPair> ||
+                       std::is_same_v<OutputType, TensorList>) {
+    auto output = T::forward(ctx.get(), std::forward<Args>(args)...);
+    std::shared_ptr<FunctionInstance> fnInst = nullptr;
+    if (requiresGrad) {
+      fnInst = std::make_shared<FunctionInstance>(std::move(ctx));
+      fnInst->nextFunctions = std::move(inputFns);
+    }
     handleOutputTensor(output, requiresGrad, fnInst);
+    return output;
   } else {
     static_assert(always_false<OutputType>, "Unsupported return type for T::forward");
   }
-  return output;
 }
 
 class FuncLeaf : public FunctionBase {

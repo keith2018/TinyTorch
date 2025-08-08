@@ -27,6 +27,9 @@ void registerNNLayerCpu() {
 
   // layerNorm
   REG_NN_LAYER_CPU_F32(layerNorm, layerNormOpCpuImpl);
+
+  // rmsNorm
+  REG_NN_LAYER_CPU_F32(rmsNorm, rmsNormOpCpuImpl);
 }
 
 }  // namespace tinytorch::op

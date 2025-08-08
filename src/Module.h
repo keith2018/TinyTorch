@@ -322,4 +322,22 @@ class LayerNorm : public Module {
   Tensor bias_;
 };
 
+class RMSNorm : public Module {
+ public:
+  explicit RMSNorm(IntArrayView normalizedShape, float eps = 1e-8, Options options = {});
+
+  Tensor forward(const Tensor &input) override;
+  void resetParameters() override;
+
+  Tensor &weight() { return weight_; }
+
+ protected:
+  std::vector<std::pair<std::string, TensorPtr>> namedParameters_() override;
+
+ private:
+  SizeVector normalizedShape_;
+  float eps_;
+  Tensor weight_;
+};
+
 }  // namespace tinytorch::nn

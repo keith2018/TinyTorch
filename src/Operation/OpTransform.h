@@ -76,6 +76,15 @@ using TopkOpFn = TensorPair (*)(const Tensor& self, int64_t k, int64_t dim, bool
 
 using MultinomialOpFn = Tensor (*)(const Tensor& self, int64_t numSamples, bool replacement);
 
+using SortOpFn = TensorPair (*)(const Tensor& self, int64_t dim, bool descending);
+
+using CumsumOpFn = Tensor (*)(const Tensor& self, int64_t dim);
+
+using GatherOpFn = Tensor (*)(const Tensor& self, int64_t dim, const Tensor& index);
+
+using ScatterOpFn = Tensor (*)(const Tensor& self, int64_t dim, const Tensor& index, const Tensor& src);
+using ScatterOpInplaceFn = void (*)(Tensor& self, int64_t dim, const Tensor& index, const Tensor& src);
+
 // dtype cast
 DEFINE_OP(dtypeCast, CastOpFn)
 
@@ -139,6 +148,19 @@ DEFINE_OP(topk, TopkOpFn)
 
 // multinomial
 DEFINE_OP(multinomial, MultinomialOpFn)
+
+// sort
+DEFINE_OP(sort, SortOpFn)
+
+// cumsum
+DEFINE_OP(cumsum, CumsumOpFn)
+
+// gather
+DEFINE_OP(gather, GatherOpFn)
+
+// scatter
+DEFINE_OP(scatter, ScatterOpFn)
+DEFINE_OP(scatterInplace, ScatterOpInplaceFn)
 
 void registerTransformCommon();
 STATIC_CALL(registerTransformCommon);

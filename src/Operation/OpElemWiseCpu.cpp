@@ -22,6 +22,16 @@ void registerUnaryCpuBool() {
   REG_ELEM_WISE_CPU_BOOL(logicNot, unaryOpCpuImpl, OpCpuLogicNot);
   REG_ELEM_WISE_CPU_BOOL(logicNotOut, unaryOpOutCpuImpl, OpCpuLogicNot);
   REG_ELEM_WISE_CPU_BOOL(logicNotInplace, unaryOpInplaceCpuImpl, OpCpuLogicNot);
+
+  // logicAnd
+  REG_ELEM_WISE_CPU_BOOL(logicAnd, binaryOpCpuImpl, OpCpuLogicAnd);
+  REG_ELEM_WISE_CPU_BOOL(logicAndOut, binaryOpOutCpuImpl, OpCpuLogicAnd);
+  REG_ELEM_WISE_CPU_BOOL(logicAndInplace, binaryOpInplaceCpuImpl, OpCpuLogicAnd);
+
+  // logicOr
+  REG_ELEM_WISE_CPU_BOOL(logicOr, binaryOpCpuImpl, OpCpuLogicOr);
+  REG_ELEM_WISE_CPU_BOOL(logicOrOut, binaryOpOutCpuImpl, OpCpuLogicOr);
+  REG_ELEM_WISE_CPU_BOOL(logicOrInplace, binaryOpInplaceCpuImpl, OpCpuLogicOr);
 }
 
 void registerUnaryCpuFloat32() {

@@ -155,6 +155,8 @@ KernelLaunchParams getKernelLaunchParams(int device, int64_t n, size_t batch, si
   return {gridSize, blockSize, sharedMemBytes, stream};
 }
 
+void streamSynchronize(const CUDAStream& stream) { CUDA_CHECK(cudaStreamSynchronize(stream.stream)); }
+
 TensorCudaCtx getTensorCudaCtx(const Tensor& t) {
   TensorCudaCtx ret{};
   ret.ndim = t.dim();

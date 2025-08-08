@@ -22,6 +22,16 @@ void registerUnaryCudaBool() {
   REG_ELEM_WISE_CUDA_BOOL(logicNot, unaryOpCudaImpl, OpCudaLogicNot);
   REG_ELEM_WISE_CUDA_BOOL(logicNotOut, unaryOpOutCudaImpl, OpCudaLogicNot);
   REG_ELEM_WISE_CUDA_BOOL(logicNotInplace, unaryOpInplaceCudaImpl, OpCudaLogicNot);
+
+  // logicAnd
+  REG_ELEM_WISE_CUDA_BOOL(logicAnd, binaryOpCudaImpl, OpCudaLogicAnd);
+  REG_ELEM_WISE_CUDA_BOOL(logicAndOut, binaryOpOutCudaImpl, OpCudaLogicAnd);
+  REG_ELEM_WISE_CUDA_BOOL(logicAndInplace, binaryOpInplaceCudaImpl, OpCudaLogicAnd);
+
+  // logicOr
+  REG_ELEM_WISE_CUDA_BOOL(logicOr, binaryOpCudaImpl, OpCudaLogicOr);
+  REG_ELEM_WISE_CUDA_BOOL(logicOrOut, binaryOpOutCudaImpl, OpCudaLogicOr);
+  REG_ELEM_WISE_CUDA_BOOL(logicOrInplace, binaryOpInplaceCudaImpl, OpCudaLogicOr);
 }
 
 void registerUnaryCudaFloat32() {

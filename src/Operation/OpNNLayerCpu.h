@@ -177,48 +177,75 @@ Tensor dropoutMaskedOpCpuImpl(const Tensor& self, const Tensor& mask, float p) {
   return out;
 }
 
-template <typename T>
-Tensor layerNormOpCpuImpl(const Tensor& self, IntArrayView normalizedShape, const Tensor& weight, const Tensor& bias,
-                          float eps) {
-  int64_t d = self.shape().back();
-  int64_t n = self.numel() / d;
+template <typename T, NormType normType>
+Tensor normOpCpuImplDetail(const Tensor& self, IntArrayView normalizedShape, const Tensor& weight, const Tensor& bias,
+                           float eps) {
+  int64_t dim = self.shape().back();
+  int64_t numRows = self.numel() / dim;
   ASSERT(normalizedShape.size() == 1);
-  ASSERT(normalizedShape.front() == d);
+  ASSERT(normalizedShape.front() == dim);
+
   Tensor out(self.shape(), self.options().noGrad());
 
-  const auto* selfPtr = self.dataPtr<T>();
+  const auto* inputPtr = self.dataPtr<T>();
   const auto* weightPtr = weight.defined() ? weight.dataPtr<T>() : nullptr;
   const auto* biasPtr = bias.defined() ? bias.dataPtr<T>() : nullptr;
-
   auto* outPtr = out.dataPtr<T>();
 
-  for (auto i = 0; i < n; i++) {
-    const T* src = selfPtr + i * d;
-    T* dst = outPtr + i * d;
-    // mean
-    T mean = 0.f;
-    for (auto j = 0; j < d; j++) {
-      mean += src[j];
-    }
-    mean /= static_cast<T>(d);
-    // var
-    T var = 0.f;
-    for (auto j = 0; j < d; j++) {
-      T diff = src[j] - mean;
-      var += diff * diff;
-    }
-    var /= static_cast<T>(d);
-    T invStd = 1.f / std::sqrt(var + eps);
-    // norm + affine
-    for (auto j = 0; j < d; j++) {
-      T normed = (src[j] - mean) * invStd;
-      if (weightPtr) normed *= weightPtr[j];
-      if (biasPtr) normed += biasPtr[j];
-      dst[j] = normed;
+  for (auto i = 0; i < numRows; i++) {
+    const T* src = inputPtr + i * dim;
+    T* dst = outPtr + i * dim;
+
+    if constexpr (normType == NormType::LayerNorm) {
+      T mean = 0;
+      for (auto j = 0; j < dim; j++) {
+        mean += src[j];
+      }
+      mean /= static_cast<T>(dim);
+
+      T var = 0;
+      for (auto j = 0; j < dim; j++) {
+        T diff = src[j] - mean;
+        var += diff * diff;
+      }
+      var /= static_cast<T>(dim);
+      T invStd = T(1) / std::sqrt(var + eps);
+
+      for (auto j = 0; j < dim; j++) {
+        T normed = (src[j] - mean) * invStd;
+        if (weightPtr) normed *= weightPtr[j];
+        if (biasPtr) normed += biasPtr[j];
+        dst[j] = normed;
+      }
+    } else {
+      UNUSED(biasPtr);
+      T meanSquare = 0;
+      for (auto j = 0; j < dim; j++) {
+        meanSquare += src[j] * src[j];
+      }
+      meanSquare /= static_cast<T>(dim);
+      T invRms = T(1) / std::sqrt(meanSquare + eps);
+
+      for (auto j = 0; j < dim; j++) {
+        T normed = src[j] * invRms;
+        if (weightPtr) normed *= weightPtr[j];
+        dst[j] = normed;
+      }
     }
   }
 
   return out;
+}
+
+template <typename T>
+Tensor layerNormOpCpuImpl(const Tensor& self, IntArrayView normalizedShape, const Tensor& weight, const Tensor& bias,
+                          float eps) {
+  return normOpCpuImplDetail<T, NormType::LayerNorm>(self, normalizedShape, weight, bias, eps);
+}
+
+template <typename T>
+Tensor rmsNormOpCpuImpl(const Tensor& self, IntArrayView normalizedShape, const Tensor& weight, float eps) {
+  return normOpCpuImplDetail<T, NormType::RMSNorm>(self, normalizedShape, weight, {}, eps);
 }
 
 }  // namespace tinytorch::op

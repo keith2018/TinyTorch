@@ -156,10 +156,16 @@ class FuncVarMeanOnDims : public Function<FuncVarMeanOnDims> {
 inline Tensor min(const Tensor& self) { return FuncMin::apply(self); }
 inline Tensor argmin(const Tensor& self) { return FuncArgmin::apply(self); }
 inline TensorPair min(const Tensor& self, int64_t dim, bool keepDim) { return FuncMinOnDim::apply(self, dim, keepDim); }
+inline Tensor argmin(const Tensor& self, int64_t dim, bool keepDim) {
+  return FuncMinOnDim::apply(self, dim, keepDim).second;
+}
 
 inline Tensor max(const Tensor& self) { return FuncMax::apply(self); }
 inline Tensor argmax(const Tensor& self) { return FuncArgmax::apply(self); }
 inline TensorPair max(const Tensor& self, int64_t dim, bool keepDim) { return FuncMaxOnDim::apply(self, dim, keepDim); }
+inline Tensor argmax(const Tensor& self, int64_t dim, bool keepDim) {
+  return FuncMaxOnDim::apply(self, dim, keepDim).second;
+}
 
 inline Tensor sum(const Tensor& self) { return FuncSum::apply(self); }
 inline Tensor sum(const Tensor& self, int64_t dim, bool keepDim = false) {

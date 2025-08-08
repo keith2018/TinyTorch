@@ -130,4 +130,16 @@ void LayerNorm::resetParameters() {
   }
 }
 
+RMSNorm::RMSNorm(IntArrayView normalizedShape, float eps, Options options)
+    : normalizedShape_(normalizedShape), eps_(eps) {
+  options.requiresGrad(true);
+  weight_ = Tensor::empty(normalizedShape, options);
+}
+
+Tensor RMSNorm::forward(const Tensor &input) { return function::rmsNorm(input, normalizedShape_, weight_, eps_); }
+
+std::vector<std::pair<std::string, TensorPtr>> RMSNorm::namedParameters_() { return {{"weight", &weight_}}; }
+
+void RMSNorm::resetParameters() { Initializer::ones(weight_); }
+
 }  // namespace tinytorch::nn

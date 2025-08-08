@@ -34,13 +34,6 @@ struct OpCpuSign {
   }
 };
 
-struct OpCpuLogicNot {
-  template <typename T>
-  static T apply(const T& a) {
-    return !a;
-  }
-};
-
 struct OpCpuSqrt {
   template <typename T>
   static T apply(const T& a) {
@@ -253,6 +246,27 @@ struct OpCpuGe {
   template <typename T>
   static bool apply(const T& a, const T& b) {
     return a >= b;
+  }
+};
+
+struct OpCpuLogicNot {
+  template <typename T>
+  static T apply(const T& a) {
+    return !a;
+  }
+};
+
+struct OpCpuLogicAnd {
+  template <typename T>
+  static T apply(const T& a, const T& b) {
+    return a && b;
+  }
+};
+
+struct OpCpuLogicOr {
+  template <typename T>
+  static T apply(const T& a, const T& b) {
+    return a || b;
   }
 };
 

@@ -82,6 +82,19 @@ void registerTransformCuda() {
 
   // multinomial
   REGISTER_OP_IMPL_DTYPE_TPL(multinomial, CUDA, multinomialOpCudaImpl);
+
+  // sort
+  REGISTER_OP_IMPL_DTYPE_TPL(sort, CUDA, sortOpCudaImpl)
+
+  // cumsum
+  REGISTER_OP_IMPL_DTYPE_TPL(cumsum, CUDA, cumsumOpCudaImpl)
+
+  // gather
+  REGISTER_OP_IMPL_DTYPE_TPL(gather, CUDA, gatherOpCudaImpl)
+
+  // scatter
+  REGISTER_OP_IMPL_DTYPE_TPL(scatter, CUDA, scatterOpCudaImpl)
+  REGISTER_OP_IMPL_DTYPE_TPL(scatterInplace, CUDA, scatterOpInplaceCudaImpl)
 }
 
 }  // namespace tinytorch::op

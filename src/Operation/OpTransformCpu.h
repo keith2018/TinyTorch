@@ -314,4 +314,154 @@ Tensor multinomialOpCpuImpl(const Tensor& self, int64_t numSamples, bool replace
   return ret;
 }
 
+template <typename T>
+TensorPair sortOpCpuImpl(const Tensor& self, int64_t dim, bool descending) {
+  if (dim < 0) {
+    dim += self.dim();
+  }
+  ASSERT(dim >= 0 && dim < self.dim());
+
+  SizeVector retShape(self.shape());
+  Tensor values = Tensor::empty(retShape, self.options().noGrad());
+  Tensor indices = Tensor::empty(retShape, self.options().noGrad().indices());
+
+  int64_t outer = 1, inner = 1, n = self.shape(dim);
+  for (int64_t i = 0; i < dim; i++) {
+    outer *= self.shape(i);
+  }
+  for (int64_t i = dim + 1; i < self.dim(); i++) {
+    inner *= self.shape(i);
+  }
+
+  const T* selfPtr = self.dataPtr<T>();
+  T* valPtr = values.dataPtr<T>();
+  auto* idxPtr = indices.dataPtr<int64_t>();
+
+  for (int64_t o = 0; o < outer; o++) {
+    for (int64_t in = 0; in < inner; in++) {
+      std::vector<std::pair<T, int64_t>> vec(n);
+      for (int64_t i = 0; i < n; i++) {
+        int64_t offset = o * n * inner + i * inner + in;
+        vec[i] = {selfPtr[offset], i};
+      }
+      if (descending) {
+        std::sort(vec.begin(), vec.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+      } else {
+        std::sort(vec.begin(), vec.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+      }
+      for (int64_t i = 0; i < n; i++) {
+        int64_t offset = o * n * inner + i * inner + in;
+        valPtr[offset] = vec[i].first;
+        idxPtr[offset] = vec[i].second;
+      }
+    }
+  }
+  return {values, indices};
+}
+
+template <typename T>
+Tensor cumsumOpCpuImpl(const Tensor& self, int64_t dim) {
+  if (dim < 0) {
+    dim += self.dim();
+  }
+  ASSERT(dim >= 0 && dim < self.dim());
+
+  Tensor ret = Tensor::empty(self.shape(), self.options().noGrad());
+  const T* selfPtr = self.dataPtr<T>();
+  T* retPtr = ret.dataPtr<T>();
+
+  int64_t outer = 1, inner = 1, n = self.shape(dim);
+  for (int64_t i = 0; i < dim; i++) {
+    outer *= self.shape(i);
+  }
+  for (int64_t i = dim + 1; i < self.dim(); i++) {
+    inner *= self.shape(i);
+  }
+
+  for (int64_t o = 0; o < outer; o++) {
+    for (int64_t in = 0; in < inner; in++) {
+      T sum = 0;
+      for (int64_t i = 0; i < n; i++) {
+        int64_t offset = o * n * inner + i * inner + in;
+        sum += selfPtr[offset];
+        retPtr[offset] = sum;
+      }
+    }
+  }
+  return ret;
+}
+
+template <typename F>
+void indexCoordForEach(const Tensor& self, int64_t dim, const Tensor& index, F func) {
+  if (dim < 0) {
+    dim += self.dim();
+  }
+  ASSERT(dim >= 0 && dim < self.dim());
+  ASSERT(index.dim() == self.dim());
+
+  const auto* idxPtr = index.dataPtr<int64_t>();
+  auto strides = self.strides();
+  auto selfShape = self.shape();
+  auto indexShape = index.shape();
+  auto ndim = self.dim();
+
+  SizeVector indexStrides(ndim);
+  int64_t stride = 1;
+  for (auto d = ndim - 1; d >= 0; d--) {
+    indexStrides[d] = stride;
+    stride *= indexShape[d];
+  }
+
+  SizeVector coord(ndim);
+  for (int64_t i = 0; i < index.numel(); i++) {
+    int64_t remain = i;
+    for (auto d = 0; d < ndim; d++) {
+      coord[d] = remain / indexStrides[d];
+      remain = remain % indexStrides[d];
+    }
+    int64_t idx = idxPtr[i];
+    if (idx < 0) idx += selfShape[dim];
+    ASSERT(idx >= 0 && idx < selfShape[dim]);
+    coord[dim] = idx;
+
+    int64_t offset = 0;
+    for (auto d = 0; d < ndim; d++) {
+      offset += coord[d] * strides[d];
+    }
+    func(i, offset);
+  }
+}
+
+template <typename T>
+Tensor gatherOpCpuImpl(const Tensor& self, int64_t dim, const Tensor& index) {
+  Tensor ret = Tensor::empty(index.shape(), self.options().noGrad());
+  const T* selfPtr = self.dataPtr<T>();
+  T* retPtr = ret.dataPtr<T>();
+
+  indexCoordForEach(self, dim, index, [&](int64_t i, int64_t offset) { retPtr[i] = selfPtr[offset]; });
+  return ret;
+}
+
+template <typename T>
+Tensor scatterOpCpuImpl(const Tensor& self, int64_t dim, const Tensor& index, const Tensor& src) {
+  Tensor ret = self.clone();
+  ret.setRequiresGrad(false);
+  ret.copyOnWrite();
+
+  T* retPtr = ret.dataPtr<T>();
+  const T* srcPtr = src.dataPtr<T>();
+
+  indexCoordForEach(self, dim, index, [&](int64_t i, int64_t offset) { retPtr[offset] = srcPtr[i]; });
+  return ret;
+}
+
+template <typename T>
+void scatterOpInplaceCpuImpl(Tensor& self, int64_t dim, const Tensor& index, const Tensor& src) {
+  self.copyOnWrite();
+  T* selfPtr = self.dataPtr<T>();
+  const T* srcPtr = src.dataPtr<T>();
+
+  indexCoordForEach(self, dim, index, [&](int64_t i, int64_t offset) { selfPtr[offset] = srcPtr[i]; });
+}
+
 }  // namespace tinytorch::op

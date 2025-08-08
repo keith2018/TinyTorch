@@ -227,6 +227,15 @@ class FuncLayerNorm : public Function<FuncLayerNorm> {
   static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
 };
 
+class FuncRMSNorm : public Function<FuncRMSNorm> {
+ public:
+  static Tensor forward(AutogradContext* ctx, const Tensor& input, IntArrayView normalizedShape, const Tensor& weight,
+                        float eps) {
+    return op::rmsNorm(input, normalizedShape, weight, eps);
+  }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
+};
+
 class FuncSDPAttention : public Function<FuncSDPAttention> {
  public:
   static Tensor forward(AutogradContext* ctx, const Tensor& query, const Tensor& key, const Tensor& value,
@@ -285,6 +294,10 @@ inline Tensor embedding(const Tensor& input, const Tensor& weight) { return Func
 inline Tensor layerNorm(const Tensor& input, IntArrayView normalizedShape, const Tensor& weight, const Tensor& bias,
                         float eps = 1e-5f) {
   return FuncLayerNorm::apply(input, normalizedShape, weight, bias, eps);
+}
+
+inline Tensor rmsNorm(const Tensor& input, IntArrayView normalizedShape, const Tensor& weight, float eps = 1e-8f) {
+  return FuncRMSNorm::apply(input, normalizedShape, weight, eps);
 }
 
 inline Tensor sdpAttention(const Tensor& query, const Tensor& key, const Tensor& value, bool isCausal = false,
