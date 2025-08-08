@@ -129,6 +129,7 @@ size_t getMaxSharedMemoryPerBlock(int device);
 unsigned int getKernelBlockSize(int device);
 unsigned int getKernelGridSize(unsigned int blockSize, int64_t n, size_t batch = 1);
 KernelLaunchParams getKernelLaunchParams(int device, int64_t n, size_t batch = 1, size_t sharedMemBytes = 0);
+void streamSynchronize(const CUDAStream& stream);
 
 #define CUDA_LAUNCH_KERNEL(KERNEL, PARAMS, ...)                                                     \
   KERNEL<<<(PARAMS).grid, (PARAMS).block, (PARAMS).sharedMemBytes, (PARAMS).stream>>>(__VA_ARGS__); \

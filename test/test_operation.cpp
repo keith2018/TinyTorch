@@ -859,6 +859,113 @@ TEST(TEST_Operation, basic_multinomial) {
   EXPECT_THAT(yv, ElementsAre(0, 1, 2));
 }
 
+TEST(TEST_Operation, basic_sort) {
+  // 1D ascending
+  Tensor x(Array1d<float>{3, 1, 2});
+  auto ret = op::sort(x, 0, false);
+  EXPECT_THAT(ret.first.shape(), ElementsAre(3));
+  EXPECT_THAT(ret.second.shape(), ElementsAre(3));
+  EXPECT_THAT(ret.first.toList<float>(), ElementsAre(1, 2, 3));
+  EXPECT_THAT(ret.second.toList<int64_t>(), ElementsAre(1, 2, 0));
+
+  // 1D descending
+  ret = op::sort(x, 0, true);
+  EXPECT_THAT(ret.first.shape(), ElementsAre(3));
+  EXPECT_THAT(ret.second.shape(), ElementsAre(3));
+  EXPECT_THAT(ret.first.toList<float>(), ElementsAre(3, 2, 1));
+  EXPECT_THAT(ret.second.toList<int64_t>(), ElementsAre(0, 2, 1));
+
+  // 2D sort by row (axis 1) ascending
+  Tensor y(Array2d<float>{{3, 1, 2}, {9, 7, 8}});
+  ret = op::sort(y, 1, false);
+  EXPECT_THAT(ret.first.shape(), ElementsAre(2, 3));
+  EXPECT_THAT(ret.second.shape(), ElementsAre(2, 3));
+  EXPECT_THAT(ret.first.toList<float>(), ElementsAre(1, 2, 3, 7, 8, 9));
+  EXPECT_THAT(ret.second.toList<int64_t>(), ElementsAre(1, 2, 0, 1, 2, 0));
+
+  // 2D sort by column (axis 0) descending
+  ret = op::sort(y, 0, true);
+  EXPECT_THAT(ret.first.shape(), ElementsAre(2, 3));
+  EXPECT_THAT(ret.second.shape(), ElementsAre(2, 3));
+  EXPECT_THAT(ret.first.toList<float>(), ElementsAre(9, 7, 8, 3, 1, 2));
+  EXPECT_THAT(ret.second.toList<int64_t>(), ElementsAre(1, 1, 1, 0, 0, 0));
+}
+
+TEST(TEST_Operation, basic_cumsum) {
+  // 1D
+  Tensor x(Array1d<float>{1, 2, 3});
+  auto y = op::cumsum(x, 0);
+  EXPECT_THAT(y.shape(), ElementsAre(3));
+  EXPECT_THAT(y.toList<float>(), ElementsAre(1, 3, 6));
+
+  // 2D cumsum along row (axis 1)
+  Tensor z(Array2d<float>{{1, 2, 3}, {4, 5, 6}});
+  y = op::cumsum(z, 1);
+  EXPECT_THAT(y.shape(), ElementsAre(2, 3));
+  EXPECT_THAT(y.toList<float>(), ElementsAre(1, 3, 6, 4, 9, 15));
+
+  // 2D cumsum along column (axis 0)
+  y = op::cumsum(z, 0);
+  EXPECT_THAT(y.shape(), ElementsAre(2, 3));
+  EXPECT_THAT(y.toList<float>(), ElementsAre(1, 2, 3, 5, 7, 9));
+}
+
+TEST(TEST_Operation, basic_gather) {
+  // 1D
+  Tensor x(Array1d<float>{10, 20, 30, 40});
+  Tensor idx(Array1d<int64_t>{2, 0, 3});
+  auto y = op::gather(x, 0, idx);
+  EXPECT_THAT(y.shape(), ElementsAre(3));
+  EXPECT_THAT(y.toList<float>(), ElementsAre(30, 10, 40));
+
+  // 2D gather along row (axis 1)
+  Tensor a(Array2d<float>{{1, 2}, {3, 4}});
+  Tensor idx2(Array2d<int64_t>{{1, 0}, {0, 1}});
+  y = op::gather(a, 1, idx2);
+  EXPECT_THAT(y.shape(), ElementsAre(2, 2));
+  EXPECT_THAT(y.toList<float>(), ElementsAre(2, 1, 3, 4));
+
+  // 2D gather along column (axis 0)
+  Tensor idx3(Array2d<int64_t>{{1, 1}, {0, 0}});
+  y = op::gather(a, 0, idx3);
+  EXPECT_THAT(y.shape(), ElementsAre(2, 2));
+  EXPECT_THAT(y.toList<float>(), ElementsAre(3, 4, 1, 2));
+}
+
+TEST(TEST_Operation, basic_scatter) {
+  // 1D
+  Tensor x(Array1d<float>{0, 0, 0, 0});
+  Tensor idx(Array1d<int64_t>{1, 3});
+  Tensor src(Array1d<float>{10, 20});
+  auto y = op::scatter(x, 0, idx, src);
+  EXPECT_THAT(y.shape(), ElementsAre(4));
+  EXPECT_THAT(y.toList<float>(), ElementsAre(0, 10, 0, 20));
+
+  // 2D scatter along row (axis 1)
+  Tensor a(Array2d<float>{{0, 0}, {0, 0}});
+  Tensor idx2(Array2d<int64_t>{{1, 0}, {0, 1}});
+  Tensor src2(Array2d<float>{{5, 6}, {7, 8}});
+  y = op::scatter(a, 1, idx2, src2);
+  EXPECT_THAT(y.shape(), ElementsAre(2, 2));
+  EXPECT_THAT(y.toList<float>(), ElementsAre(6, 5, 7, 8));
+
+  // 2D scatter along column (axis 0)
+  Tensor a2(Array2d<float>{{0, 0}, {0, 0}});
+  Tensor idx3(Array2d<int64_t>{{1, 1}, {0, 0}});
+  Tensor src3(Array2d<float>{{9, 8}, {7, 6}});
+  y = op::scatter(a2, 0, idx3, src3);
+  EXPECT_THAT(y.shape(), ElementsAre(2, 2));
+  EXPECT_THAT(y.toList<float>(), ElementsAre(7, 6, 9, 8));
+
+  // scatter inplace
+  Tensor inplace(Array1d<float>{0, 0, 0});
+  Tensor idx4(Array1d<int64_t>{0, 2});
+  Tensor src4(Array1d<float>{1, 2});
+  op::scatterInplace(inplace, 0, idx4, src4);
+  EXPECT_THAT(inplace.shape(), ElementsAre(3));
+  EXPECT_THAT(inplace.toList<float>(), ElementsAre(1, 0, 2));
+}
+
 TEST(TEST_Operation, math_dot) {
   Array1d<float> d1 = {1, 2, 3};
   Array1d<float> d2 = {4, 5, 6};

@@ -173,6 +173,44 @@ class FuncMinimum : public Function<FuncMinimum> {
   static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
 };
 
+#define DEFINE_COMPARE_FUNCTION(CLASSNAME, OPNAME)                                         \
+  class CLASSNAME : public Function<CLASSNAME> {                                           \
+   public:                                                                                 \
+    static Tensor forward(AutogradContext* ctx, const Tensor& self, const Tensor& other) { \
+      return op::OPNAME(self, other);                                                      \
+    }                                                                                      \
+    static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }  \
+  }
+
+DEFINE_COMPARE_FUNCTION(FuncLt, lt);
+DEFINE_COMPARE_FUNCTION(FuncLe, le);
+DEFINE_COMPARE_FUNCTION(FuncGt, gt);
+DEFINE_COMPARE_FUNCTION(FuncGe, ge);
+DEFINE_COMPARE_FUNCTION(FuncEq, eq);
+DEFINE_COMPARE_FUNCTION(FuncNe, ne);
+
+class FuncLogicNot : public Function<FuncLogicNot> {
+ public:
+  static Tensor forward(AutogradContext* ctx, const Tensor& self) { return op::logicNot(self); }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
+};
+
+class FuncLogicAnd : public Function<FuncLogicAnd> {
+ public:
+  static Tensor forward(AutogradContext* ctx, const Tensor& self, const Tensor& other) {
+    return op::logicAnd(self, other);
+  }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
+};
+
+class FuncLogicOr : public Function<FuncLogicOr> {
+ public:
+  static Tensor forward(AutogradContext* ctx, const Tensor& self, const Tensor& other) {
+    return op::logicOr(self, other);
+  }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
+};
+
 inline Tensor add(const Tensor& self, const Tensor& other, const Scalar& alpha = 1) {
   return FuncAdd::apply(self, other, alpha);
 }
@@ -189,5 +227,16 @@ inline Tensor pow(const Tensor& self, const Tensor& other) { return FuncPow::app
 
 inline Tensor maximum(const Tensor& self, const Tensor& other) { return FuncMaximum::apply(self, other); }
 inline Tensor minimum(const Tensor& self, const Tensor& other) { return FuncMinimum::apply(self, other); }
+
+inline Tensor lt(const Tensor& self, const Tensor& other) { return FuncLt::apply(self, other); }
+inline Tensor le(const Tensor& self, const Tensor& other) { return FuncLe::apply(self, other); }
+inline Tensor gt(const Tensor& self, const Tensor& other) { return FuncGt::apply(self, other); }
+inline Tensor ge(const Tensor& self, const Tensor& other) { return FuncGe::apply(self, other); }
+inline Tensor eq(const Tensor& self, const Tensor& other) { return FuncEq::apply(self, other); }
+inline Tensor ne(const Tensor& self, const Tensor& other) { return FuncNe::apply(self, other); }
+
+inline Tensor logicNot(const Tensor& self) { return FuncLogicNot::apply(self); }
+inline Tensor logicAnd(const Tensor& self, const Tensor& other) { return FuncLogicAnd::apply(self, other); }
+inline Tensor logicOr(const Tensor& self, const Tensor& other) { return FuncLogicOr::apply(self, other); }
 
 }  // namespace tinytorch::function

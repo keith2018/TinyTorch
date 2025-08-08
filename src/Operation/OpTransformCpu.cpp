@@ -74,6 +74,19 @@ void registerTransformCpu() {
 
   // multinomial
   REGISTER_OP_IMPL_DTYPE_TPL(multinomial, CPU, multinomialOpCpuImpl);
+
+  // sort
+  REGISTER_OP_IMPL_DTYPE_TPL(sort, CPU, sortOpCpuImpl)
+
+  // cumsum
+  REGISTER_OP_IMPL_DTYPE_TPL(cumsum, CPU, cumsumOpCpuImpl)
+
+  // gather
+  REGISTER_OP_IMPL_DTYPE_TPL(gather, CPU, gatherOpCpuImpl)
+
+  // scatter
+  REGISTER_OP_IMPL_DTYPE_TPL(scatter, CPU, scatterOpCpuImpl)
+  REGISTER_OP_IMPL_DTYPE_TPL(scatterInplace, CPU, scatterOpInplaceCpuImpl)
 }
 
 }  // namespace tinytorch::op

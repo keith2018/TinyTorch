@@ -33,13 +33,6 @@ struct OpCudaSign {
   }
 };
 
-struct OpCudaLogicNot {
-  template <typename T>
-  __device__ static T apply(const T& a) {
-    return !a;
-  }
-};
-
 struct OpCudaSqrt {
   template <typename T>
   __device__ static T apply(const T& a) {
@@ -252,6 +245,27 @@ struct OpCudaGe {
   template <typename T>
   __device__ static bool apply(const T& a, const T& b) {
     return a >= b;
+  }
+};
+
+struct OpCudaLogicNot {
+  template <typename T>
+  __device__ static T apply(const T& a) {
+    return !a;
+  }
+};
+
+struct OpCudaLogicAnd {
+  template <typename T>
+  __device__ static T apply(const T& a, const T& b) {
+    return a && b;
+  }
+};
+
+struct OpCudaLogicOr {
+  template <typename T>
+  __device__ static T apply(const T& a, const T& b) {
+    return a || b;
   }
 };
 

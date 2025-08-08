@@ -38,15 +38,17 @@ Tensor Tensor::ones(const IntArrayView shape, Options options) {
   return ret;
 }
 
-Tensor Tensor::onesLike(const Tensor &t, Options options) { return ones(t.shape(), options); }
-
 Tensor Tensor::zeros(const IntArrayView shape, Options options) {
   Tensor ret(shape, options);
   ret.fillZero_();
   return ret;
 }
 
-Tensor Tensor::zerosLike(const Tensor &t, Options options) { return zeros(t.shape(), options); }
+Tensor Tensor::full(const IntArrayView shape, const Scalar &scalar, Options options) {
+  Tensor ret(shape, options);
+  op::fill(ret, scalar);
+  return ret;
+}
 
 Tensor Tensor::rand(const IntArrayView shape, Options options) {
   Tensor ret(shape, options);
@@ -69,6 +71,23 @@ Tensor Tensor::uniform(const IntArrayView shape, float min, float max, Options o
 Tensor Tensor::bernoulli(const IntArrayView shape, float p, Options options) {
   Tensor ret(shape, options);
   op::fillRandBernoulli(ret, p);
+  return ret;
+}
+
+Tensor Tensor::onesLike(const Tensor &t, std::optional<Options> options) {
+  auto ops = options ? *options : t.options();
+  return ones(t.shape(), ops);
+}
+
+Tensor Tensor::zerosLike(const Tensor &t, std::optional<Options> options) {
+  auto ops = options ? *options : t.options();
+  return zeros(t.shape(), ops);
+}
+
+Tensor Tensor::fullLike(const Tensor &t, const Scalar &scalar, std::optional<Options> options) {
+  auto ops = options ? *options : t.options();
+  Tensor ret(t.shape(), ops);
+  op::fill(ret, scalar);
   return ret;
 }
 
@@ -210,6 +229,10 @@ void Tensor::fillUniform_(float min, float max) { op::fillRandUniform(*this, min
 void Tensor::fillNormal_(float mean, float stddev) { op::fillRandNormal(*this, mean, stddev); }
 void Tensor::fillBernoulli_(float p) { op::fillRandBernoulli(*this, p); }
 
+void Tensor::scatter_(int64_t dim, const Tensor &index, const Tensor &src) {
+  function::scatter_(*this, dim, index, src);
+}
+
 Tensor Tensor::operator+(const Tensor &other) const { return function::add(*this, other); }
 Tensor Tensor::operator-(const Tensor &other) const { return function::sub(*this, other); }
 Tensor Tensor::operator*(const Tensor &other) const { return function::mul(*this, other); }
@@ -243,19 +266,23 @@ void Tensor::operator-=(const Scalar &other) { inplaceSet(function::sub(*this, s
 void Tensor::operator*=(const Scalar &other) { inplaceSet(function::mul(*this, scalar(other, options().noGrad()))); }
 void Tensor::operator/=(const Scalar &other) { inplaceSet(function::div(*this, scalar(other, options().noGrad()))); }
 
-Tensor Tensor::operator<(const Tensor &other) const { return op::lt(*this, other); }
-Tensor Tensor::operator<=(const Tensor &other) const { return op::le(*this, other); }
-Tensor Tensor::operator>(const Tensor &other) const { return op::gt(*this, other); }
-Tensor Tensor::operator>=(const Tensor &other) const { return op::ge(*this, other); }
-Tensor Tensor::operator==(const Tensor &other) const { return op::eq(*this, other); }
-Tensor Tensor::operator!=(const Tensor &other) const { return op::ne(*this, other); }
+Tensor Tensor::operator<(const Tensor &other) const { return function::lt(*this, other); }
+Tensor Tensor::operator<=(const Tensor &other) const { return function::le(*this, other); }
+Tensor Tensor::operator>(const Tensor &other) const { return function::gt(*this, other); }
+Tensor Tensor::operator>=(const Tensor &other) const { return function::ge(*this, other); }
+Tensor Tensor::operator==(const Tensor &other) const { return function::eq(*this, other); }
+Tensor Tensor::operator!=(const Tensor &other) const { return function::ne(*this, other); }
 
-Tensor Tensor::operator<(const Scalar &other) const { return op::lt(*this, scalar(other, options().noGrad())); }
-Tensor Tensor::operator<=(const Scalar &other) const { return op::le(*this, scalar(other, options().noGrad())); }
-Tensor Tensor::operator>(const Scalar &other) const { return op::gt(*this, scalar(other, options().noGrad())); }
-Tensor Tensor::operator>=(const Scalar &other) const { return op::ge(*this, scalar(other, options().noGrad())); }
-Tensor Tensor::operator==(const Scalar &other) const { return op::eq(*this, scalar(other, options().noGrad())); }
-Tensor Tensor::operator!=(const Scalar &other) const { return op::ne(*this, scalar(other, options().noGrad())); }
+Tensor Tensor::operator<(const Scalar &other) const { return function::lt(*this, scalar(other, options().noGrad())); }
+Tensor Tensor::operator<=(const Scalar &other) const { return function::le(*this, scalar(other, options().noGrad())); }
+Tensor Tensor::operator>(const Scalar &other) const { return function::gt(*this, scalar(other, options().noGrad())); }
+Tensor Tensor::operator>=(const Scalar &other) const { return function::ge(*this, scalar(other, options().noGrad())); }
+Tensor Tensor::operator==(const Scalar &other) const { return function::eq(*this, scalar(other, options().noGrad())); }
+Tensor Tensor::operator!=(const Scalar &other) const { return function::ne(*this, scalar(other, options().noGrad())); }
+
+Tensor Tensor::operator~() const { return function::logicNot(*this); }
+Tensor Tensor::operator&(const Tensor &other) const { return function::logicAnd(*this, other); }
+Tensor Tensor::operator|(const Tensor &other) const { return function::logicOr(*this, other); }
 
 Tensor Tensor::sin() const { return function::sin(*this); }
 Tensor Tensor::cos() const { return function::cos(*this); }

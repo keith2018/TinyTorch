@@ -124,6 +124,44 @@ class FuncMultinomial : public Function<FuncMultinomial> {
   static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
 };
 
+class FuncSort : public Function<FuncSort> {
+ public:
+  static TensorPair forward(AutogradContext* ctx, const Tensor& self, int64_t dim, bool descending) {
+    return op::sort(self, dim, descending);
+  }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
+};
+
+class FuncCumsum : public Function<FuncCumsum> {
+ public:
+  static Tensor forward(AutogradContext* ctx, const Tensor& self, int64_t dim) { return op::cumsum(self, dim); }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
+};
+
+class FuncGather : public Function<FuncGather> {
+ public:
+  static Tensor forward(AutogradContext* ctx, const Tensor& self, int64_t dim, const Tensor& index) {
+    return op::gather(self, dim, index);
+  }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
+};
+
+class FuncScatter : public Function<FuncScatter> {
+ public:
+  static Tensor forward(AutogradContext* ctx, const Tensor& self, int64_t dim, const Tensor& index, const Tensor& src) {
+    return op::scatter(self, dim, index, src);
+  }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
+};
+
+class FuncScatterInplace : public Function<FuncScatterInplace> {
+ public:
+  static void forward(AutogradContext* ctx, Tensor& self, int64_t dim, const Tensor& index, const Tensor& src) {
+    return op::scatterInplace(self, dim, index, src);
+  }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
+};
+
 inline Tensor reshape(const Tensor& self, const IntArrayView shape) { return FuncReshape::apply(self, shape); }
 inline Tensor view(const Tensor& self, const IntArrayView shape) { return FuncView::apply(self, shape); }
 inline Tensor permute(const Tensor& self, const IntArrayView dims) { return FuncPermute::apply(self, dims); }
@@ -156,6 +194,19 @@ inline TensorPair topk(const Tensor& self, int64_t k, int64_t dim, bool largest 
 }
 inline Tensor multinomial(const Tensor& self, int64_t numSamples, bool replacement = false) {
   return FuncMultinomial::apply(self, numSamples, replacement);
+}
+inline TensorPair sort(const Tensor& self, int64_t dim = -1, bool descending = false) {
+  return FuncSort::apply(self, dim, descending);
+}
+inline Tensor cumsum(const Tensor& self, int64_t dim) { return FuncCumsum::apply(self, dim); }
+inline Tensor gather(const Tensor& self, int64_t dim, const Tensor& index) {
+  return FuncGather::apply(self, dim, index);
+}
+inline Tensor scatter(const Tensor& self, int64_t dim, const Tensor& index, const Tensor& src) {
+  return FuncScatter::apply(self, dim, index, src);
+}
+inline void scatter_(Tensor& self, int64_t dim, const Tensor& index, const Tensor& src) {
+  return FuncScatterInplace::apply(self, dim, index, src);
 }
 
 }  // namespace tinytorch::function

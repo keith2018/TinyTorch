@@ -16,12 +16,22 @@ namespace tinytorch {
 
 class Storage {
  public:
-  Storage(int64_t nbytes, Device device, Allocator* allocator);
+  Storage(int64_t nbytes, Device device, Allocator* allocator = nullptr);
   ~Storage() = default;
+
+  Storage(const Storage&) = delete;
+  Storage& operator=(const Storage&) = delete;
+
+  Storage(Storage&&) noexcept = default;
+  Storage& operator=(Storage&&) noexcept = default;
 
   std::shared_ptr<Storage> clone() const;
 
-  void* data() const { return data_.get(); }
+  template <typename T = void>
+  T* dataPtr() {
+    return static_cast<T*>(data_.get());
+  }
+
   int64_t size() const { return nbytes_; }
   Device device() const { return device_; }
 
@@ -30,10 +40,10 @@ class Storage {
   static void copyOnDevice(void* dst, const void* src, int64_t nbytes, const Device& device);
 
  private:
-  std::unique_ptr<void, std::function<void(void*)>> data_;
   int64_t nbytes_;
   Device device_;
   Allocator* allocator_;
+  std::unique_ptr<void, std::function<void(void*)>> data_;
 };
 
 }  // namespace tinytorch

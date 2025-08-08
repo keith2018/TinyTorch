@@ -19,7 +19,7 @@ class Initializer {
  public:
   static void zeros(Tensor &tensor);
   static void ones(Tensor &tensor);
-  static void normal(Tensor &tensor, float mean = 0.f, float stddev= 1.f);
+  static void normal(Tensor &tensor, float mean = 0.f, float stddev = 1.f);
   static void uniform(Tensor &tensor, float min, float max);
   static void kaimingUniform(Tensor &tensor, float a = 0, FanMode mode = FanMode::FAN_IN);
 

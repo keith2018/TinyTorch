@@ -27,6 +27,9 @@ void registerNNLayerCuda() {
 
   // layerNorm
   REG_NN_LAYER_CUDA_F32(layerNorm, layerNormOpCudaImpl);
+
+  // rmsNorm
+  REG_NN_LAYER_CUDA_F32(rmsNorm, rmsNormOpCudaImpl);
 }
 
 }  // namespace tinytorch::op

@@ -64,13 +64,16 @@ class Tensor {
   static Tensor empty(IntArrayView shape, Options options = {});
   static Tensor scalar(const Scalar& scalar, Options options = {});
   static Tensor ones(IntArrayView shape, Options options = {});
-  static Tensor onesLike(const Tensor& t, Options options = {});
   static Tensor zeros(IntArrayView shape, Options options = {});
-  static Tensor zerosLike(const Tensor& t, Options options = {});
+  static Tensor full(IntArrayView shape, const Scalar& scalar, Options options = {});
   static Tensor rand(IntArrayView shape, Options options = {});
   static Tensor randn(IntArrayView shape, Options options = {});
   static Tensor uniform(IntArrayView shape, float min, float max, Options options = {});
   static Tensor bernoulli(IntArrayView shape, float p, Options options = {});
+
+  static Tensor onesLike(const Tensor& t, std::optional<Options> options = std::nullopt);
+  static Tensor zerosLike(const Tensor& t, std::optional<Options> options = std::nullopt);
+  static Tensor fullLike(const Tensor& t, const Scalar& scalar, std::optional<Options> options = std::nullopt);
 
   template <typename T>
   static Tensor arange(T start, T stop, T step = 1, Options options = {});
@@ -147,6 +150,9 @@ class Tensor {
   void fillNormal_(float mean = 0.f, float stddev = 1.f);
   void fillBernoulli_(float p);
 
+  // set
+  void scatter_(int64_t dim, const Tensor& index, const Tensor& src);
+
   // math
   Tensor operator+(const Tensor& other) const;
   Tensor operator-(const Tensor& other) const;
@@ -186,6 +192,10 @@ class Tensor {
   Tensor operator>=(const Scalar& other) const;
   Tensor operator==(const Scalar& other) const;
   Tensor operator!=(const Scalar& other) const;
+
+  Tensor operator~() const;
+  Tensor operator&(const Tensor& other) const;
+  Tensor operator|(const Tensor& other) const;
 
   Tensor sin() const;
   Tensor cos() const;

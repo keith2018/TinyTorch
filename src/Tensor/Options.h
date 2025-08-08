@@ -42,11 +42,10 @@ struct Options {
   bool requiresGrad_;
   bool pinnedMemory_;
 
-  Options()
-      : device_(options::Default::device()),
-        dtype_(options::Default::dType()),
-        requiresGrad_(false),
-        pinnedMemory_(false) {}
+  // NOLINTNEXTLINE(google-explicit-constructor)
+  Options(Device device = options::Default::device(), DType dtype = options::Default::dType(),
+          bool requiresGrad = false, bool pinnedMemory = false)
+      : device_(device), dtype_(dtype), requiresGrad_(requiresGrad), pinnedMemory_(pinnedMemory) {}
 
   Options& device(const Device& d) {
     device_ = d;

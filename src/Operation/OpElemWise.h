@@ -54,11 +54,6 @@ DEFINE_OP(sign, UnaryOpFn)
 DEFINE_OP(signOut, UnaryOpOutFn)
 DEFINE_OP(signInplace, UnaryOpInplaceFn)
 
-// logicNot
-DEFINE_OP(logicNot, UnaryOpFn)
-DEFINE_OP(logicNotOut, UnaryOpOutFn)
-DEFINE_OP(logicNotInplace, UnaryOpInplaceFn)
-
 // sqrt
 DEFINE_OP(sqrt, UnaryOpFn)
 DEFINE_OP(sqrtOut, UnaryOpOutFn)
@@ -175,6 +170,21 @@ DEFINE_OP(gtOut, BinaryOpOutFn)
 // greater equal
 DEFINE_OP(ge, BinaryOpFn)
 DEFINE_OP(geOut, BinaryOpOutFn)
+
+// logicNot
+DEFINE_OP(logicNot, UnaryOpFn)
+DEFINE_OP(logicNotOut, UnaryOpOutFn)
+DEFINE_OP(logicNotInplace, UnaryOpInplaceFn)
+
+// logicAnd
+DEFINE_OP(logicAnd, BinaryOpFn)
+DEFINE_OP(logicAndOut, BinaryOpOutFn)
+DEFINE_OP(logicAndInplace, BinaryOpInplaceFn)
+
+// logicOr
+DEFINE_OP(logicOr, BinaryOpFn)
+DEFINE_OP(logicOrOut, BinaryOpOutFn)
+DEFINE_OP(logicOrInplace, BinaryOpInplaceFn)
 
 // clampMin
 DEFINE_OP(clampMin, BinaryOpFn)

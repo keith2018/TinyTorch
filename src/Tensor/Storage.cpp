@@ -11,14 +11,18 @@
 #ifdef USE_CUDA
 #include "Utils/CUDAUtils.h"
 #endif
+#include "Options.h"
 #include "Utils/Logger.h"
 
 namespace tinytorch {
 
 Storage::Storage(int64_t nbytes, Device device, Allocator* allocator)
-    : nbytes_(nbytes), device_(device), allocator_(allocator) {
+    : nbytes_(nbytes),
+      device_(device),
+      allocator_(allocator ? allocator : getAllocator(Options(device))),
+      data_(nullptr, [](void*) {}) {
   void* ptr = allocator_->allocate(nbytes_);
-  data_ = std::unique_ptr<void, std::function<void(void*)>>(ptr, [allocator](void* p) { allocator->deallocate(p); });
+  data_ = std::unique_ptr<void, std::function<void(void*)>>(ptr, [&](void* p) { allocator_->deallocate(p); });
 }
 
 std::shared_ptr<Storage> Storage::clone() const {
@@ -43,21 +47,25 @@ void Storage::copyOnDevice(void* dst, const Device& dstDevice, const void* src, 
   // CUDA -> CUDA
   if (dstDevice.isCuda() && srcDevice.isCuda()) {
     cuda::CudaDeviceGuard guard(dstDevice.index);
-    CUDA_CHECK(cudaMemcpy(dst, src, nbytes, cudaMemcpyDeviceToDevice));
+    auto stream = cuda::getCurrentCUDAStream(dstDevice.index);
+    CUDA_CHECK(cudaMemcpyAsync(dst, src, nbytes, cudaMemcpyDeviceToDevice, stream.stream));
     return;
   }
 
   // CPU -> CUDA
   if (dstDevice.isCuda() && srcDevice.isCpu()) {
     cuda::CudaDeviceGuard guard(dstDevice.index);
-    CUDA_CHECK(cudaMemcpy(dst, src, nbytes, cudaMemcpyHostToDevice));
+    auto stream = cuda::getCurrentCUDAStream(dstDevice.index);
+    CUDA_CHECK(cudaMemcpyAsync(dst, src, nbytes, cudaMemcpyHostToDevice, stream.stream));
     return;
   }
 
   // CUDA -> CPU
   if (dstDevice.isCpu() && srcDevice.isCuda()) {
     cuda::CudaDeviceGuard guard(dstDevice.index);
-    CUDA_CHECK(cudaMemcpy(dst, src, nbytes, cudaMemcpyDeviceToHost));
+    auto stream = cuda::getCurrentCUDAStream(dstDevice.index);
+    CUDA_CHECK(cudaMemcpyAsync(dst, src, nbytes, cudaMemcpyDeviceToHost, stream.stream));
+    cuda::streamSynchronize(stream);
     return;
   }
 #endif
