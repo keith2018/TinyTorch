@@ -77,6 +77,12 @@ struct TrainArgs {
 
   // how many batches to wait before logging training status
   int32_t logInterval = 10;
+
+  // load pretrained model
+  std::string pretrained;
+
+  // for saving the current model
+  bool saveModel = true;
 };
 
 void train(TrainArgs &args, nn::Module &model, Device device, data::DataLoader &dataLoader, optim::Optimizer &optimizer,
@@ -163,7 +169,15 @@ void demo_mnist() {
 
   auto model = Net();
   model.to(device);
-  model.initParameters();
+
+  bool loadSuccess = false;
+  if (!args.pretrained.empty()) {
+    LOGD("Load pretrained model: %s", args.pretrained.c_str());
+    loadSuccess = load(model, args.pretrained);
+  }
+  if (!loadSuccess) {
+    model.initParameters();
+  }
 
   auto optimizer = optim::AdaDelta(model.parameters(), args.lr);
   auto scheduler = optim::lr_scheduler::StepLR(optimizer, 1, args.gamma);
@@ -172,6 +186,10 @@ void demo_mnist() {
     train(args, model, device, trainDataloader, optimizer, epoch);
     test(model, device, testDataloader);
     scheduler.step();
+  }
+
+  if (args.saveModel) {
+    save(model, "mnist_cnn.model");
   }
 
   timer.mark();
