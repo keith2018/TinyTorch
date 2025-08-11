@@ -14,4 +14,5 @@
 #include "Operations.h"
 #include "Optimizer.h"
 #include "Scheduler.h"
+#include "Serializer.h"
 #include "Tensor.h"
