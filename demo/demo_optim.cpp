@@ -18,7 +18,7 @@ void demo_optim() {
 
   manualSeed(0);
 
-  auto x = Tensor::linspace(-PI_FLT, PI_FLT, 2000);
+  auto x = Tensor::linspace<float>(-M_PI, M_PI, 2000);
   auto y = x.sin();
 
   auto p = Tensor(Array1d<float>{1, 2, 3});

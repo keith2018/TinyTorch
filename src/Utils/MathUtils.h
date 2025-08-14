@@ -6,10 +6,13 @@
 
 #pragma once
 
-namespace tinytorch {
+#include <cmath>
 
-constexpr float PI_FLT = 3.1415927f;
-constexpr double PI_DBL = 3.14159265358979323846;
+#ifndef M_PI
+#define M_PI 3.14159265358979323846  // pi
+#endif
+
+namespace tinytorch {
 
 unsigned int nextPow2(unsigned int v);
 

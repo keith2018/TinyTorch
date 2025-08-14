@@ -59,23 +59,25 @@ TEST(TEST_Function, func_div) {
 }
 
 TEST(TEST_Function, func_sin) {
+  auto pi = static_cast<float>(M_PI);
   Options options = options::requiresGrad(true);
-  Tensor x(Array1d<float>{0.0f, PI_FLT / 2, PI_FLT}, options);
+  Tensor x(Array1d<float>{0.0f, pi / 2, pi}, options);
   auto y = function::sin(x);
-  EXPECT_THAT(y.toList<float>(), ElementsAre(0, 1, std::sin(PI_FLT)));
+  EXPECT_THAT(y.toList<float>(), ElementsAre(0, 1, std::sin(pi)));
 
   y.backward(Tensor::onesLike(y));
-  EXPECT_THAT(x.grad().toList<float>(), ElementsAre(1, std::cos(PI_FLT / 2), -1));
+  EXPECT_THAT(x.grad().toList<float>(), ElementsAre(1, std::cos(pi / 2), -1));
 }
 
 TEST(TEST_Function, func_cos) {
+  auto pi = static_cast<float>(M_PI);
   Options options = options::requiresGrad(true);
-  Tensor x(Array1d<float>{0.0f, PI_FLT / 2, PI_FLT}, options);
+  Tensor x(Array1d<float>{0.0f, pi / 2, pi}, options);
   auto y = function::cos(x);
-  EXPECT_THAT(y.toList<float>(), ElementsAre(1, std::cos(PI_FLT / 2), std::cos(PI_FLT)));
+  EXPECT_THAT(y.toList<float>(), ElementsAre(1, std::cos(pi / 2), std::cos(pi)));
 
   y.backward(Tensor::onesLike(y));
-  EXPECT_TRUE(VectorNear(x.grad().toList<float>(), {0, -std::sin(PI_FLT / 2), 0}));
+  EXPECT_TRUE(VectorNear(x.grad().toList<float>(), {0, -std::sin(pi / 2), 0}));
 }
 
 TEST(TEST_Function, func_pow) {
