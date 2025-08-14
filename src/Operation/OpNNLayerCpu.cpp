@@ -30,6 +30,10 @@ void registerNNLayerCpu() {
 
   // rmsNorm
   REG_NN_LAYER_CPU_F32(rmsNorm, rmsNormOpCpuImpl);
+
+  // rope
+  REG_NN_LAYER_CPU_F32(ropeInit, ropeInitOpCpuImpl);
+  REG_NN_LAYER_CPU_F32(ropeApply, ropeApplyOpCpuImpl);
 }
 
 }  // namespace tinytorch::op

@@ -247,4 +247,104 @@ Tensor rmsNormOpCpuImpl(const Tensor& self, IntArrayView normalizedShape, const 
   return normOpCpuImplDetail<T, NormType::RMSNorm>(self, normalizedShape, weight, {}, eps);
 }
 
+template <typename T>
+TensorPair ropeInitOpCpuImpl(int64_t headDim, int64_t contextLength, float thetaBase,
+                             std::optional<RopeScalingConfig> scaling, Options options) {
+  ASSERT(!options.requiresGrad_);
+  ASSERT(options.device_.type == DeviceType::CPU);
+  ASSERT(options.dtype_ == DType::Float32);
+
+  ASSERT(headDim % 2 == 0);
+  int64_t halfDim = headDim >> 1;
+
+  // inverse frequency
+  Tensor invFreq({halfDim}, options);
+  auto* invFreqPtr = invFreq.dataPtr<T>();
+  for (int64_t i = 0; i < halfDim; i++) {
+    invFreqPtr[i] = 1.f / std::pow(thetaBase, static_cast<float>(i << 1) / static_cast<float>(headDim));
+  }
+
+  // apply scaling if needed
+  if (scaling.has_value()) {
+    auto originCtxLen = static_cast<float>(scaling->originalContextLength);
+    auto lowWaveLen = originCtxLen / scaling->lowFreqFactor;
+    auto highWaveLen = originCtxLen / scaling->highFreqFactor;
+    for (int64_t i = 0; i < halfDim; i++) {
+      auto waveLen = 2.f * static_cast<float>(M_PI) / invFreqPtr[i];
+      if (waveLen > lowWaveLen) {
+        invFreqPtr[i] /= scaling->factor;
+      } else if (waveLen < highWaveLen) {
+        // do nothing
+      } else {
+        auto smoothFactor =
+            (originCtxLen / waveLen - scaling->lowFreqFactor) / (scaling->highFreqFactor - scaling->lowFreqFactor);
+        auto scaled = invFreqPtr[i] / scaling->factor;
+        invFreqPtr[i] = (1.f - smoothFactor) * scaled + smoothFactor * invFreqPtr[i];
+      }
+    }
+  }
+
+  // precompute cos/sin
+  Tensor cos({contextLength, headDim}, options);
+  Tensor sin({contextLength, headDim}, options);
+  auto* cosPtr = cos.dataPtr<T>();
+  auto* sinPtr = sin.dataPtr<T>();
+
+  for (int64_t pos = 0; pos < contextLength; pos++) {
+    for (int64_t i = 0; i < halfDim; i++) {
+      float angle = static_cast<T>(pos) * invFreqPtr[i];
+      int64_t offset1 = pos * headDim + i;
+      int64_t offset2 = pos * headDim + halfDim + i;
+      cosPtr[offset1] = std::cos(angle);
+      sinPtr[offset1] = std::sin(angle);
+      cosPtr[offset2] = cosPtr[offset1];
+      sinPtr[offset2] = sinPtr[offset1];
+    }
+  }
+
+  return {cos, sin};
+}
+
+template <typename T>
+Tensor ropeApplyOpCpuImpl(const Tensor& input, const TensorPair& rope) {
+  const auto& shape = input.shape();  // [batch, numHead, seqLen, headDim]
+  ASSERT(shape.size() == 4);
+
+  int64_t batch = shape[0];
+  int64_t numHead = shape[1];
+  int64_t seqLen = shape[2];
+  int64_t headDim = shape[3];
+
+  ASSERT(headDim % 2 == 0);
+  int64_t halfDim = headDim >> 1;
+
+  const auto* inputPtr = input.dataPtr<T>();
+  const auto* cosPtr = rope.first.dataPtr<T>();
+  const auto* sinPtr = rope.second.dataPtr<T>();
+
+  Tensor out(shape, input.options().noGrad());
+  auto* outPtr = out.dataPtr<T>();
+
+  for (int64_t b = 0; b < batch; b++) {
+    for (int64_t h = 0; h < numHead; h++) {
+      for (int64_t t = 0; t < seqLen; t++) {
+        int64_t base = ((b * numHead + h) * seqLen + t) * headDim;
+        const float* xPtr = inputPtr + base;
+        float* yPtr = outPtr + base;
+        const float* cosRow = cosPtr + t * headDim;
+        const float* sinRow = sinPtr + t * headDim;
+        for (int64_t i = 0; i < halfDim; i++) {
+          float x1 = xPtr[i];
+          float x2 = xPtr[halfDim + i];
+          float c = cosRow[i];
+          float s = sinRow[i];
+          yPtr[i] = x1 * c - x2 * s;
+          yPtr[halfDim + i] = x2 * c + x1 * s;
+        }
+      }
+    }
+  }
+  return out;
+}
+
 }  // namespace tinytorch::op
