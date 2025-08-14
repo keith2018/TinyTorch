@@ -6,10 +6,9 @@
 
 #pragma once
 
-#include <cmath>
-
 #include "OpNNLayer.h"
 #include "Tensor/TensorIterator.h"
+#include "Utils/MathUtils.h"
 #include "Utils/RandomGenerator.h"
 
 namespace tinytorch::op {

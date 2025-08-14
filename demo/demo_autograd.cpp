@@ -16,7 +16,7 @@ void demo_autograd() {
   Timer timer;
   timer.start();
 
-  auto x = Tensor::linspace(-PI_FLT, PI_FLT, 2000);
+  auto x = Tensor::linspace<float>(-M_PI, M_PI, 2000);
   auto y = x.sin();
 
   Options options = options::requiresGrad(true);

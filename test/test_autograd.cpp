@@ -46,8 +46,9 @@ TEST(TEST_Autograd, backward_02) {
 }
 
 TEST(TEST_Autograd, backward_03) {
+  auto pi = static_cast<float>(M_PI);
   Options options = options::requiresGrad(true);
-  auto x = Tensor::linspace(-PI_FLT, PI_FLT, 100);
+  auto x = Tensor::linspace(-pi, pi, 100);
   auto y = function::sin(x);
 
   Tensor a(Array1d<float>{1.5f}, options);
