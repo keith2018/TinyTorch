@@ -115,7 +115,7 @@ bool Serializer::load(nn::Module& module, const std::string& path) {
   }
 
   bool success = true;
-
+  ankerl::unordered_dense::set<std::string> fileKeys;
   // read tensors
   for (uint64_t i = 0; i < tensorCount; i++) {
     const auto* header = reinterpret_cast<const TensorHeader*>(dataPtr + offset);
@@ -123,6 +123,7 @@ bool Serializer::load(nn::Module& module, const std::string& path) {
 
     std::string name(dataPtr + offset, header->nameLength);
     offset += header->nameLength;
+    fileKeys.insert(name);
 
     SizeVector shape;
     for (uint64_t j = 0; j < header->ndim; j++) {
@@ -133,7 +134,7 @@ bool Serializer::load(nn::Module& module, const std::string& path) {
 
     auto iter = name2tensor.find(name);
     if (iter == name2tensor.end()) {
-      LOGW("tensor not found: %s", name.c_str());
+      LOGW("Unexpected key: %s", name.c_str());
       continue;
     }
 
@@ -173,6 +174,13 @@ bool Serializer::load(nn::Module& module, const std::string& path) {
     const void* tensorDataPtr = dataPtr + header->dataOffset;
     Storage::copyOnDevice(tensor->dataPtr<>(), tensor->device(), tensorDataPtr, Device::cpu(),
                           static_cast<int64_t>(header->dataSize));
+  }
+
+  // check missing keys
+  for (const auto& [name, tensor] : name2tensor) {
+    if (!fileKeys.count(name)) {
+      LOGE("Missing key: %s", name.c_str());
+    }
   }
 
   MMapUtils::unmapFile(mappingResult);
