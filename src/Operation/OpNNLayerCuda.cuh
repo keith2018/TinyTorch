@@ -348,6 +348,81 @@ __global__ void kNormLarge(T* out, const T* input, const T* weight, const T* bia
   }
 }
 
+template <typename T>
+__global__ void kRopeComputeInvFreq(T* invFreqPtr, int64_t halfDim, float thetaBase) {
+  const auto idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < halfDim) {
+    invFreqPtr[idx] = 1.f / powf(thetaBase, static_cast<float>(idx << 1) / static_cast<float>(halfDim << 1));
+  }
+}
+
+template <typename T>
+__global__ void kRopeApplyScaling(T* invFreqPtr, int64_t halfDim, float originalContextLength, float lowFreqFactor,
+                                  float highFreqFactor, float scalingFactor) {
+  const auto idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < halfDim) {
+    auto waveLen = 2.f * static_cast<float>(M_PI) / invFreqPtr[idx];
+    auto lowWaveLen = originalContextLength / lowFreqFactor;
+    auto highWaveLen = originalContextLength / highFreqFactor;
+
+    if (waveLen > lowWaveLen) {
+      invFreqPtr[idx] /= scalingFactor;
+    } else if (waveLen < highWaveLen) {
+      // do nothing
+    } else {
+      auto smoothFactor = (originalContextLength / waveLen - lowFreqFactor) / (highFreqFactor - lowFreqFactor);
+      auto scaled = invFreqPtr[idx] / scalingFactor;
+      invFreqPtr[idx] = (1.f - smoothFactor) * scaled + smoothFactor * invFreqPtr[idx];
+    }
+  }
+}
+
+template <typename T>
+__global__ void kRopePrecomputeCosSin(const T* invFreqPtr, T* cosPtr, T* sinPtr, int64_t contextLength,
+                                      int64_t headDim) {
+  const int64_t pos = blockIdx.x;
+  if (pos < contextLength) {
+    auto halfDim = headDim >> 1;
+    for (auto i = threadIdx.x; i < halfDim; i += blockDim.x) {
+      float angle = static_cast<float>(pos) * invFreqPtr[i];
+      int64_t offset1 = pos * headDim + i;
+      int64_t offset2 = pos * headDim + halfDim + i;
+
+      float cosVal = cosf(angle);
+      float sinVal = sinf(angle);
+
+      cosPtr[offset1] = cosVal;
+      sinPtr[offset1] = sinVal;
+      cosPtr[offset2] = cosVal;
+      sinPtr[offset2] = sinVal;
+    }
+  }
+}
+
+template <typename T>
+__global__ void kRopeApply(T* out, const T* input, const T* cos, const T* sin, int numHead, int seqLen, int headDim) {
+  auto t = blockIdx.x;   // sequence pos
+  auto h = blockIdx.y;   // head id
+  auto b = blockIdx.z;   // batch id
+  auto i = threadIdx.x;  // dim idx
+
+  auto halfDim = headDim >> 1;
+  if (i >= halfDim) {
+    return;
+  }
+  auto base = ((b * numHead + h) * seqLen + t) * headDim;
+  const T* xPtr = input + base;
+  T* yPtr = out + base;
+  const T* cosRow = cos + t * headDim;
+  const T* sinRow = sin + t * headDim;
+  T x1 = xPtr[i];
+  T x2 = xPtr[halfDim + i];
+  T c = cosRow[i];
+  T s = sinRow[i];
+  yPtr[i] = x1 * c - x2 * s;
+  yPtr[halfDim + i] = x2 * c + x1 * s;
+}
+
 template <typename T, SoftmaxType type>
 void softmaxForwardCudaImpl(Tensor& out, const Tensor& self, int64_t dim) {
   ASSERT(out.shape() == self.shape());
@@ -519,6 +594,71 @@ Tensor layerNormOpCudaImpl(const Tensor& self, IntArrayView normalizedShape, con
 template <typename T>
 Tensor rmsNormOpCudaImpl(const Tensor& self, IntArrayView normalizedShape, const Tensor& weight, float eps) {
   return normOpCudaImplDetail<T, NormType::RMSNorm>(self, normalizedShape, weight, {}, eps);
+}
+
+template <typename T>
+TensorPair ropeInitOpCudaImpl(int64_t headDim, int64_t contextLength, float thetaBase,
+                              std::optional<RopeScalingConfig> scaling, Options options) {
+  ASSERT(!options.requiresGrad_);
+  ASSERT(options.device_.type == DeviceType::CUDA);
+  ASSERT(options.dtype_ == DType::Float32);
+
+  ASSERT(headDim % 2 == 0);
+  int64_t halfDim = headDim >> 1;
+
+  // inverse frequency
+  Tensor invFreq({halfDim}, options);
+  auto* invFreqPtr = invFreq.dataPtr<T>();
+
+  auto params = cuda::getKernelLaunchParams(options.device_.index, halfDim);
+  CUDA_LAUNCH_KERNEL(kRopeComputeInvFreq<T>, params, invFreqPtr, halfDim, thetaBase);
+
+  // apply scaling if needed
+  if (scaling.has_value()) {
+    CUDA_LAUNCH_KERNEL(kRopeApplyScaling<T>, params, invFreqPtr, halfDim,
+                       static_cast<float>(scaling->originalContextLength), scaling->lowFreqFactor,
+                       scaling->highFreqFactor, scaling->factor);
+  }
+
+  // precompute cos/sin
+  Tensor cos({contextLength, headDim}, options);
+  Tensor sin({contextLength, headDim}, options);
+  auto* cosPtr = cos.dataPtr<T>();
+  auto* sinPtr = sin.dataPtr<T>();
+
+  auto blockSize = cuda::getKernelBlockSize(options.device_.index);
+  auto stream = cuda::getCurrentCUDAStream(options.device_.index).stream;
+  kRopePrecomputeCosSin<T><<<contextLength, blockSize, 0, stream>>>(invFreqPtr, cosPtr, sinPtr, contextLength, headDim);
+  CUDA_KERNEL_CHECK();
+  return {cos, sin};
+}
+
+template <typename T>
+Tensor ropeApplyOpCudaImpl(const Tensor& input, const TensorPair& rope) {
+  const auto& shape = input.shape();  // [batch, numHead, seqLen, headDim]
+  ASSERT(shape.size() == 4);
+
+  int64_t batch = shape[0];
+  int64_t numHead = shape[1];
+  int64_t seqLen = shape[2];
+  int64_t headDim = shape[3];
+
+  ASSERT(headDim % 2 == 0);
+  int64_t halfDim = headDim >> 1;
+
+  const auto* inputPtr = input.dataPtr<T>();
+  const auto* cosPtr = rope.first.dataPtr<T>();
+  const auto* sinPtr = rope.second.dataPtr<T>();
+
+  Tensor out(shape, input.options().noGrad());
+  auto* outPtr = out.dataPtr<T>();
+
+  dim3 gridSize(seqLen, numHead, batch);
+  dim3 blockSize = halfDim;
+  auto stream = cuda::getCurrentCUDAStream(input.device().index).stream;
+  kRopeApply<T><<<gridSize, blockSize, 0, stream>>>(outPtr, inputPtr, cosPtr, sinPtr, numHead, seqLen, headDim);
+  CUDA_KERNEL_CHECK();
+  return out;
 }
 
 }  // namespace tinytorch::op

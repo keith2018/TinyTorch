@@ -48,6 +48,9 @@ template <typename Tag, typename Fn>
 Fn OpRegistry<Tag, Fn>::table[NumDispatchKeys] = {nullptr};
 
 template <typename T>
+constexpr bool isOptionValue = std::is_same_v<std::decay_t<T>, Options>;
+
+template <typename T>
 constexpr bool isTensorValue = std::is_same_v<std::decay_t<T>, Tensor>;
 
 template <typename T>
@@ -55,7 +58,9 @@ constexpr bool isTensorArrayValue = std::is_same_v<std::decay_t<T>, ArrayView<Te
 
 template <typename First, typename... Rest>
 DispatchKey getDispatchKeyFromArgs(First&& first, Rest&&... rest) {
-  if constexpr (isTensorValue<First>) {
+  if constexpr (isOptionValue<First>) {
+    return {first.device_.type, first.dtype_};
+  } else if constexpr (isTensorValue<First>) {
     return {first.device().type, first.dtype()};
   } else if constexpr (isTensorArrayValue<std::decay_t<First>>) {
     ASSERT(!first.empty());
