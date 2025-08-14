@@ -57,12 +57,6 @@ class FuncTranspose : public Function<FuncTranspose> {
   static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
 };
 
-class FuncTranspose2D : public Function<FuncTranspose2D> {
- public:
-  static Tensor forward(AutogradContext* ctx, const Tensor& self) { return op::transpose2d(self); }
-  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
-};
-
 class FuncSplit : public Function<FuncSplit> {
  public:
   static std::vector<Tensor> forward(AutogradContext* ctx, const Tensor& self, int64_t splitSize, int64_t dim) {
@@ -178,7 +172,6 @@ inline Tensor unsqueeze(const Tensor& self, int64_t dim) { return FuncUnsqueeze:
 inline Tensor transpose(const Tensor& self, int64_t dim0, int64_t dim1) {
   return FuncTranspose::apply(self, dim0, dim1);
 }
-inline Tensor transpose2d(const Tensor& self) { return FuncTranspose2D::apply(self); }
 inline std::vector<Tensor> split(const Tensor& self, int64_t splitSize, int64_t dim = 0) {
   return FuncSplit::apply(self, splitSize, dim);
 }

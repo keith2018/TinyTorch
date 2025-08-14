@@ -47,6 +47,12 @@ Tensor permuteAllOpCpuImpl(const Tensor& self) {
 }
 
 template <typename T>
+Tensor transpose2dOpCpuImpl(const Tensor& self) {
+  ASSERT(self.dim() == 2);
+  return permuteOpCpuImpl<T>(self, {1, 0});
+}
+
+template <typename T>
 Tensor transposeOpCpuImpl(const Tensor& self, int64_t dim0, int64_t dim1) {
   if (dim0 < 0) {
     dim0 += self.dim();
@@ -60,17 +66,19 @@ Tensor transposeOpCpuImpl(const Tensor& self, int64_t dim0, int64_t dim1) {
     return {};
   }
 
+  if (dim0 == dim1) {
+    return self.clone();
+  }
+
+  if (self.dim() == 2) {
+    return transpose2dOpCpuImpl<T>(self);
+  }
+
   SizeVector dims(self.dim());
   std::iota(dims.begin(), dims.end(), 0);
   dims[dim0] = dim1;
   dims[dim1] = dim0;
   return permuteOpCpuImpl<T>(self, dims);
-}
-
-template <typename T>
-Tensor transpose2dOpCpuImpl(const Tensor& self) {
-  ASSERT(self.dim() == 2);
-  return permuteOpCpuImpl<T>(self, {1, 0});
 }
 
 inline void getSubIndices(int64_t* subIndices, const Tensor& t, ArrayView<Tensor> indices, int64_t idx) {
