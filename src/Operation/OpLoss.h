@@ -6,8 +6,17 @@
 
 #pragma once
 
-#include "Loss.h"
 #include "Tensor/Dispatch.h"
+
+namespace tinytorch {
+
+enum class LossReduction : int8_t {
+  NONE = 0,
+  MEAN = 1,
+  SUM = 2,
+};
+
+}  // namespace tinytorch
 
 namespace tinytorch::op {
 
