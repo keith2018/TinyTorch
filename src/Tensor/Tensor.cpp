@@ -337,7 +337,7 @@ void Tensor::squeeze_(int64_t dim) { inplaceSet(function::squeeze(*this, dim)); 
 void Tensor::squeeze_(IntArrayView dims) { inplaceSet(function::squeeze(*this, dims)); }
 void Tensor::unsqueeze_(int64_t dim) { inplaceSet(function::unsqueeze(*this, dim)); }
 void Tensor::transpose_(int64_t dim0, int64_t dim1) { inplaceSet(function::transpose(*this, dim0, dim1)); }
-void Tensor::t_() { inplaceSet(function::transpose2d(*this)); }
+void Tensor::t_() { inplaceSet(function::transpose(*this, 0, 1)); }
 
 Tensor Tensor::reshape(const IntArrayView shape) const { return function::reshape(*this, shape); }
 Tensor Tensor::view(const IntArrayView shape) const { return function::view(*this, shape); }
@@ -349,6 +349,6 @@ Tensor Tensor::squeeze(int64_t dim) const { return function::squeeze(*this, dim)
 Tensor Tensor::squeeze(IntArrayView dims) const { return function::squeeze(*this, dims); }
 Tensor Tensor::unsqueeze(int64_t dim) const { return function::unsqueeze(*this, dim); }
 Tensor Tensor::transpose(int64_t dim0, int64_t dim1) const { return function::transpose(*this, dim0, dim1); }
-Tensor Tensor::t() const { return function::transpose2d(*this); }
+Tensor Tensor::t() const { return function::transpose(*this, 0, 1); }
 
 }  // namespace tinytorch

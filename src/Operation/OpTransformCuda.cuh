@@ -63,7 +63,7 @@ __global__ void kPermute(const cuda::TensorCudaCtx ret, const cuda::TensorCudaCt
 }
 
 template <typename T>
-__global__ void kTranspose(T* out, const T* in, const int64_t width, const int64_t height) {
+__global__ void kTranspose2D(T* out, const T* in, const int64_t width, const int64_t height) {
   __shared__ T tile[TRANSPOSE_TILE_DIM][TRANSPOSE_TILE_DIM + 1];  // +1 to avoid bank conflicts
 
   auto x = blockIdx.x * TRANSPOSE_TILE_DIM + threadIdx.x;
@@ -79,6 +79,36 @@ __global__ void kTranspose(T* out, const T* in, const int64_t width, const int64
 
   if (x < height && y < width) {
     out[y * height + x] = tile[threadIdx.x][threadIdx.y];
+  }
+}
+
+template <typename T>
+__global__ void kTransposeND(T* out, const T* in, int64_t ndim, int64_t dim0, int64_t dim1, int64_t n,
+                             const DimArray<int64_t> outStrides, const DimArray<int64_t> inStrides) {
+  const int64_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (idx < n) {
+    int64_t inIdx = 0;
+
+    int64_t coords[MAX_TENSOR_DIM];
+    int64_t tmpIdx = idx;
+
+#pragma unroll
+    for (int d = 0; d < ndim; d++) {
+      coords[d] = tmpIdx / outStrides.data[d];
+      tmpIdx %= outStrides.data[d];
+    }
+
+    int64_t tmp = coords[dim0];
+    coords[dim0] = coords[dim1];
+    coords[dim1] = tmp;
+
+#pragma unroll
+    for (int d = 0; d < ndim; d++) {
+      inIdx += coords[d] * inStrides.data[d];
+    }
+
+    out[idx] = in[inIdx];
   }
 }
 
@@ -331,7 +361,7 @@ void cudaTranspose2d(T* out, const T* in, int64_t width, int64_t height, const D
                 (height + TRANSPOSE_TILE_DIM - 1) / TRANSPOSE_TILE_DIM);
 
   const auto stream = cuda::getCurrentCUDAStream(device.index).stream;
-  kTranspose<<<gridSize, blockSize, 0, stream>>>(out, in, width, height);
+  kTranspose2D<<<gridSize, blockSize, 0, stream>>>(out, in, width, height);
   CUDA_KERNEL_CHECK();
 }
 
@@ -364,6 +394,16 @@ Tensor permuteAllOpCudaImpl(const Tensor& self) {
 }
 
 template <typename T>
+Tensor transpose2dOpCudaImpl(const Tensor& self) {
+  ASSERT(self.dim() == 2);
+
+  SizeVector retShape = {self.shape(1), self.shape(0)};
+  auto ret = Tensor::empty(retShape, self.options().noGrad());
+  cudaTranspose2d(ret.dataPtr<T>(), self.dataPtr<T>(), retShape[0], retShape[1], self.device());
+  return ret;
+}
+
+template <typename T>
 Tensor transposeOpCudaImpl(const Tensor& self, int64_t dim0, int64_t dim1) {
   if (dim0 < 0) {
     dim0 += self.dim();
@@ -377,20 +417,32 @@ Tensor transposeOpCudaImpl(const Tensor& self, int64_t dim0, int64_t dim1) {
     return {};
   }
 
-  SizeVector dims(self.dim());
-  std::iota(dims.begin(), dims.end(), 0);
-  dims[dim0] = dim1;
-  dims[dim1] = dim0;
-  return permuteOpCudaImpl<T>(self, dims);
-}
+  if (dim0 == dim1) {
+    return self.clone();
+  }
 
-template <typename T>
-Tensor transpose2dOpCudaImpl(const Tensor& self) {
-  ASSERT(self.dim() == 2);
+  if (self.dim() == 2) {
+    return transpose2dOpCudaImpl<T>(self);
+  }
 
-  SizeVector retShape = {self.shape(1), self.shape(0)};
+  SizeVector retShape(self.shape());
+  std::swap(retShape[dim0], retShape[dim1]);
   auto ret = Tensor::empty(retShape, self.options().noGrad());
-  cudaTranspose2d(ret.dataPtr<T>(), self.dataPtr<T>(), retShape[0], retShape[1], self.device());
+
+  const auto* selfPtr = self.dataPtr<T>();
+  auto* retPtr = ret.dataPtr<T>();
+
+  DimArray<int64_t> inStrides{};
+  DimArray<int64_t> outStrides{};
+
+  for (auto i = 0; i < self.dim(); i++) {
+    inStrides.data[i] = self.stride(i);
+    outStrides.data[i] = ret.stride(i);
+  }
+
+  auto params = cuda::getKernelLaunchParams(self.device().index, self.numel());
+  CUDA_LAUNCH_KERNEL(kTransposeND<T>, params, retPtr, selfPtr, self.dim(), dim0, dim1, self.numel(), outStrides,
+                     inStrides);
   return ret;
 }
 
