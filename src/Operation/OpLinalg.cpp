@@ -35,7 +35,7 @@ SizeVector broadcastShape(const IntArrayView t0, const IntArrayView t1, int64_t 
 }
 
 template <typename T>
-Tensor matmulOpImplDetail(const Tensor &a, const Tensor &b) {
+Tensor matmulOpImplDetail(const Tensor &a, const Tensor &b, bool transA = false, bool transB = false) {
   if (a.dim() == 0 || b.dim() == 0) {
     ASSERT(false && "matmul error: invalid shape");
     return {};
@@ -45,17 +45,23 @@ Tensor matmulOpImplDetail(const Tensor &a, const Tensor &b) {
   SizeVector shapeB(b.shape());
   bool prependA = false;
   bool appendB = false;
+
   if (shapeA.size() == 1) {
     shapeA.insert(shapeA.begin(), 1);
     prependA = true;
+    transA = false;
   }
   if (shapeB.size() == 1) {
     shapeB.insert(shapeB.end(), 1);
     appendB = true;
+    transB = false;
   }
 
   // check matrix multiplication compatible
-  if (shapeA.back() != shapeB[shapeB.size() - 2]) {
+  int64_t effectiveADim1 = transA ? shapeA[shapeA.size() - 2] : shapeA.back();
+  int64_t effectiveBDim0 = transB ? shapeB.back() : shapeB[shapeB.size() - 2];
+
+  if (effectiveADim1 != effectiveBDim0) {
     ASSERT(false && "matmul error: shape not aligned");
     return {};
   }
@@ -68,9 +74,9 @@ Tensor matmulOpImplDetail(const Tensor &a, const Tensor &b) {
   }
 
   auto retDimCnt = static_cast<int64_t>(retShape.size());
-  auto m = shapeA[shapeA.size() - 2];
-  auto k = shapeA.back();
-  auto n = shapeB.back();
+  auto m = transA ? shapeA.back() : shapeA[shapeA.size() - 2];
+  auto k = transA ? shapeA[shapeA.size() - 2] : shapeA.back();
+  auto n = transB ? shapeB[shapeB.size() - 2] : shapeB.back();
 
   retShape[retDimCnt - 2] = m;
   retShape[retDimCnt - 1] = n;
@@ -110,10 +116,10 @@ Tensor matmulOpImplDetail(const Tensor &a, const Tensor &b) {
         }
       }
 
-      gemm(retPtr + batch * m * n, selfPtr + aOffset, otherPtr + bOffset, m, k, n, false, false, a.device().index);
+      gemm(retPtr + batch * m * n, selfPtr + aOffset, otherPtr + bOffset, m, k, n, transA, transB, a.device().index);
     }
   } else {
-    gemm(retPtr, selfPtr, otherPtr, m, k, n, false, false, a.device().index);
+    gemm(retPtr, selfPtr, otherPtr, m, k, n, transA, transB, a.device().index);
     if (prependA) {
       retTensor.reshape_({n});
     }
@@ -155,7 +161,7 @@ Tensor matmulOpImpl(const Tensor &a, const Tensor &b, bool transA, bool transB) 
   }
 
   // slow path
-  return matmulOpImplDetail<T>(transA ? a.permute() : a, transB ? b.permute() : b);
+  return matmulOpImplDetail<T>(a, b, transA, transB);
 }
 
 void registerLinalgCommon() {
