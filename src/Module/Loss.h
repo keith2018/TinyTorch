@@ -6,18 +6,12 @@
 
 #pragma once
 
-#include "Module.h"
+#include "Operation/OpLoss.h"
+#include "Tensor/Tensor.h"
 
-namespace tinytorch {
+namespace tinytorch::nn {
 
-enum class LossReduction : int8_t {
-  NONE = 0,
-  MEAN = 1,
-  SUM = 2,
-};
-
-namespace nn {
-
+// TODO derived from Module
 class Loss {
  public:
   explicit Loss(const LossReduction reduction = LossReduction::MEAN) : reduction_(reduction) {}
@@ -48,5 +42,4 @@ class NLLLoss : public Loss {
 
 // TODO CrossEntropyLoss
 
-}  // namespace nn
-}  // namespace tinytorch
+}  // namespace tinytorch::nn

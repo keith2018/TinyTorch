@@ -8,7 +8,7 @@
 
 #include <string>
 
-#include "Module.h"
+#include "Modules.h"
 
 namespace tinytorch {
 

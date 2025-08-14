@@ -6,8 +6,6 @@
 
 #pragma once
 
-#include <optional>
-
 #include "Tensor.h"
 
 namespace tinytorch::nn {
@@ -170,174 +168,13 @@ class Sequential : public ModuleList {
  public:
   Sequential(std::initializer_list<std::shared_ptr<Module>> modules) : ModuleList(modules) {}
 
-  Tensor forward(const Tensor &input) override;
-};
-
-class Linear : public Module {
- public:
-  Linear(int64_t inFeatures, int64_t outFeatures, bool bias = true, Options options = {});
-
-  Tensor forward(const Tensor &input) override;
-  void resetParameters() override;
-
-  Tensor &weight() { return weight_; }
-  Tensor &bias() { return bias_; }
-
- protected:
-  std::vector<std::pair<std::string, TensorPtr>> namedParameters_() override;
-
- private:
-  bool useBias_;
-  Tensor weight_;
-  Tensor bias_;
-};
-
-class Flatten : public Module {
- public:
-  explicit Flatten(int64_t startDim = 0, int64_t endDim = -1) : startDim_(startDim), endDim_(endDim) {}
-
-  Tensor forward(const Tensor &input) override;
-
- private:
-  int64_t startDim_;
-  int64_t endDim_;
-};
-
-class Relu : public Module {
- public:
-  Tensor forward(const Tensor &input) override;
-};
-
-class Gelu : public Module {
- public:
-  Tensor forward(const Tensor &input) override;
-};
-
-class Silu : public Module {
- public:
-  Tensor forward(const Tensor &input) override;
-};
-
-class Dropout : public Module {
- public:
-  explicit Dropout(float p = 0.5f) : p_(p) {}
-
-  Tensor forward(const Tensor &input) override;
-
- private:
-  float p_;
-};
-
-class Softmax : public Module {
- public:
-  explicit Softmax(int64_t dim) : dim_(dim) {}
-
-  Tensor forward(const Tensor &input) override;
-
- private:
-  int64_t dim_;
-};
-
-class LogSoftmax : public Module {
- public:
-  explicit LogSoftmax(int64_t dim) : dim_(dim) {}
-
-  Tensor forward(const Tensor &input) override;
-
- private:
-  int64_t dim_;
-};
-
-class MaxPool2D : public Module {
- public:
-  explicit MaxPool2D(Dim2D kernel, std::optional<Dim2D> stride = std::nullopt, Dim2D padding = 0)
-      : kernel_(kernel), stride_(stride.has_value() ? stride.value() : kernel), padding_(padding) {}
-
-  Tensor forward(const Tensor &input) override;
-
- private:
-  Dim2D kernel_;
-  Dim2D stride_;
-  Dim2D padding_;
-};
-
-class Conv2D : public Module {
- public:
-  Conv2D(int64_t inFeatures, int64_t outFeatures, Dim2D kernel, Dim2D stride = 1, Dim2D padding = 0, bool bias = true,
-         Options options = {});
-
-  Tensor forward(const Tensor &input) override;
-  void resetParameters() override;
-
-  Tensor &weight() { return weight_; }
-  Tensor &bias() { return bias_; }
-
- protected:
-  std::vector<std::pair<std::string, TensorPtr>> namedParameters_() override;
-
- private:
-  Dim2D kernel_;
-  Dim2D stride_;
-  Dim2D padding_;
-  bool useBias_;
-
-  Tensor weight_;
-  Tensor bias_;
-};
-
-class Embedding : public Module {
- public:
-  Embedding(int64_t numEmbeddings, int64_t embeddingDim, Options options = {});
-
-  Tensor forward(const Tensor &input) override;
-  void resetParameters() override;
-
-  Tensor &weight() { return weight_; }
-
- protected:
-  std::vector<std::pair<std::string, TensorPtr>> namedParameters_() override;
-
- private:
-  Tensor weight_;
-};
-
-class LayerNorm : public Module {
- public:
-  explicit LayerNorm(IntArrayView normalizedShape, float eps = 1e-5, bool bias = true, Options options = {});
-
-  Tensor forward(const Tensor &input) override;
-  void resetParameters() override;
-
-  Tensor &weight() { return weight_; }
-  Tensor &bias() { return bias_; }
-
- protected:
-  std::vector<std::pair<std::string, TensorPtr>> namedParameters_() override;
-
- private:
-  SizeVector normalizedShape_;
-  float eps_;
-  bool useBias_;
-  Tensor weight_;
-  Tensor bias_;
-};
-
-class RMSNorm : public Module {
- public:
-  explicit RMSNorm(IntArrayView normalizedShape, float eps = 1e-8, Options options = {});
-
-  Tensor forward(const Tensor &input) override;
-  void resetParameters() override;
-
-  Tensor &weight() { return weight_; }
-
- protected:
-  std::vector<std::pair<std::string, TensorPtr>> namedParameters_() override;
-
- private:
-  SizeVector normalizedShape_;
-  float eps_;
-  Tensor weight_;
+  Tensor forward(const Tensor &input) override {
+    Tensor ret = {input};
+    for (auto &module : modules_) {
+      ret = (*module)(ret);
+    }
+    return ret;
+  }
 };
 
 }  // namespace tinytorch::nn
