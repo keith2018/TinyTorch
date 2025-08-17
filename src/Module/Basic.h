@@ -154,6 +154,9 @@ class RoPE : public Module {
   Tensor &cos() { return rope_.first; }
   Tensor &sin() { return rope_.second; }
 
+protected:
+  std::vector<std::pair<std::string, TensorPtr>> namedStates_() override;
+
  private:
   int64_t headDim_;
   int64_t contextLength_;

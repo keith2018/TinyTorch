@@ -329,10 +329,10 @@ Tensor ropeApplyOpCpuImpl(const Tensor& input, const TensorPair& rope) {
     for (int64_t h = 0; h < numHead; h++) {
       for (int64_t t = 0; t < seqLen; t++) {
         int64_t base = ((b * numHead + h) * seqLen + t) * headDim;
-        const float* xPtr = inputPtr + base;
-        float* yPtr = outPtr + base;
-        const float* cosRow = cosPtr + t * headDim;
-        const float* sinRow = sinPtr + t * headDim;
+        const T* xPtr = inputPtr + base;
+        T* yPtr = outPtr + base;
+        const T* cosRow = cosPtr + t * headDim;
+        const T* sinRow = sinPtr + t * headDim;
         for (int64_t i = 0; i < halfDim; i++) {
           float x1 = xPtr[i];
           float x2 = xPtr[halfDim + i];

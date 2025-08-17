@@ -15,6 +15,9 @@ struct RopeScalingConfig {
   float highFreqFactor;
   float lowFreqFactor;
   int64_t originalContextLength;
+
+  RopeScalingConfig(float f, float hf, float lf, int64_t len)
+      : factor(f), highFreqFactor(hf), lowFreqFactor(lf), originalContextLength(len) {}
 };
 
 }  // namespace tinytorch
