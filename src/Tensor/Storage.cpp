@@ -62,8 +62,8 @@ void Storage::copyOnDevice(void* dst, const Device& dstDevice, const void* src, 
 
   // CUDA -> CPU
   if (dstDevice.isCpu() && srcDevice.isCuda()) {
-    cuda::CudaDeviceGuard guard(dstDevice.index);
-    auto stream = cuda::getCurrentCUDAStream(dstDevice.index);
+    cuda::CudaDeviceGuard guard(srcDevice.index);
+    auto stream = cuda::getCurrentCUDAStream(srcDevice.index);
     CUDA_CHECK(cudaMemcpyAsync(dst, src, nbytes, cudaMemcpyDeviceToHost, stream.stream));
     cuda::streamSynchronize(stream);
     return;
