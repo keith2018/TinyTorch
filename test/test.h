@@ -8,6 +8,7 @@
 
 #include <vector>
 
+#include "Utils/MathUtils.h"
 #include "gmock/gmock-matchers.h"
 #include "gtest/gtest.h"
 
