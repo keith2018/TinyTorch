@@ -77,7 +77,7 @@ bool Serializer::save(nn::Module& module, const std::string& path) {
   return true;
 }
 
-bool Serializer::load(nn::Module& module, const std::string& path) {
+bool Serializer::load(nn::Module& module, const std::string& path, bool strict) {
   MMappingResult mappingResult = MMapUtils::mapFileForRead(path);
   if (!mappingResult.success) {
     LOGE("Error mapFileForRead: %s", path.c_str());
@@ -135,6 +135,9 @@ bool Serializer::load(nn::Module& module, const std::string& path) {
     auto iter = name2tensor.find(name);
     if (iter == name2tensor.end()) {
       LOGW("Unexpected key: %s", name.c_str());
+      if (strict) {
+        success = false;
+      }
       continue;
     }
 
@@ -144,7 +147,7 @@ bool Serializer::load(nn::Module& module, const std::string& path) {
     if (shape != tensor->shape()) {
       LOGE("shape not equal for tensor: %s", name.c_str());
       success = false;
-      break;
+      continue;
     }
 
     // check dtype
@@ -152,7 +155,7 @@ bool Serializer::load(nn::Module& module, const std::string& path) {
     if (dtype != tensor->dtype()) {
       LOGE("dtype not equal for tensor: %s", name.c_str());
       success = false;
-      break;
+      continue;
     }
 
     // check dataSize
@@ -160,14 +163,14 @@ bool Serializer::load(nn::Module& module, const std::string& path) {
     if (header->dataSize != expectedSize) {
       LOGE("size not equal for tensor: %s", name.c_str());
       success = false;
-      break;
+      continue;
     }
 
     // check dataOffset
     if (header->dataOffset + header->dataSize > mappingResult.fileSize) {
       LOGE("Tensor data out of file range: %s", name.c_str());
       success = false;
-      break;
+      continue;
     }
 
     // copy data
@@ -180,6 +183,9 @@ bool Serializer::load(nn::Module& module, const std::string& path) {
   for (const auto& [name, tensor] : name2tensor) {
     if (!fileKeys.count(name)) {
       LOGE("Missing key: %s", name.c_str());
+      if (strict) {
+        success = false;
+      }
     }
   }
 
