@@ -69,18 +69,6 @@ void registerTransformCpu() {
   REGISTER_OP_IMPL_DTYPE_TPL(tril, CPU, trilOpCpuImpl);
   REGISTER_OP_IMPL_DTYPE_TPL(triu, CPU, triuOpCpuImpl);
 
-  // topk
-  REGISTER_OP_IMPL_DTYPE_TPL(topk, CPU, topkOpCpuImpl);
-
-  // multinomial
-  REGISTER_OP_IMPL_DTYPE_TPL(multinomial, CPU, multinomialOpCpuImpl);
-
-  // sort
-  REGISTER_OP_IMPL_DTYPE_TPL(sort, CPU, sortOpCpuImpl)
-
-  // cumsum
-  REGISTER_OP_IMPL_DTYPE_TPL(cumsum, CPU, cumsumOpCpuImpl)
-
   // gather
   REGISTER_OP_IMPL_DTYPE_TPL(gather, CPU, gatherOpCpuImpl)
 

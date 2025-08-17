@@ -72,14 +72,6 @@ using VStackOpFn = HStackOpFn;
 
 using NarrowOpFn = Tensor (*)(const Tensor& self, int64_t dim, int64_t start, int64_t length);
 
-using TopkOpFn = TensorPair (*)(const Tensor& self, int64_t k, int64_t dim, bool largest, bool sorted);
-
-using MultinomialOpFn = Tensor (*)(const Tensor& self, int64_t numSamples, bool replacement);
-
-using SortOpFn = TensorPair (*)(const Tensor& self, int64_t dim, bool descending);
-
-using CumsumOpFn = Tensor (*)(const Tensor& self, int64_t dim);
-
 using GatherOpFn = Tensor (*)(const Tensor& self, int64_t dim, const Tensor& index);
 
 using ScatterOpFn = Tensor (*)(const Tensor& self, int64_t dim, const Tensor& index, const Tensor& src);
@@ -142,18 +134,6 @@ DEFINE_OP(hstack, HStackOpFn)
 
 // narrow
 DEFINE_OP(narrow, NarrowOpFn)
-
-// topk
-DEFINE_OP(topk, TopkOpFn)
-
-// multinomial
-DEFINE_OP(multinomial, MultinomialOpFn)
-
-// sort
-DEFINE_OP(sort, SortOpFn)
-
-// cumsum
-DEFINE_OP(cumsum, CumsumOpFn)
 
 // gather
 DEFINE_OP(gather, GatherOpFn)

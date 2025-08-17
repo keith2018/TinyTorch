@@ -12,4 +12,5 @@
 #include "Operation/OpLoss.h"
 #include "Operation/OpNNLayer.h"
 #include "Operation/OpReduce.h"
+#include "Operation/OpSampling.h"
 #include "Operation/OpTransform.h"

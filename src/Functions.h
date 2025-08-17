@@ -12,4 +12,5 @@
 #include "Function/FuncLoss.h"
 #include "Function/FuncNNLayer.h"
 #include "Function/FuncReduce.h"
+#include "Function/FuncSampling.h"
 #include "Function/FuncTransform.h"

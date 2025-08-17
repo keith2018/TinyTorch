@@ -77,18 +77,6 @@ void registerTransformCuda() {
   REGISTER_OP_IMPL_DTYPE_TPL(tril, CUDA, trilOpCudaImpl);
   REGISTER_OP_IMPL_DTYPE_TPL(triu, CUDA, triuOpCudaImpl);
 
-  // topk
-  REGISTER_OP_IMPL_DTYPE_TPL(topk, CUDA, topkOpCudaImpl);
-
-  // multinomial
-  REGISTER_OP_IMPL_DTYPE_TPL(multinomial, CUDA, multinomialOpCudaImpl);
-
-  // sort
-  REGISTER_OP_IMPL_DTYPE_TPL(sort, CUDA, sortOpCudaImpl)
-
-  // cumsum
-  REGISTER_OP_IMPL_DTYPE_TPL(cumsum, CUDA, cumsumOpCudaImpl)
-
   // gather
   REGISTER_OP_IMPL_DTYPE_TPL(gather, CUDA, gatherOpCudaImpl)
 
