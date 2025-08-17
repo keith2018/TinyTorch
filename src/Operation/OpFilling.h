@@ -24,15 +24,19 @@ using FillOpRandUniformFn = void (*)(Tensor& self, float min, float max);
 using FillOpRandNormalFn = void (*)(Tensor& self, float min, float stddev);
 using FillOpRandBernoulliFn = void (*)(Tensor& self, float p);
 
+// fill
 DEFINE_OP(fill, FillOpFn)
 DEFINE_OP(fillOffset, FillOpOffsetFn)
 
+// fillMasked
 DEFINE_OP(fillMasked, FillOpMaskedFn)
 DEFINE_OP(fillMaskedOut, FillOpMaskedOutFn)
 DEFINE_OP(fillMaskedInplace, FillOpMaskedInplaceFn)
 
+// fillLinSpace
 DEFINE_OP(fillLinSpace, FillOpLinSpaceFn)
 
+// fillRand
 DEFINE_OP(fillRandUniform, FillOpRandUniformFn)
 DEFINE_OP(fillRandNormal, FillOpRandNormalFn)
 DEFINE_OP(fillRandBernoulli, FillOpRandBernoulliFn)
