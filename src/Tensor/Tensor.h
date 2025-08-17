@@ -107,6 +107,7 @@ class Tensor {
 
   const Options& options() const { return impl_->options(); }
   IntArrayView shape() const { return impl_->shape(); }
+  IntArrayView sizes() const { return impl_->shape(); }
   IntArrayView strides() const { return impl_->strides(); }
   int64_t shape(int64_t d) const { return impl_->shape(d); }
   int64_t size(int64_t d) const { return impl_->shape(d); }
@@ -150,8 +151,10 @@ class Tensor {
   void fillNormal_(float mean = 0.f, float stddev = 1.f);
   void fillBernoulli_(float p);
 
-  // set
+  // index
   void scatter_(int64_t dim, const Tensor& index, const Tensor& src);
+  Tensor tril(int64_t diagonal = 0) const;
+  Tensor triu(int64_t diagonal = 0) const;
 
   // math
   Tensor operator+(const Tensor& other) const;

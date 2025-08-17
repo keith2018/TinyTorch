@@ -77,6 +77,12 @@ using GatherOpFn = Tensor (*)(const Tensor& self, int64_t dim, const Tensor& ind
 using ScatterOpFn = Tensor (*)(const Tensor& self, int64_t dim, const Tensor& index, const Tensor& src);
 using ScatterOpInplaceFn = void (*)(Tensor& self, int64_t dim, const Tensor& index, const Tensor& src);
 
+using ExpandOpFn = Tensor (*)(const Tensor& self, IntArrayView sizes);
+
+using IndexSelectOpFn = Tensor (*)(const Tensor& self, int64_t dim, const Tensor& index);
+
+using RepeatInterleaveOpFn = Tensor (*)(const Tensor& self, int64_t repeats, int64_t dim);
+
 // dtype cast
 DEFINE_OP(dtypeCast, CastOpFn)
 
@@ -141,6 +147,15 @@ DEFINE_OP(gather, GatherOpFn)
 // scatter
 DEFINE_OP(scatter, ScatterOpFn)
 DEFINE_OP(scatterInplace, ScatterOpInplaceFn)
+
+// expand
+DEFINE_OP(expand, ExpandOpFn)
+
+// indexSelect
+DEFINE_OP(indexSelect, IndexSelectOpFn)
+
+// repeatInterleave
+DEFINE_OP(repeatInterleave, RepeatInterleaveOpFn)
 
 void registerTransformCommon();
 STATIC_CALL(registerTransformCommon);

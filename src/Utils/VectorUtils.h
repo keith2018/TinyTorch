@@ -41,7 +41,8 @@ class SmallVector {
     size_ = init.size();
   }
 
-  explicit SmallVector(const std::vector<T>& init) : SmallVector() {
+  // NOLINTNEXTLINE(google-explicit-constructor)
+  SmallVector(const std::vector<T>& init) : SmallVector() {
     static_assert(!std::is_same_v<T, bool>,
                   "SmallVector<bool> cannot be constructed from a std::vector<bool> bitfield.");
     reserve(init.size());
@@ -49,7 +50,8 @@ class SmallVector {
     size_ = init.size();
   }
 
-  explicit SmallVector(const ArrayView<T>& view) : SmallVector() {
+  // NOLINTNEXTLINE(google-explicit-constructor)
+  SmallVector(const ArrayView<T>& view) : SmallVector() {
     reserve(view.size());
     std::uninitialized_copy(view.begin(), view.end(), data_);
     size_ = view.size();

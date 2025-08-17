@@ -75,6 +75,15 @@ void registerTransformCpu() {
   // scatter
   REGISTER_OP_IMPL_DTYPE_TPL(scatter, CPU, scatterOpCpuImpl)
   REGISTER_OP_IMPL_DTYPE_TPL(scatterInplace, CPU, scatterOpInplaceCpuImpl)
+
+  // expand
+  REGISTER_OP_IMPL_DTYPE_TPL(expand, CPU, expandOpCpuImpl)
+
+  // indexSelect
+  REGISTER_OP_IMPL_DTYPE_TPL(indexSelect, CPU, indexSelectOpCpuImpl)
+
+  // repeatInterleave
+  REGISTER_OP_IMPL_DTYPE_TPL(repeatInterleave, CPU, repeatInterleaveOpCpuImpl)
 }
 
 }  // namespace tinytorch::op

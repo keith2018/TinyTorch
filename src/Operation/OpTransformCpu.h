@@ -279,4 +279,150 @@ void scatterOpInplaceCpuImpl(Tensor& self, int64_t dim, const Tensor& index, con
   indexCoordForEach(self, dim, index, [&](int64_t i, int64_t offset) { selfPtr[offset] = srcPtr[i]; });
 }
 
+template <typename T>
+Tensor expandOpCpuImpl(const Tensor& self, IntArrayView sizes) {
+  auto inDim = self.dim();
+  auto outDim = static_cast<int64_t>(sizes.size());
+  ASSERT(outDim >= inDim);
+
+  SizeVector retShape(outDim, 1);
+  for (auto i = 0; i < outDim; i++) {
+    int64_t inputIdx = i - (outDim - inDim);
+    if (sizes[i] == -1) {
+      retShape[i] = (inputIdx >= 0 ? self.shape(inputIdx) : 1);
+    } else {
+      ASSERT(sizes[i] > 0);
+      retShape[i] = sizes[i];
+    }
+  }
+
+  auto ret = Tensor::empty(retShape, self.options().noGrad());
+  if (self.isScalar()) {
+    op::fillOffset(ret, self, 0, ret.numel());
+    return ret;
+  }
+
+  SizeVector inShape(outDim, 1);
+  SizeVector inStride(outDim, 0);
+  for (auto i = 0; i < inDim; i++) {
+    inShape[outDim - inDim + i] = self.shape(i);
+    inStride[outDim - inDim + i] = self.stride(i);
+  }
+
+  T* outPtr = ret.dataPtr<T>();
+  const T* selfPtr = self.dataPtr<T>();
+
+  SizeVector indices(outDim, 0);
+  for (int64_t outIdx = 0; outIdx < ret.numel(); outIdx++) {
+    int64_t inOffset = 0;
+    for (auto dim = 0; dim < outDim; dim++) {
+      int64_t srcIdx = (inShape[dim] == 1) ? 0 : indices[dim];
+      inOffset += srcIdx * inStride[dim];
+    }
+    outPtr[outIdx] = selfPtr[inOffset];
+
+    for (int64_t k = outDim - 1; k >= 0; k--) {
+      indices[k]++;
+      if (indices[k] < retShape[k]) break;
+      indices[k] = 0;
+    }
+  }
+  return ret;
+}
+
+template <typename T>
+Tensor indexSelectOpCpuImpl(const Tensor& self, int64_t dim, const Tensor& index) {
+  int64_t ndim = self.dim();
+  if (dim < 0) {
+    dim += ndim;
+  }
+  ASSERT(dim >= 0 && dim < ndim);
+  ASSERT(index.dim() == 1);
+  ASSERT(index.dtype() == DType::Int64);
+
+  SizeVector retShape = self.shape();
+  retShape[dim] = index.numel();
+  auto ret = Tensor::empty(retShape, self.options().noGrad());
+
+  if (index.numel() == 0) {
+    return ret;
+  }
+
+  const auto* selfPtr = self.dataPtr<T>();
+  auto* retPtr = ret.dataPtr<T>();
+  const auto* indexPtr = index.dataPtr<int64_t>();
+
+  SizeVector counter(ndim, 0);
+  for (int64_t i = 0; i < ret.numel(); i++) {
+    int64_t selfOffset = 0;
+    for (int64_t d = 0; d < ndim; d++) {
+      if (d == dim) {
+        selfOffset += indexPtr[counter[d]] * self.stride(d);
+      } else {
+        selfOffset += counter[d] * self.stride(d);
+      }
+    }
+
+    int64_t outOffset = 0;
+    for (int64_t d = 0; d < ndim; d++) {
+      outOffset += counter[d] * ret.stride(d);
+    }
+
+    retPtr[outOffset] = selfPtr[selfOffset];
+    for (int64_t d = ndim - 1; d >= 0; d--) {
+      counter[d]++;
+      if (counter[d] < (d == dim ? index.numel() : self.shape(d))) {
+        break;
+      }
+      counter[d] = 0;
+    }
+  }
+  return ret;
+}
+
+template <typename T>
+Tensor repeatInterleaveOpCpuImpl(const Tensor& self, int64_t repeats, int64_t dim) {
+  int64_t ndim = self.dim();
+  if (dim < 0) {
+    dim += ndim;
+  }
+  ASSERT(dim >= 0 && dim < ndim);
+  ASSERT(repeats > 0);
+
+  SizeVector retShape = self.shape();
+  retShape[dim] *= repeats;
+  auto ret = Tensor::empty(retShape, self.options().noGrad());
+
+  const auto* selfPtr = self.dataPtr<T>();
+  auto* retPtr = ret.dataPtr<T>();
+
+  SizeVector counter(ndim, 0);
+  for (int64_t i = 0; i < ret.numel(); i++) {
+    int64_t selfOffset = 0;
+    for (int64_t d = 0; d < ndim; d++) {
+      if (d == dim) {
+        selfOffset += (counter[d] / repeats) * self.stride(d);
+      } else {
+        selfOffset += counter[d] * self.stride(d);
+      }
+    }
+
+    int64_t outOffset = 0;
+    for (int64_t d = 0; d < ndim; d++) {
+      outOffset += counter[d] * ret.stride(d);
+    }
+
+    retPtr[outOffset] = selfPtr[selfOffset];
+
+    for (int64_t d = ndim - 1; d >= 0; d--) {
+      counter[d]++;
+      if (counter[d] < ret.shape(d)) {
+        break;
+      }
+      counter[d] = 0;
+    }
+  }
+  return ret;
+}
+
 }  // namespace tinytorch::op

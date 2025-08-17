@@ -255,6 +255,92 @@ __global__ void kGatherScatter(const cuda::TensorCudaCtx out, const cuda::Tensor
 }
 
 template <typename T>
+__global__ void kExpand(T* out, const T* in, int64_t n, int64_t ndim, const DimArray<int64_t> outStrides,
+                        const DimArray<int64_t> inShape, const DimArray<int64_t> inStrides) {
+  const int64_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (idx < n) {
+    int64_t inIdx = 0;
+    int64_t tmpIdx = idx;
+    int64_t coords[MAX_TENSOR_DIM];
+
+#pragma unroll
+    for (int d = 0; d < ndim; d++) {
+      coords[d] = tmpIdx / outStrides.data[d];
+      tmpIdx %= outStrides.data[d];
+    }
+
+#pragma unroll
+    for (int d = 0; d < ndim; d++) {
+      int64_t srcIdx = (inShape.data[d] == 1) ? 0 : coords[d];
+      inIdx += srcIdx * inStrides.data[d];
+    }
+
+    out[idx] = in[inIdx];
+  }
+}
+
+template <typename T>
+__global__ void kIndexSelect(T* out, const T* in, const int64_t* indices, int64_t n, int64_t ndim, int64_t indexDim,
+                             const DimArray<int64_t> inStrides, const DimArray<int64_t> outStrides) {
+  const int64_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (idx < n) {
+    int64_t tmpIdx = idx;
+    int64_t coords[MAX_TENSOR_DIM];
+
+#pragma unroll
+    for (int d = 0; d < ndim; d++) {
+      coords[d] = tmpIdx / outStrides.data[d];
+      tmpIdx %= outStrides.data[d];
+    }
+
+    int64_t inIdx = 0;
+
+#pragma unroll
+    for (int d = 0; d < ndim; d++) {
+      if (d == indexDim) {
+        inIdx += indices[coords[d]] * inStrides.data[d];
+      } else {
+        inIdx += coords[d] * inStrides.data[d];
+      }
+    }
+
+    out[idx] = in[inIdx];
+  }
+}
+
+template <typename T>
+__global__ void kRepeatInterleave(T* out, const T* in, int64_t n, int64_t ndim, int64_t dim, int64_t repeats,
+                                  const DimArray<int64_t> inStrides, const DimArray<int64_t> outStrides) {
+  const int64_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (idx < n) {
+    int64_t tmpIdx = idx;
+    int64_t coords[MAX_TENSOR_DIM];
+
+#pragma unroll
+    for (int d = 0; d < ndim; d++) {
+      coords[d] = tmpIdx / outStrides.data[d];
+      tmpIdx %= outStrides.data[d];
+    }
+
+    int64_t inIdx = 0;
+
+#pragma unroll
+    for (int d = 0; d < ndim; d++) {
+      if (d == dim) {
+        inIdx += (coords[d] / repeats) * inStrides.data[d];
+      } else {
+        inIdx += coords[d] * inStrides.data[d];
+      }
+    }
+
+    out[idx] = in[inIdx];
+  }
+}
+
+template <typename T>
 void cudaTranspose2d(T* out, const T* in, int64_t width, int64_t height, const Device& device) {
   dim3 blockSize(TRANSPOSE_TILE_DIM, TRANSPOSE_TILE_DIM);
   dim3 gridSize((width + TRANSPOSE_TILE_DIM - 1) / TRANSPOSE_TILE_DIM,
@@ -498,6 +584,119 @@ template <typename T>
 void scatterOpInplaceCudaImpl(Tensor& self, int64_t dim, const Tensor& index, const Tensor& src) {
   self.copyOnWrite();
   gatherScatterCudaImpl<T, OpCudaScatter>(self, dim, index, &src, self);
+}
+
+template <typename T>
+Tensor expandOpCudaImpl(const Tensor& self, IntArrayView sizes) {
+  auto inDim = self.dim();
+  auto outDim = static_cast<int64_t>(sizes.size());
+  ASSERT(outDim >= inDim);
+
+  SizeVector retShape(outDim, 1);
+  for (auto i = 0; i < outDim; i++) {
+    int64_t inputIdx = i - (outDim - inDim);
+    if (sizes[i] == -1) {
+      retShape[i] = (inputIdx >= 0 ? self.shape(inputIdx) : 1);
+    } else {
+      ASSERT(sizes[i] > 0);
+      retShape[i] = sizes[i];
+    }
+  }
+
+  auto ret = Tensor::empty(retShape, self.options().noGrad());
+  if (self.isScalar()) {
+    op::fillOffset(ret, self, 0, ret.numel());
+    return ret;
+  }
+
+  SizeVector inShape(outDim, 1);
+  SizeVector inStride(outDim, 0);
+  for (auto i = 0; i < inDim; i++) {
+    inShape[outDim - inDim + i] = self.shape(i);
+    inStride[outDim - inDim + i] = self.stride(i);
+  }
+
+  T* outPtr = ret.dataPtr<T>();
+  const T* selfPtr = self.dataPtr<T>();
+
+  DimArray<int64_t> outStrideArr{};
+  DimArray<int64_t> inShapeArr{};
+  DimArray<int64_t> inStrideArr{};
+
+  for (auto i = 0; i < outDim; i++) {
+    outStrideArr.data[i] = ret.stride(i);
+    inShapeArr.data[i] = inShape[i];
+    inStrideArr.data[i] = inStride[i];
+  }
+
+  auto params = cuda::getKernelLaunchParams(self.device().index, ret.numel());
+  CUDA_LAUNCH_KERNEL(kExpand<T>, params, outPtr, selfPtr, ret.numel(), outDim, outStrideArr, inShapeArr, inStrideArr);
+  return ret;
+}
+
+template <typename T>
+Tensor indexSelectOpCudaImpl(const Tensor& self, int64_t dim, const Tensor& index) {
+  int64_t ndim = self.dim();
+  if (dim < 0) {
+    dim += ndim;
+  }
+  ASSERT(dim >= 0 && dim < ndim);
+  ASSERT(index.dim() == 1);
+  ASSERT(index.dtype() == DType::Int64);
+
+  SizeVector retShape = self.shape();
+  retShape[dim] = index.numel();
+  auto ret = Tensor::empty(retShape, self.options().noGrad());
+
+  if (index.numel() == 0) {
+    return ret;
+  }
+
+  const auto* selfPtr = self.dataPtr<T>();
+  auto* retPtr = ret.dataPtr<T>();
+  const auto* indexPtr = index.dataPtr<int64_t>();
+
+  DimArray<int64_t> outStrides{};
+  DimArray<int64_t> inStrides{};
+
+  for (int64_t i = 0; i < ndim; i++) {
+    outStrides.data[i] = ret.stride(i);
+    inStrides.data[i] = self.stride(i);
+  }
+
+  auto params = cuda::getKernelLaunchParams(self.device().index, ret.numel());
+  CUDA_LAUNCH_KERNEL(kIndexSelect<T>, params, retPtr, selfPtr, indexPtr, ret.numel(), ndim, dim, inStrides, outStrides);
+  return ret;
+}
+
+template <typename T>
+Tensor repeatInterleaveOpCudaImpl(const Tensor& self, int64_t repeats, int64_t dim) {
+  int64_t ndim = self.dim();
+  if (dim < 0) {
+    dim += ndim;
+  }
+  ASSERT(dim >= 0 && dim < ndim);
+  ASSERT(repeats > 0);
+
+  SizeVector retShape = self.shape();
+  retShape[dim] *= repeats;
+  auto ret = Tensor::empty(retShape, self.options().noGrad());
+
+  const auto* selfPtr = self.dataPtr<T>();
+  auto* retPtr = ret.dataPtr<T>();
+
+  DimArray<int64_t> inStrides{};
+  DimArray<int64_t> outStrides{};
+
+  for (int64_t i = 0; i < ndim; i++) {
+    inStrides.data[i] = self.stride(i);
+    outStrides.data[i] = ret.stride(i);
+  }
+
+  auto params = cuda::getKernelLaunchParams(self.device().index, ret.numel());
+  CUDA_LAUNCH_KERNEL(kRepeatInterleave<T>, params, retPtr, selfPtr, ret.numel(), ndim, dim, repeats, inStrides,
+                     outStrides);
+  return ret;
 }
 
 }  // namespace tinytorch::op

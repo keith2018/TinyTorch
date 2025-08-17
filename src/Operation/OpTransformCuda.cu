@@ -83,6 +83,15 @@ void registerTransformCuda() {
   // scatter
   REGISTER_OP_IMPL_DTYPE_TPL(scatter, CUDA, scatterOpCudaImpl)
   REGISTER_OP_IMPL_DTYPE_TPL(scatterInplace, CUDA, scatterOpInplaceCudaImpl)
+
+  // expand
+  REGISTER_OP_IMPL_DTYPE_TPL(expand, CUDA, expandOpCudaImpl)
+
+  // indexSelect
+  REGISTER_OP_IMPL_DTYPE_TPL(indexSelect, CUDA, indexSelectOpCudaImpl)
+
+  // repeatInterleave
+  REGISTER_OP_IMPL_DTYPE_TPL(repeatInterleave, CUDA, repeatInterleaveOpCudaImpl)
 }
 
 }  // namespace tinytorch::op

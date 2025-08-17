@@ -57,6 +57,22 @@ class FuncTranspose : public Function<FuncTranspose> {
   static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
 };
 
+class FuncTril : public Function<FuncTril> {
+public:
+  static Tensor forward(AutogradContext* ctx, const Tensor& self, int64_t diagonal) {
+    return op::tril(self, diagonal);
+  }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
+};
+
+class FuncTriu : public Function<FuncTriu> {
+public:
+  static Tensor forward(AutogradContext* ctx, const Tensor& self, int64_t diagonal) {
+    return op::triu(self, diagonal);
+  }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
+};
+
 class FuncSplit : public Function<FuncSplit> {
  public:
   static std::vector<Tensor> forward(AutogradContext* ctx, const Tensor& self, int64_t splitSize, int64_t dim) {
@@ -125,6 +141,30 @@ class FuncScatterInplace : public Function<FuncScatterInplace> {
   static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
 };
 
+class FuncExpand : public Function<FuncExpand> {
+ public:
+  static Tensor forward(AutogradContext* ctx, const Tensor& self, IntArrayView sizes) {
+    return op::expand(self, sizes);
+  }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
+};
+
+class FuncIndexSelect : public Function<FuncIndexSelect> {
+ public:
+  static Tensor forward(AutogradContext* ctx, const Tensor& self, int64_t dim, const Tensor& index) {
+    return op::indexSelect(self, dim, index);
+  }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
+};
+
+class FuncRepeatInterleave : public Function<FuncRepeatInterleave> {
+ public:
+  static Tensor forward(AutogradContext* ctx, const Tensor& self, int64_t repeats, int64_t dim) {
+    return op::repeatInterleave(self, repeats, dim);
+  }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
+};
+
 inline Tensor reshape(const Tensor& self, const IntArrayView shape) { return FuncReshape::apply(self, shape); }
 inline Tensor view(const Tensor& self, const IntArrayView shape) { return FuncView::apply(self, shape); }
 inline Tensor permute(const Tensor& self, const IntArrayView dims) { return FuncPermute::apply(self, dims); }
@@ -140,6 +180,12 @@ inline Tensor squeeze(const Tensor& self, const IntArrayView dims) { return Func
 inline Tensor unsqueeze(const Tensor& self, int64_t dim) { return FuncUnsqueeze::apply(self, dim); }
 inline Tensor transpose(const Tensor& self, int64_t dim0, int64_t dim1) {
   return FuncTranspose::apply(self, dim0, dim1);
+}
+inline Tensor tril(const Tensor& self, int64_t diagonal = 0) {
+  return FuncTril::apply(self, diagonal);
+}
+inline Tensor triu(const Tensor& self, int64_t diagonal = 0) {
+  return FuncTriu::apply(self, diagonal);
 }
 inline std::vector<Tensor> split(const Tensor& self, int64_t splitSize, int64_t dim = 0) {
   return FuncSplit::apply(self, splitSize, dim);
@@ -159,6 +205,13 @@ inline Tensor scatter(const Tensor& self, int64_t dim, const Tensor& index, cons
 }
 inline void scatter_(Tensor& self, int64_t dim, const Tensor& index, const Tensor& src) {
   return FuncScatterInplace::apply(self, dim, index, src);
+}
+inline Tensor expand(const Tensor& self, IntArrayView sizes) { return FuncExpand::apply(self, sizes); }
+inline Tensor indexSelect(const Tensor& self, int64_t dim, const Tensor& index) {
+  return FuncIndexSelect::apply(self, dim, index);
+}
+inline Tensor repeatInterleave(const Tensor& self, int64_t repeats, int64_t dim) {
+  return FuncRepeatInterleave::apply(self, repeats, dim);
 }
 
 }  // namespace tinytorch::function

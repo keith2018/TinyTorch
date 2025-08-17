@@ -5,7 +5,6 @@
  */
 
 #include "TinyTorch.h"
-#include "Utils/MathUtils.h"
 #include "test.h"
 
 using namespace tinytorch;

@@ -966,6 +966,147 @@ TEST(TEST_Operation, basic_scatter) {
   EXPECT_THAT(inplace.toList<float>(), ElementsAre(1, 0, 2));
 }
 
+TEST(TEST_Operation, basic_expand) {
+  // expand scalar to 1D
+  auto x1 = Tensor::scalar(5);
+  auto y1 = op::expand(x1, IntArrayView{3});
+  EXPECT_THAT(y1.shape(), ElementsAre(3));
+  EXPECT_THAT(y1.toList<float>(), ElementsAre(5, 5, 5));
+
+  // expand 1D [2] to [2, 3]
+  Tensor x2(Array1d<int>{7, 8});
+  x2.unsqueeze_(1);
+  auto y2 = op::expand(x2, IntArrayView{2, 3});
+  EXPECT_THAT(y2.shape(), ElementsAre(2, 3));
+  EXPECT_THAT(y2.toList<int>(), ElementsAre(7, 7, 7, 8, 8, 8));
+
+  // expand 1D [1] to [4]
+  Tensor x3(Array1d<float>{-1});
+  auto y3 = op::expand(x3, IntArrayView{4});
+  EXPECT_THAT(y3.shape(), ElementsAre(4));
+  EXPECT_THAT(y3.toList<float>(), ElementsAre(-1, -1, -1, -1));
+
+  // expand 2D [1, 3] to [2, 3]
+  Tensor x4(Array2d<float>{{1, 2, 3}});
+  auto y4 = op::expand(x4, IntArrayView{2, 3});
+  EXPECT_THAT(y4.shape(), ElementsAre(2, 3));
+  EXPECT_THAT(y4.toList<float>(), ElementsAre(1, 2, 3, 1, 2, 3));
+
+  // expand 2D [2,1] to [2,4]
+  Tensor x5(Array2d<float>{{-1}, {2}});
+  auto y5 = op::expand(x5, IntArrayView{2, 4});
+  EXPECT_THAT(y5.shape(), ElementsAre(2, 4));
+  EXPECT_THAT(y5.toList<float>(), ElementsAre(-1, -1, -1, -1, 2, 2, 2, 2));
+
+  // expand no-op: shape unchanged
+  Tensor x6(Array2d<int>{{1, 2}, {3, 4}});
+  auto y6 = op::expand(x6, IntArrayView{2, 2});
+  EXPECT_THAT(y6.shape(), ElementsAre(2, 2));
+  EXPECT_THAT(y6.toList<int>(), ElementsAre(1, 2, 3, 4));
+
+  // expand [1,1,1] to [2,3,4]
+  Tensor x7(Array3d<float>{{{9}}});
+  auto y7 = op::expand(x7, IntArrayView{2, 3, 4});
+  std::vector<float> y7_expected(2 * 3 * 4, 9);
+  EXPECT_THAT(y7.shape(), ElementsAre(2, 3, 4));
+  EXPECT_THAT(y7.toList<float>(), ElementsAreArray(y7_expected));
+
+  // Expand with broadcasting at different axes
+  Tensor x8(Array2d<int>{{1}, {2}});
+  auto y8 = op::expand(x8, IntArrayView{2, 3});
+  EXPECT_THAT(y8.shape(), ElementsAre(2, 3));
+  EXPECT_THAT(y8.toList<int>(), ElementsAre(1, 1, 1, 2, 2, 2));
+}
+
+TEST(TEST_Operation, basic_indexSelect) {
+  // Select from 1D tensor
+  Tensor x1(Array1d<int>{10, 20, 30, 40, 50});
+  Tensor indices1(Array1d<int64_t>{0, 2, 4});
+  auto y1 = op::indexSelect(x1, 0, indices1);
+  EXPECT_THAT(y1.shape(), ElementsAre(3));
+  EXPECT_THAT(y1.toList<int>(), ElementsAre(10, 30, 50));
+
+  // Select from 2D tensor along dimension 0
+  Tensor x2(Array2d<float>{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}});
+  Tensor indices2(Array1d<int64_t>{0, 2});
+  auto y2 = op::indexSelect(x2, 0, indices2);
+  EXPECT_THAT(y2.shape(), ElementsAre(2, 3));
+  EXPECT_THAT(y2.toList<float>(), ElementsAre(1, 2, 3, 7, 8, 9));
+
+  // Select from 2D tensor along dimension 1
+  Tensor x3(Array2d<float>{{1, 2, 3}, {4, 5, 6}});
+  Tensor indices3(Array1d<int64_t>{0, 2});
+  auto y3 = op::indexSelect(x3, 1, indices3);
+  EXPECT_THAT(y3.shape(), ElementsAre(2, 2));
+  EXPECT_THAT(y3.toList<float>(), ElementsAre(1, 3, 4, 6));
+
+  // Select from 3D tensor along dimension 0
+  Tensor x4(Array3d<int>{{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}, {{9, 10}, {11, 12}}});
+  Tensor indices4(Array1d<int64_t>{0, 2});
+  auto y4 = op::indexSelect(x4, 0, indices4);
+  EXPECT_THAT(y4.shape(), ElementsAre(2, 2, 2));
+  EXPECT_THAT(y4.toList<int>(), ElementsAre(1, 2, 3, 4, 9, 10, 11, 12));
+
+  // Select from 3D tensor along dimension 1
+  Tensor indices5(Array1d<int64_t>{1});
+  auto y5 = op::indexSelect(x4, 1, indices5);
+  EXPECT_THAT(y5.shape(), ElementsAre(3, 1, 2));
+  EXPECT_THAT(y5.toList<int>(), ElementsAre(3, 4, 7, 8, 11, 12));
+
+  // Select from 3D tensor along dimension 2
+  Tensor indices6(Array1d<int64_t>{0});
+  auto y6 = op::indexSelect(x4, 2, indices6);
+  EXPECT_THAT(y6.shape(), ElementsAre(3, 2, 1));
+  EXPECT_THAT(y6.toList<int>(), ElementsAre(1, 3, 5, 7, 9, 11));
+
+  // Edge case: empty indices
+  Tensor x7(Array1d<float>{1.0, 2.0, 3.0});
+  Tensor indices7(Array1d<int64_t>{});
+  auto y7 = op::indexSelect(x7, 0, indices7);
+  EXPECT_THAT(y7.shape(), ElementsAre(0));
+  EXPECT_TRUE(y7.toList<float>().empty());
+}
+
+TEST(TEST_Operation, basic_repeatInterleave) {
+  // Repeat elements in a 1D tensor
+  Tensor x1(Array1d<int>{1, 2, 3});
+  auto y1 = op::repeatInterleave(x1, 2, 0);
+  EXPECT_THAT(y1.shape(), ElementsAre(6));
+  EXPECT_THAT(y1.toList<int>(), ElementsAre(1, 1, 2, 2, 3, 3));
+
+  // Repeat elements in a 2D tensor along dimension 0
+  Tensor x2(Array2d<float>{{1, 2}, {3, 4}});
+  auto y2 = op::repeatInterleave(x2, 3, 0);
+  EXPECT_THAT(y2.shape(), ElementsAre(6, 2));
+  EXPECT_THAT(y2.toList<float>(), ElementsAre(1, 2, 1, 2, 1, 2, 3, 4, 3, 4, 3, 4));
+
+  // Repeat elements in a 2D tensor along dimension 1
+  auto y3 = op::repeatInterleave(x2, 2, 1);
+  EXPECT_THAT(y3.shape(), ElementsAre(2, 4));
+  EXPECT_THAT(y3.toList<float>(), ElementsAre(1, 1, 2, 2, 3, 3, 4, 4));
+
+  // Repeat elements in a 3D tensor along dimension 0
+  Tensor x4(Array3d<int>{{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}});
+  auto y4 = op::repeatInterleave(x4, 2, 0);
+  EXPECT_THAT(y4.shape(), ElementsAre(4, 2, 2));
+  EXPECT_THAT(y4.toList<int>(), ElementsAre(1, 2, 3, 4, 1, 2, 3, 4, 5, 6, 7, 8, 5, 6, 7, 8));
+
+  // Repeat elements in a 3D tensor along dimension 1
+  auto y5 = op::repeatInterleave(x4, 2, 1);
+  EXPECT_THAT(y5.shape(), ElementsAre(2, 4, 2));
+  EXPECT_THAT(y5.toList<int>(), ElementsAre(1, 2, 1, 2, 3, 4, 3, 4, 5, 6, 5, 6, 7, 8, 7, 8));
+
+  // Repeat elements in a 3D tensor along dimension 2
+  auto y6 = op::repeatInterleave(x4, 3, 2);
+  EXPECT_THAT(y6.shape(), ElementsAre(2, 2, 6));
+  EXPECT_THAT(y6.toList<int>(), ElementsAre(1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 7, 7, 7, 8, 8, 8));
+
+  // Edge case: repeat count of 1 (no-op)
+  auto y7 = op::repeatInterleave(x1, 1, 0);
+  EXPECT_THAT(y7.shape(), ElementsAre(3));
+  EXPECT_THAT(y7.toList<int>(), ElementsAre(1, 2, 3));
+}
+
 TEST(TEST_Operation, math_dot) {
   Array1d<float> d1 = {1, 2, 3};
   Array1d<float> d2 = {4, 5, 6};
