@@ -92,7 +92,14 @@ class Module {
   virtual Tensor forward(const Tensor &input) { return {}; }
   Tensor operator()(const Tensor &input) { return forward(input); }
 
-  void to(Device device) {
+  virtual void to(DType type) {
+    auto allStates = namedStates();
+    for (auto &[name, state] : allStates) {
+      *state = state->to(type);
+    }
+  }
+
+  virtual void to(Device device) {
     auto allStates = namedStates();
     for (auto &[name, state] : allStates) {
       *state = state->to(device);
