@@ -106,7 +106,7 @@ struct OpCudaTanh {
 struct OpCudaRelu {
   template <typename T>
   __device__ static T apply(const T& a) {
-    return a > 0 ? a : 0;
+    return a > 0 ? a : T(0);
   }
 };
 

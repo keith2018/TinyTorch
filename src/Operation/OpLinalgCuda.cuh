@@ -6,6 +6,9 @@
 
 #pragma once
 
+#include <thrust/device_ptr.h>
+#include <thrust/inner_product.h>
+
 #include "OpLinalg.h"
 #include "Utils/CUDAUtils.h"
 
@@ -52,67 +55,42 @@ __global__ void kCol2Im(T* ret, const T* self, const int64_t n, const int64_t ch
                         const int64_t paddingW) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
-    const int64_t colH = outH * outW;
+    const int64_t w = index % width;
+    const int64_t h = (index / width) % height;
+    const int64_t c = (index / (width * height)) % channels;
+    const int64_t b = index / (width * height * channels);
+
+    T val = static_cast<T>(0);
     const int64_t kernelSize = kernelH * kernelW;
 
-    const int64_t b = index / (channels * colH);
-    const int64_t c = (index % (channels * colH)) / colH;
-    const int64_t h = (index % colH) / outW;
-    const int64_t w = index % outW;
+    for (int64_t oh = 0; oh < outH; oh++) {
+      for (int64_t ow = 0; ow < outW; ow++) {
+        const int64_t kh = h - (oh * strideH - paddingH);
+        const int64_t kw = w - (ow * strideW - paddingW);
 
-    const int64_t hStride = h * strideH - paddingH;
-    const int64_t wStride = w * strideW - paddingW;
-
-    T* imPtr = ret + (b * channels + c) * height * width;
-    const T* colPtr = self + ((b * colH + h * outW + w) * channels + c) * kernelSize;
-
-    for (int64_t i = 0; i < kernelH; i++) {
-      for (int64_t j = 0; j < kernelW; j++) {
-        const int64_t ih = hStride + i;
-        const int64_t iw = wStride + j;
-        if (ih >= 0 && ih < height && iw >= 0 && iw < width) {
-          atomicAdd(&imPtr[ih * width + iw], colPtr[i * kernelW + j]);
+        if (kh >= 0 && kh < kernelH && kw >= 0 && kw < kernelW) {
+          const int64_t colIdx = ((b * outH * outW + oh * outW + ow) * channels + c) * kernelSize + (kh * kernelW + kw);
+          val += self[colIdx];
         }
       }
     }
-  }
-}
-
-template <typename T>
-__global__ void kDot(T* ret, const T* a, const T* b, const int64_t n) {
-  extern __shared__ T sharedData[];
-
-  auto index = blockIdx.x * blockDim.x + threadIdx.x;
-  const auto tid = threadIdx.x;
-
-  T temp = 0;
-  while (index < n) {
-    temp += a[index] * b[index];
-    index += blockDim.x * gridDim.x;
-  }
-
-  sharedData[tid] = temp;
-  __syncthreads();
-
-  for (auto stride = blockDim.x / 2; stride > 0; stride >>= 1) {
-    if (tid < stride) {
-      sharedData[tid] += sharedData[tid + stride];
-    }
-    __syncthreads();
-  }
-
-  if (tid == 0) {
-    atomicAdd(ret, sharedData[0]);
+    ret[index] = val;
   }
 }
 
 template <typename T>
 Tensor dotOpCudaImpl(const Tensor& self, const Tensor& other) {
+  using CudaT = typename cuda::CudaTypeMap<T>::type;
   auto ret = Tensor::scalar(0, self.options().noGrad());
 
-  auto params = cuda::getKernelLaunchParams(self.device().index, self.numel());
-  params.sharedMemBytes = params.block.x * sizeof(T);
-  CUDA_LAUNCH_KERNEL((kDot<T>), params, ret.dataPtr<T>(), self.dataPtr<T>(), other.dataPtr<T>(), self.numel());
+  int64_t n = self.numel();
+  const auto stream = cuda::getCurrentCUDAStream(self.device().index).stream;
+
+  thrust::device_ptr<const CudaT> selfPtr(self.dataPtr<CudaT>());
+  thrust::device_ptr<const CudaT> otherPtr(other.dataPtr<CudaT>());
+  thrust::device_ptr<CudaT> retPtr(ret.dataPtr<CudaT>());
+
+  *retPtr = thrust::inner_product(thrust::cuda::par.on(stream), selfPtr, selfPtr + n, otherPtr, CudaT(0));
   return ret;
 }
 
@@ -130,15 +108,16 @@ Tensor im2colOpCudaImpl(const Tensor& self, Dim2D kernel, Dim2D stride, Dim2D pa
   int64_t colH = outH * outW;
   int64_t colW = channels * kernel.h * kernel.w;
 
+  using CudaT = typename cuda::CudaTypeMap<T>::type;
   auto ret = Tensor::empty({batch * colH, colW}, self.options().noGrad());
-  const T* selfPtr = self.dataPtr<T>();
-  T* retPtr = ret.dataPtr<T>();
+  const auto* selfPtr = self.dataPtr<CudaT>();
+  auto* retPtr = ret.dataPtr<CudaT>();
 
   int64_t n = ret.numel();
   auto params = cuda::getKernelLaunchParams(self.device().index, n);
 
-  CUDA_LAUNCH_KERNEL(kIm2Col<T>, params, retPtr, selfPtr, n, channels, height, width, outH, outW, kernel.h, kernel.w,
-                     stride.h, stride.w, padding.h, padding.w);
+  CUDA_LAUNCH_KERNEL(kIm2Col<CudaT>, params, retPtr, selfPtr, n, channels, height, width, outH, outW, kernel.h,
+                     kernel.w, stride.h, stride.w, padding.h, padding.w);
   return ret;
 }
 
@@ -157,20 +136,21 @@ Tensor col2imOpCudaImpl(const Tensor& self, const IntArrayView shape, Dim2D kern
   // int64_t colH = outH * outW;
   // int64_t colW = channels * kernel.h * kernel.w;
 
+  using CudaT = typename cuda::CudaTypeMap<T>::type;
   auto ret = Tensor::zeros(shape, self.options().noGrad());
-  const T* selfPtr = self.dataPtr<T>();
-  T* retPtr = ret.dataPtr<T>();
+  const auto* selfPtr = self.dataPtr<CudaT>();
+  auto* retPtr = ret.dataPtr<CudaT>();
 
-  int64_t n = batch * channels * outH * outW;
+  int64_t n = batch * channels * height * width;
   auto params = cuda::getKernelLaunchParams(self.device().index, n);
 
-  CUDA_LAUNCH_KERNEL(kCol2Im<T>, params, retPtr, selfPtr, n, channels, height, width, outH, outW, kernel.h, kernel.w,
-                     stride.h, stride.w, padding.h, padding.w);
+  CUDA_LAUNCH_KERNEL(kCol2Im<CudaT>, params, retPtr, selfPtr, n, channels, height, width, outH, outW, kernel.h,
+                     kernel.w, stride.h, stride.w, padding.h, padding.w);
   return ret;
 }
 
-void gemmCudaF32Impl(float* c, const float* a, const float* b, int64_t m, int64_t k, int64_t n, bool transA,
-                     bool transB, DeviceIndex device) {
+inline void gemmCudaF32Impl(float* c, const float* a, const float* b, int64_t m, int64_t k, int64_t n, bool transA,
+                            bool transB, DeviceIndex device) {
   cublasOperation_t opA = transA ? CUBLAS_OP_T : CUBLAS_OP_N;
   cublasOperation_t opB = transB ? CUBLAS_OP_T : CUBLAS_OP_N;
 
@@ -185,10 +165,60 @@ void gemmCudaF32Impl(float* c, const float* a, const float* b, int64_t m, int64_
   CUBLAS_CHECK(cublasSgemm(handle, opB, opA, n, m, k, &alpha, b, ldb, a, lda, &beta, c, ldc));
 }
 
+inline void gemmCudaF16Impl(__half* c, const __half* a, const __half* b, int64_t m, int64_t k, int64_t n, bool transA,
+                            bool transB, DeviceIndex device) {
+  cublasOperation_t opA = transA ? CUBLAS_OP_T : CUBLAS_OP_N;
+  cublasOperation_t opB = transB ? CUBLAS_OP_T : CUBLAS_OP_N;
+
+  int lda = static_cast<int>(transA ? m : k);
+  int ldb = static_cast<int>(transB ? k : n);
+  int ldc = static_cast<int>(n);
+
+  constexpr float alpha = 1.f;
+  constexpr float beta = 0.f;
+
+  auto handle = cuda::getCublasHandle(device);
+  CUBLAS_CHECK(cublasSetMathMode(handle, CUBLAS_TENSOR_OP_MATH));
+  CUBLAS_CHECK(cublasGemmEx(handle, opB, opA, n, m, k, &alpha, b, CUDA_R_16F, ldb, a, CUDA_R_16F, lda, &beta, c,
+                            CUDA_R_16F, ldc, CUDA_R_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+}
+
+inline void gemmCudaBF16Impl(__nv_bfloat16* c, const __nv_bfloat16* a, const __nv_bfloat16* b, int64_t m, int64_t k,
+                             int64_t n, bool transA, bool transB, DeviceIndex device) {
+  cublasOperation_t opA = transA ? CUBLAS_OP_T : CUBLAS_OP_N;
+  cublasOperation_t opB = transB ? CUBLAS_OP_T : CUBLAS_OP_N;
+
+  int lda = static_cast<int>(transA ? m : k);
+  int ldb = static_cast<int>(transB ? k : n);
+  int ldc = static_cast<int>(n);
+
+  constexpr float alpha = 1.f;
+  constexpr float beta = 0.f;
+
+  auto handle = cuda::getCublasHandle(device);
+  CUBLAS_CHECK(cublasSetMathMode(handle, CUBLAS_TENSOR_OP_MATH));
+  CUBLAS_CHECK(cublasGemmEx(handle, opB, opA, n, m, k, &alpha, b, CUDA_R_16BF, ldb, a, CUDA_R_16BF, lda, &beta, c,
+                            CUDA_R_16BF, ldc, CUDA_R_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+}
+
 template <>
 void gemmImpl<float, DeviceType::CUDA>(float* c, const float* a, const float* b, int64_t m, int64_t k, int64_t n,
                                        bool transA, bool transB, DeviceIndex device) {
   gemmCudaF32Impl(c, a, b, m, k, n, transA, transB, device);
+}
+
+template <>
+void gemmImpl<Half, DeviceType::CUDA>(Half* c, const Half* a, const Half* b, int64_t m, int64_t k, int64_t n,
+                                      bool transA, bool transB, DeviceIndex device) {
+  gemmCudaF16Impl(reinterpret_cast<__half*>(c), reinterpret_cast<const __half*>(a), reinterpret_cast<const __half*>(b),
+                  m, k, n, transA, transB, device);
+}
+
+template <>
+void gemmImpl<BFloat16, DeviceType::CUDA>(BFloat16* c, const BFloat16* a, const BFloat16* b, int64_t m, int64_t k,
+                                          int64_t n, bool transA, bool transB, DeviceIndex device) {
+  gemmCudaBF16Impl(reinterpret_cast<__nv_bfloat16*>(c), reinterpret_cast<const __nv_bfloat16*>(a),
+                   reinterpret_cast<const __nv_bfloat16*>(b), m, k, n, transA, transB, device);
 }
 
 }  // namespace tinytorch::op

@@ -106,6 +106,13 @@ class Module {
     }
   }
 
+  virtual void to(DType type, Device device) {
+    auto allStates = namedStates();
+    for (auto &[name, state] : allStates) {
+      *state = state->to(type, device);
+    }
+  }
+
   void eval() { train(false); }
 
   void train(bool mode = true) { setTraining(mode); }

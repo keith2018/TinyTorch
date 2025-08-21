@@ -10,6 +10,7 @@
 #include "OpReduceCuda.cuh"
 #include "Tensor/TensorIterator.cuh"
 #include "Utils/CUDAUtils.h"
+#include "Utils/CUDAMath.h"
 #include "Utils/MathUtils.h"
 #include "Utils/RandomGenerator.h"
 
@@ -40,26 +41,26 @@ __global__ void kSoftmaxForward(T* out, const T* self, int64_t dimSize, int64_t 
   auto base = (outer * dimSize * innerSize) + inner;
 
   // max
-  T maxVal = -cuda::Inf<T>();
+  T maxVal = -cuda::max<T>();
   for (auto i = tid; i < dimSize; i += blockDim.x) {
-    maxVal = ::max(maxVal, self[base + i * innerSize]);
+    maxVal = cuda::max(maxVal, self[base + i * innerSize]);
   }
-  T blockMax = cudaBlockReduce<T, OpCudaReduceMax>(maxVal, -cuda::Inf<T>());
+  T blockMax = cudaBlockReduce<T, OpCudaReduceMax>(maxVal, -cuda::max<T>());
 
   // sum of exp
   T sum = 0;
   for (auto i = tid; i < dimSize; i += blockDim.x) {
-    sum += ::expf(self[base + i * innerSize] - blockMax);
+    sum += cuda::exp(self[base + i * innerSize] - blockMax);
   }
   T blockSum = cudaBlockReduce<T, OpCudaReduceSum>(sum, T(0));
 
   // output
   if constexpr (type == SoftmaxType::Softmax) {
     for (auto i = tid; i < dimSize; i += blockDim.x) {
-      out[base + i * innerSize] = ::expf(self[base + i * innerSize] - blockMax) / blockSum;
+      out[base + i * innerSize] = cuda::exp(self[base + i * innerSize] - blockMax) / blockSum;
     }
   } else {
-    T logSum = ::logf(blockSum);
+    T logSum = cuda::log(blockSum);
     for (auto i = tid; i < dimSize; i += blockDim.x) {
       out[base + i * innerSize] = self[base + i * innerSize] - blockMax - logSum;
     }
@@ -68,9 +69,7 @@ __global__ void kSoftmaxForward(T* out, const T* self, int64_t dimSize, int64_t 
 
 template <typename T, SoftmaxType type>
 __global__ void kSoftmaxForwardLargeDim(T* out, const T* self, int64_t dimSize, int64_t innerSize) {
-  // shared[0:blockPerRow]: max
-  // shared[blockPerRow:2*blockPerRow]: sum
-  extern __shared__ T shared[];
+  __shared__ T shared[2];  // max, sum
 
   auto blockPerRow = gridDim.x;
   auto blockId = blockIdx.x;
@@ -80,26 +79,26 @@ __global__ void kSoftmaxForwardLargeDim(T* out, const T* self, int64_t dimSize, 
 
   auto tileSize = (dimSize + blockPerRow - 1) / blockPerRow;
   auto tileStart = blockId * tileSize;
-  auto tileEnd = ::min(tileStart + tileSize, dimSize);
+  auto tileEnd = cuda::min(tileStart + tileSize, dimSize);
 
   auto base = (outer * dimSize * innerSize) + inner;
 
   // max
-  T localMax = -cuda::Inf<T>();
+  T localMax = -cuda::max<T>();
   for (auto i = tileStart + tid; i < tileEnd; i += blockDim.x) {
     auto idx = base + i * innerSize;
-    localMax = ::max(localMax, self[idx]);
+    localMax = cuda::max(localMax, self[idx]);
   }
-  T tileMax = cudaBlockReduce<T, OpCudaReduceMax>(localMax, -cuda::Inf<T>());
+  T tileMax = cudaBlockReduce<T, OpCudaReduceMax>(localMax, -cuda::max<T>());
   if (tid == 0) shared[blockId] = tileMax;
   __syncthreads();
 
-  T globalMax = -cuda::Inf<T>();
+  T globalMax = -cuda::max<T>();
   if (blockId == 0) {
     for (auto i = tid; i < blockPerRow; i += blockDim.x) {
-      globalMax = ::max(globalMax, shared[i]);
+      globalMax = cuda::max(globalMax, shared[i]);
     }
-    globalMax = cudaBlockReduce<T, OpCudaReduceMax>(globalMax, -cuda::Inf<T>());
+    globalMax = cudaBlockReduce<T, OpCudaReduceMax>(globalMax, -cuda::max<T>());
     if (tid == 0) shared[blockPerRow] = globalMax;
   }
   __syncthreads();
@@ -109,7 +108,7 @@ __global__ void kSoftmaxForwardLargeDim(T* out, const T* self, int64_t dimSize, 
   T localSum = 0;
   for (auto i = tileStart + tid; i < tileEnd; i += blockDim.x) {
     auto idx = base + i * innerSize;
-    localSum += ::expf(self[idx] - globalMax);
+    localSum += cuda::exp(self[idx] - globalMax);
   }
   T tileSum = cudaBlockReduce<T, OpCudaReduceSum>(localSum, T(0));
   if (tid == 0) shared[blockId] = tileSum;
@@ -130,10 +129,10 @@ __global__ void kSoftmaxForwardLargeDim(T* out, const T* self, int64_t dimSize, 
   if constexpr (type == SoftmaxType::Softmax) {
     for (auto i = tileStart + tid; i < tileEnd; i += blockDim.x) {
       auto idx = base + i * innerSize;
-      out[idx] = ::expf(self[idx] - globalMax) / globalSum;
+      out[idx] = cuda::exp(self[idx] - globalMax) / globalSum;
     }
   } else {
-    T logSum = ::logf(globalSum);
+    T logSum = cuda::log(globalSum);
     for (auto i = tileStart + tid; i < tileEnd; i += blockDim.x) {
       auto idx = base + i * innerSize;
       out[idx] = self[idx] - globalMax - logSum;
@@ -155,7 +154,7 @@ struct OpCudaLogSoftmaxBackward {
   __device__ static T computePartialSum(const T* output, const T* grad, int64_t idx) { return grad[idx]; }
 
   __device__ static T computeResult(const T* output, const T* grad, T totalSum, int64_t idx) {
-    return grad[idx] - ::expf(output[idx]) * totalSum;
+    return grad[idx] - cuda::exp(output[idx]) * totalSum;
   }
 };
 
@@ -190,7 +189,7 @@ __global__ void kSoftmaxBackwardLarge(T* out, const T* output, const T* grad, T*
 
   auto elemsPerBlock = (dimSize + numBlocks - 1) / numBlocks;
   auto start = blockId * elemsPerBlock;
-  auto end = ::min(start + elemsPerBlock, dimSize);
+  auto end = cuda::min(start + elemsPerBlock, dimSize);
 
   if constexpr (isPhase1) {
     T sum = 0;
@@ -228,21 +227,22 @@ __global__ void kDropout(T* out, const T* self, const float p, const unsigned lo
     curand_init(seed, seq, index, &state);
     const auto rand = curand_uniform4(&state);
 
+    T tp = static_cast<T>(p);
     if (index + 3 < n) {
-      out[index] = rand.x < p ? (self[index] / p) : 0.f;
-      out[index + 1] = rand.y < p ? (self[index + 1] / p) : 0.f;
-      out[index + 2] = rand.z < p ? (self[index + 2] / p) : 0.f;
-      out[index + 3] = rand.w < p ? (self[index + 3] / p) : 0.f;
+      out[index] = rand.x < p ? (self[index] / tp) : T(0.f);
+      out[index + 1] = rand.y < p ? (self[index + 1] / tp) : T(0.f);
+      out[index + 2] = rand.z < p ? (self[index + 2] / tp) : T(0.f);
+      out[index + 3] = rand.w < p ? (self[index + 3] / tp) : T(0.f);
     } else {
-      if (index < n) out[index] = rand.x < p ? (self[index] / p) : 0.f;
-      if (index + 1 < n) out[index + 1] = rand.y < p ? (self[index + 1] / p) : 0.f;
-      if (index + 2 < n) out[index + 2] = rand.z < p ? (self[index + 2] / p) : 0.f;
+      if (index < n) out[index] = rand.x < p ? (self[index] / tp) : T(0.f);
+      if (index + 1 < n) out[index + 1] = rand.y < p ? (self[index + 1] / tp) : T(0.f);
+      if (index + 2 < n) out[index + 2] = rand.z < p ? (self[index + 2] / tp) : T(0.f);
     }
   }
 }
 
 template <typename T, NormType normType>
-__global__ void kNormSmall(T* out, const T* input, const T* weight, const T* bias, int64_t dim, float eps) {
+__global__ void kNormSmall(T* out, const T* input, const T* weight, const T* bias, int64_t dim, T eps) {
   auto row = blockIdx.x;
   auto tid = threadIdx.x;
   auto base = row * dim;
@@ -269,7 +269,7 @@ __global__ void kNormSmall(T* out, const T* input, const T* weight, const T* bia
       varSum += diff * diff;
     }
     T var = cudaBlockReduce<T, OpCudaReduceSum>(varSum, T(0)) / static_cast<T>(dim);
-    invStd = ::rsqrtf(var + eps);
+    invStd = cuda::rsqrt(var + static_cast<T>(eps));
 
     // norm + affine
     for (auto i = tid; i < dim; i += blockDim.x) {
@@ -279,7 +279,7 @@ __global__ void kNormSmall(T* out, const T* input, const T* weight, const T* bia
       out[base + i] = normed;
     }
   } else {
-    invStd = ::rsqrtf(stat + eps);
+    invStd = cuda::rsqrt(stat + static_cast<T>(eps));
 
     // norm + affine
     for (auto i = tid; i < dim; i += blockDim.x) {
@@ -292,7 +292,7 @@ __global__ void kNormSmall(T* out, const T* input, const T* weight, const T* bia
 
 template <typename T, NormType normType>
 __global__ void kNormLarge(T* out, const T* input, const T* weight, const T* bias, int64_t dim, float eps) {
-  extern __shared__ T sharedMem[];
+  __shared__ T sharedMem[2];  // mean, var
   T* sharedStats = sharedMem;
 
   auto row = blockIdx.x;
@@ -327,7 +327,7 @@ __global__ void kNormLarge(T* out, const T* input, const T* weight, const T* bia
     if (tid == 0) sharedStats[1] = var / static_cast<T>(dim);
     __syncthreads();
     var = sharedStats[1];
-    invStd = ::rsqrtf(var + eps);
+    invStd = cuda::rsqrt(var + static_cast<T>(eps));
 
     // norm + affine
     for (auto i = tid; i < dim; i += blockDim.x) {
@@ -337,7 +337,7 @@ __global__ void kNormLarge(T* out, const T* input, const T* weight, const T* bia
       out[base + i] = normed;
     }
   } else {
-    invStd = ::rsqrtf(stat + eps);
+    invStd = cuda::rsqrt(stat + static_cast<T>(eps));
 
     // norm + affine
     for (auto i = tid; i < dim; i += blockDim.x) {
@@ -352,7 +352,7 @@ template <typename T>
 __global__ void kRopeComputeInvFreq(T* invFreqPtr, int64_t halfDim, float thetaBase) {
   const auto idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx < halfDim) {
-    invFreqPtr[idx] = 1.f / powf(thetaBase, static_cast<float>(idx << 1) / static_cast<float>(halfDim << 1));
+    invFreqPtr[idx] = static_cast<T>(1.f / powf(thetaBase, static_cast<float>(idx << 1) / static_cast<float>(halfDim << 1)));
   }
 }
 
@@ -361,18 +361,19 @@ __global__ void kRopeApplyScaling(T* invFreqPtr, int64_t halfDim, float original
                                   float highFreqFactor, float scalingFactor) {
   const auto idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx < halfDim) {
-    auto waveLen = 2.f * static_cast<float>(M_PI) / invFreqPtr[idx];
+    auto invFreq = static_cast<float>(invFreqPtr[idx]);
+    auto waveLen = 2.f * static_cast<float>(M_PI) / invFreq;
     auto lowWaveLen = originalContextLength / lowFreqFactor;
     auto highWaveLen = originalContextLength / highFreqFactor;
 
     if (waveLen > lowWaveLen) {
-      invFreqPtr[idx] /= scalingFactor;
+      invFreqPtr[idx] /= static_cast<T>(scalingFactor);
     } else if (waveLen < highWaveLen) {
       // do nothing
     } else {
       auto smoothFactor = (originalContextLength / waveLen - lowFreqFactor) / (highFreqFactor - lowFreqFactor);
-      auto scaled = invFreqPtr[idx] / scalingFactor;
-      invFreqPtr[idx] = (1.f - smoothFactor) * scaled + smoothFactor * invFreqPtr[idx];
+      auto scaled = invFreq / scalingFactor;
+      invFreqPtr[idx] = static_cast<T>((1.f - smoothFactor) * scaled + smoothFactor * invFreq);
     }
   }
 }
@@ -384,12 +385,12 @@ __global__ void kRopePrecomputeCosSin(const T* invFreqPtr, T* cosPtr, T* sinPtr,
   if (pos < contextLength) {
     auto halfDim = headDim >> 1;
     for (auto i = threadIdx.x; i < halfDim; i += blockDim.x) {
-      float angle = static_cast<float>(pos) * invFreqPtr[i];
+      float angle = static_cast<float>(pos) * static_cast<float>(invFreqPtr[i]);
       int64_t offset1 = pos * headDim + i;
       int64_t offset2 = pos * headDim + halfDim + i;
 
-      float cosVal = cosf(angle);
-      float sinVal = sinf(angle);
+      T cosVal = static_cast<T>(::cosf(angle));
+      T sinVal = static_cast<T>(::sinf(angle));
 
       cosPtr[offset1] = cosVal;
       sinPtr[offset1] = sinVal;
@@ -431,21 +432,20 @@ void softmaxForwardCudaImpl(Tensor& out, const Tensor& self, int64_t dim) {
   ASSERT(out.shape() == self.shape());
   auto info = getSoftmaxDimInfo(self, dim);
 
-  const T* selfPtr = self.dataPtr<T>();
-  T* outPtr = out.dataPtr<T>();
+  using CudaT = typename cuda::CudaTypeMap<T>::type;
+  const CudaT* selfPtr = self.dataPtr<CudaT>();
+  CudaT* outPtr = out.dataPtr<CudaT>();
 
   if (info.dimSize <= 1024) {
     dim3 block(std::clamp(nextPow2(info.dimSize), 32u, 1024u));
     dim3 grid(info.outerSize, info.innerSize);
     const auto stream = cuda::getCurrentCUDAStream(self.device().index).stream;
-    kSoftmaxForward<T, type><<<grid, block, 0, stream>>>(outPtr, selfPtr, info.dimSize, info.innerSize);
+    kSoftmaxForward<CudaT, type><<<grid, block, 0, stream>>>(outPtr, selfPtr, info.dimSize, info.innerSize);
   } else {
     auto blockSize = cuda::getKernelBlockSize(self.device().index);
     dim3 grid(1, info.outerSize, info.innerSize);
-    size_t sharedMem = 2 * sizeof(T);  // max, sum
     const auto stream = cuda::getCurrentCUDAStream(self.device().index).stream;
-    kSoftmaxForwardLargeDim<T, type>
-        <<<grid, blockSize, sharedMem, stream>>>(outPtr, selfPtr, info.dimSize, info.innerSize);
+    kSoftmaxForwardLargeDim<CudaT, type><<<grid, blockSize, 0, stream>>>(outPtr, selfPtr, info.dimSize, info.innerSize);
   }
   CUDA_KERNEL_CHECK();
 }
@@ -468,33 +468,34 @@ Tensor softmaxBackwardCudaImplDetail(const Tensor& grad, const Tensor& output, i
   auto info = getSoftmaxDimInfo(output, dim);
   Tensor out(output.shape(), output.options().noGrad());
 
-  const T* outputPtr = output.dataPtr<T>();
-  const T* gradPtr = grad.dataPtr<T>();
-  T* outPtr = out.dataPtr<T>();
+  using CudaT = typename cuda::CudaTypeMap<T>::type;
+  const CudaT* outputPtr = output.dataPtr<CudaT>();
+  const CudaT* gradPtr = grad.dataPtr<CudaT>();
+  CudaT* outPtr = out.dataPtr<CudaT>();
   const auto stream = cuda::getCurrentCUDAStream(output.device().index).stream;
 
   if (info.dimSize <= 1024) {
     dim3 block(std::clamp(nextPow2(info.dimSize), 32u, 1024u));
     dim3 grid(info.outerSize, info.innerSize);
-    kSoftmaxBackward<T, Op><<<grid, block, 0, stream>>>(outPtr, outputPtr, gradPtr, info.dimSize, info.innerSize);
+    kSoftmaxBackward<CudaT, Op><<<grid, block, 0, stream>>>(outPtr, outputPtr, gradPtr, info.dimSize, info.innerSize);
   } else {
     constexpr int64_t maxBlocksPerDim = 16;
     const int64_t numBlocks = std::min(maxBlocksPerDim, (info.dimSize + 1023) / 1024);
     const int64_t partialSumsSize = info.outerSize * info.innerSize * numBlocks;
 
-    Storage partialSums(static_cast<int64_t>(partialSumsSize * sizeof(T)), output.device());
-    T* partialSumsPtr = partialSums.dataPtr<T>();
+    Storage partialSums(static_cast<int64_t>(partialSumsSize * sizeof(CudaT)), output.device());
+    auto* partialSumsPtr = partialSums.dataPtr<CudaT>();
 
     dim3 block(cuda::getKernelBlockSize(output.device().index));
     dim3 grid(numBlocks, info.innerSize, info.outerSize);
 
     // phase 1
-    kSoftmaxBackwardLarge<T, Op, true><<<grid, block, 0, stream>>>(outPtr, outputPtr, gradPtr, partialSumsPtr,
-                                                                   info.dimSize, info.innerSize, numBlocks);
+    kSoftmaxBackwardLarge<CudaT, Op, true><<<grid, block, 0, stream>>>(outPtr, outputPtr, gradPtr, partialSumsPtr,
+                                                                       info.dimSize, info.innerSize, numBlocks);
 
     // phase 2
-    kSoftmaxBackwardLarge<T, Op, false><<<grid, block, 0, stream>>>(outPtr, outputPtr, gradPtr, partialSumsPtr,
-                                                                    info.dimSize, info.innerSize, numBlocks);
+    kSoftmaxBackwardLarge<CudaT, Op, false><<<grid, block, 0, stream>>>(outPtr, outputPtr, gradPtr, partialSumsPtr,
+                                                                        info.dimSize, info.innerSize, numBlocks);
   }
   CUDA_KERNEL_CHECK();
   return out;
@@ -502,7 +503,8 @@ Tensor softmaxBackwardCudaImplDetail(const Tensor& grad, const Tensor& output, i
 
 template <typename T>
 Tensor softmaxOpBackwardCudaImpl(const Tensor& grad, const Tensor& output, int64_t dim) {
-  return softmaxBackwardCudaImplDetail<T, OpCudaSoftmaxBackward<T>>(grad, output, dim);
+  using CudaT = typename cuda::CudaTypeMap<T>::type;
+  return softmaxBackwardCudaImplDetail<CudaT, OpCudaSoftmaxBackward<CudaT>>(grad, output, dim);
 }
 
 template <typename T>
@@ -519,21 +521,23 @@ Tensor logSoftmaxOpCudaImpl(const Tensor& self, int64_t dim) {
 
 template <typename T>
 Tensor logSoftmaxOpBackwardCudaImpl(const Tensor& grad, const Tensor& output, int64_t dim) {
-  return softmaxBackwardCudaImplDetail<T, OpCudaLogSoftmaxBackward<T>>(grad, output, dim);
+  using CudaT = typename cuda::CudaTypeMap<T>::type;
+  return softmaxBackwardCudaImplDetail<CudaT, OpCudaLogSoftmaxBackward<CudaT>>(grad, output, dim);
 }
 
 template <typename T>
 Tensor dropoutOpCudaImpl(const Tensor& self, float p) {
+  using CudaT = typename cuda::CudaTypeMap<T>::type;
   Tensor out(self.shape(), self.options().noGrad());
-  const auto* selfPtr = self.dataPtr<T>();
-  auto* outPtr = out.dataPtr<T>();
+  const auto* selfPtr = self.dataPtr<CudaT>();
+  auto* outPtr = out.dataPtr<CudaT>();
 
   auto seed = RandomGeneratorCUDA::getSeed();
   auto seq = RandomGeneratorCUDA::nextSequence();
   int64_t n = self.numel();
 
   auto params = cuda::getKernelLaunchParams(self.device().index, n, 4);
-  CUDA_LAUNCH_KERNEL(kDropout<T>, params, outPtr, selfPtr, p, seed, seq, n);
+  CUDA_LAUNCH_KERNEL(kDropout<CudaT>, params, outPtr, selfPtr, p, seed, seq, n);
   return out;
 }
 
@@ -543,7 +547,10 @@ Tensor dropoutMaskedOpCudaImpl(const Tensor& self, const Tensor& mask, float p) 
   auto outShape = iterator.setupBroadcast();
   ASSERT(iterator.isBroadcastOk());
   Tensor out(outShape, self.options().noGrad());
-  iterator.template forEach<T>(out, [p] __device__(const T& a, const T& b) -> T { return a * b / p; });
+  using CudaT = typename cuda::CudaTypeMap<T>::type;
+  auto tp = static_cast<CudaT>(p);
+  iterator.template forEach<CudaT>(out,
+                                   [tp] __device__(const CudaT& a, const CudaT& b) -> CudaT { return a * b / tp; });
   return out;
 }
 
@@ -557,10 +564,11 @@ Tensor normOpCudaImplDetail(const Tensor& self, IntArrayView normalizedShape, co
 
   Tensor out(self.shape(), self.options().noGrad());
 
-  const auto* inputPtr = self.dataPtr<T>();
-  const auto* weightPtr = weight.defined() ? weight.dataPtr<T>() : nullptr;
-  const auto* biasPtr = bias.defined() ? bias.dataPtr<T>() : nullptr;
-  auto* outPtr = out.dataPtr<T>();
+  using CudaT = typename cuda::CudaTypeMap<T>::type;
+  const CudaT* inputPtr = self.dataPtr<CudaT>();
+  const CudaT* weightPtr = weight.defined() ? weight.dataPtr<CudaT>() : nullptr;
+  const CudaT* biasPtr = bias.defined() ? bias.dataPtr<CudaT>() : nullptr;
+  CudaT* outPtr = out.dataPtr<CudaT>();
 
   auto stream = cuda::getCurrentCUDAStream(self.device().index).stream;
   dim3 blockSize(std::clamp(nextPow2(dim), 32u, 1024u));
@@ -568,20 +576,19 @@ Tensor normOpCudaImplDetail(const Tensor& self, IntArrayView normalizedShape, co
 
   if (dim <= 1024) {
     if constexpr (normType == NormType::LayerNorm) {
-      kNormSmall<T, NormType::LayerNorm>
+      kNormSmall<CudaT, NormType::LayerNorm>
           <<<gridSize, blockSize, 0, stream>>>(outPtr, inputPtr, weightPtr, biasPtr, dim, eps);
     } else {
-      kNormSmall<T, NormType::RMSNorm>
+      kNormSmall<CudaT, NormType::RMSNorm>
           <<<gridSize, blockSize, 0, stream>>>(outPtr, inputPtr, weightPtr, biasPtr, dim, eps);
     }
   } else {
-    size_t sharedMemSize = sizeof(T) * 2;  // mean + var
     if constexpr (normType == NormType::LayerNorm) {
-      kNormLarge<T, NormType::LayerNorm>
-          <<<gridSize, blockSize, sharedMemSize, stream>>>(outPtr, inputPtr, weightPtr, biasPtr, dim, eps);
+      kNormLarge<CudaT, NormType::LayerNorm>
+          <<<gridSize, blockSize, 0, stream>>>(outPtr, inputPtr, weightPtr, biasPtr, dim, eps);
     } else {
-      kNormLarge<T, NormType::RMSNorm>
-          <<<gridSize, blockSize, sharedMemSize, stream>>>(outPtr, inputPtr, weightPtr, biasPtr, dim, eps);
+      kNormLarge<CudaT, NormType::RMSNorm>
+          <<<gridSize, blockSize, 0, stream>>>(outPtr, inputPtr, weightPtr, biasPtr, dim, eps);
     }
   }
   CUDA_KERNEL_CHECK();
@@ -604,21 +611,21 @@ TensorPair ropeInitOpCudaImpl(int64_t headDim, int64_t contextLength, float thet
                               std::optional<RopeScalingConfig> scaling, Options options) {
   ASSERT(!options.requiresGrad_);
   ASSERT(options.device_.type == DeviceType::CUDA);
-  ASSERT(options.dtype_ == DType::Float32);
 
   ASSERT(headDim % 2 == 0);
   int64_t halfDim = headDim >> 1;
+  using CudaT = typename cuda::CudaTypeMap<T>::type;
 
   // inverse frequency
   Tensor invFreq({halfDim}, options);
-  auto* invFreqPtr = invFreq.dataPtr<T>();
+  auto* invFreqPtr = invFreq.dataPtr<CudaT>();
 
   auto params = cuda::getKernelLaunchParams(options.device_.index, halfDim);
-  CUDA_LAUNCH_KERNEL(kRopeComputeInvFreq<T>, params, invFreqPtr, halfDim, thetaBase);
+  CUDA_LAUNCH_KERNEL(kRopeComputeInvFreq<CudaT>, params, invFreqPtr, halfDim, thetaBase);
 
   // apply scaling if needed
   if (scaling.has_value()) {
-    CUDA_LAUNCH_KERNEL(kRopeApplyScaling<T>, params, invFreqPtr, halfDim,
+    CUDA_LAUNCH_KERNEL(kRopeApplyScaling<CudaT>, params, invFreqPtr, halfDim,
                        static_cast<float>(scaling->originalContextLength), scaling->lowFreqFactor,
                        scaling->highFreqFactor, scaling->factor);
   }
@@ -626,12 +633,12 @@ TensorPair ropeInitOpCudaImpl(int64_t headDim, int64_t contextLength, float thet
   // precompute cos/sin
   Tensor cos({contextLength, headDim}, options);
   Tensor sin({contextLength, headDim}, options);
-  auto* cosPtr = cos.dataPtr<T>();
-  auto* sinPtr = sin.dataPtr<T>();
+  auto* cosPtr = cos.dataPtr<CudaT>();
+  auto* sinPtr = sin.dataPtr<CudaT>();
 
   auto blockSize = cuda::getKernelBlockSize(options.device_.index);
   auto stream = cuda::getCurrentCUDAStream(options.device_.index).stream;
-  kRopePrecomputeCosSin<T><<<contextLength, blockSize, 0, stream>>>(invFreqPtr, cosPtr, sinPtr, contextLength, headDim);
+  kRopePrecomputeCosSin<CudaT><<<contextLength, blockSize, 0, stream>>>(invFreqPtr, cosPtr, sinPtr, contextLength, headDim);
   CUDA_KERNEL_CHECK();
   return {cos, sin};
 }
@@ -647,12 +654,13 @@ Tensor ropeApplyOpCudaImpl(const Tensor& input, const TensorPair& rope) {
   int64_t headDim = shape[3];
   ASSERT(headDim % 2 == 0);
 
-  const auto* inputPtr = input.dataPtr<T>();
-  const auto* cosPtr = rope.first.dataPtr<T>();
-  const auto* sinPtr = rope.second.dataPtr<T>();
+  using CudaT = typename cuda::CudaTypeMap<T>::type;
+  const auto* inputPtr = input.dataPtr<CudaT>();
+  const auto* cosPtr = rope.first.dataPtr<CudaT>();
+  const auto* sinPtr = rope.second.dataPtr<CudaT>();
 
   Tensor out(shape, input.options().noGrad());
-  auto* outPtr = out.dataPtr<T>();
+  auto* outPtr = out.dataPtr<CudaT>();
 
   const auto blockSize = cuda::getKernelBlockSize(input.device().index);
   const auto blocksPerSeq = cuda::getKernelGridSize(blockSize, seqLen);
@@ -661,7 +669,7 @@ Tensor ropeApplyOpCudaImpl(const Tensor& input, const TensorPair& rope) {
   dim3 blockDim(blockSize);
 
   auto stream = cuda::getCurrentCUDAStream(input.device().index).stream;
-  kRopeApply<T><<<gridDim, blockDim, 0, stream>>>(inputPtr, cosPtr, sinPtr, outPtr, batch, numHead, seqLen, headDim);
+  kRopeApply<CudaT><<<gridDim, blockDim, 0, stream>>>(inputPtr, cosPtr, sinPtr, outPtr, batch, numHead, seqLen, headDim);
   CUDA_KERNEL_CHECK();
   return out;
 }

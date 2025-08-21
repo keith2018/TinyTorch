@@ -161,7 +161,7 @@ Tensor dropoutOpCpuImpl(const Tensor& self, float p) {
   auto generator = RandomGeneratorCPU::getGenerator();
   std::bernoulli_distribution distribution(p);
   for (int64_t i = 0; i < self.numel(); i++) {
-    outPtr[i] = selfPtr[i] * distribution(generator) / p;
+    outPtr[i] = static_cast<T>(static_cast<float>(selfPtr[i]) * static_cast<float>(distribution(generator)) / p);
   }
   return out;
 }
@@ -252,7 +252,6 @@ TensorPair ropeInitOpCpuImpl(int64_t headDim, int64_t contextLength, float theta
                              std::optional<RopeScalingConfig> scaling, Options options) {
   ASSERT(!options.requiresGrad_);
   ASSERT(options.device_.type == DeviceType::CPU);
-  ASSERT(options.dtype_ == DType::Float32);
 
   ASSERT(headDim % 2 == 0);
   int64_t halfDim = headDim >> 1;

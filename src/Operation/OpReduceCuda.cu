@@ -8,36 +8,43 @@
 
 namespace tinytorch::op {
 
-#define REG_REDUCE_CUDA_F32(NAME, FUNC, OP) \
-  REGISTER_OP_IMPL(NAME, CUDA, Float32, &(FUNC<DTypeToType_t<DType::Float32>, OP>))
+#define REG_REDUCE_CUDA_FLT(NAME, FUNC, OP)                                         \
+  REGISTER_OP_IMPL(NAME, CUDA, Float32, &(FUNC<DTypeToType_t<DType::Float32>, OP>)) \
+  REGISTER_OP_IMPL(NAME, CUDA, Float16, &(FUNC<DTypeToType_t<DType::Float16>, OP>)) \
+  REGISTER_OP_IMPL(NAME, CUDA, BFloat16, &(FUNC<DTypeToType_t<DType::BFloat16>, OP>))
 
-void registerReduceCudaFloat32() {
+#define REG_REDUCE_CUDA_FLT_NO_OP(NAME, FUNC)                                   \
+  REGISTER_OP_IMPL(NAME, CUDA, Float32, &(FUNC<DTypeToType_t<DType::Float32>>)) \
+  REGISTER_OP_IMPL(NAME, CUDA, Float16, &(FUNC<DTypeToType_t<DType::Float16>>)) \
+  REGISTER_OP_IMPL(NAME, CUDA, BFloat16, &(FUNC<DTypeToType_t<DType::BFloat16>>))
+
+void registerReduceCudaFloat() {
   // min/argmin
-  REG_REDUCE_CUDA_F32(min, reduceOpAllCudaImpl, OpCudaReduceMin);
-  REG_REDUCE_CUDA_F32(argmin, reduceOpArgMinMaxCudaImpl, OpCudaReduceMin);
-  REG_REDUCE_CUDA_F32(minOnDim, reduceOpMinMaxDimCudaImpl, OpCudaReduceMin);
+  REG_REDUCE_CUDA_FLT(min, reduceOpAllCudaImpl, OpCudaReduceMin);
+  REG_REDUCE_CUDA_FLT(argmin, reduceOpArgMinMaxCudaImpl, OpCudaReduceMin);
+  REG_REDUCE_CUDA_FLT(minOnDim, reduceOpMinMaxDimCudaImpl, OpCudaReduceMin);
 
   // max/argmax
-  REG_REDUCE_CUDA_F32(max, reduceOpAllCudaImpl, OpCudaReduceMax);
-  REG_REDUCE_CUDA_F32(argmax, reduceOpArgMinMaxCudaImpl, OpCudaReduceMax);
-  REG_REDUCE_CUDA_F32(maxOnDim, reduceOpMinMaxDimCudaImpl, OpCudaReduceMax);
+  REG_REDUCE_CUDA_FLT(max, reduceOpAllCudaImpl, OpCudaReduceMax);
+  REG_REDUCE_CUDA_FLT(argmax, reduceOpArgMinMaxCudaImpl, OpCudaReduceMax);
+  REG_REDUCE_CUDA_FLT(maxOnDim, reduceOpMinMaxDimCudaImpl, OpCudaReduceMax);
 
   // sum
-  REGISTER_OP_IMPL(sum, CUDA, Float32, &reduceOpSumCudaImpl<DTypeToType_t<DType::Float32>>);
-  REGISTER_OP_IMPL(sumOnDim, CUDA, Float32, &reduceOpSumDimCudaImpl<DTypeToType_t<DType::Float32>>);
-  REGISTER_OP_IMPL(sumOnDims, CUDA, Float32, &reduceOpSumDimsCudaImpl<DTypeToType_t<DType::Float32>>);
+  REG_REDUCE_CUDA_FLT_NO_OP(sum, reduceOpSumCudaImpl);
+  REG_REDUCE_CUDA_FLT_NO_OP(sumOnDim, reduceOpSumDimCudaImpl);
+  REG_REDUCE_CUDA_FLT_NO_OP(sumOnDims, reduceOpSumDimsCudaImpl);
 
   // mean
-  REGISTER_OP_IMPL(mean, CUDA, Float32, &reduceOpMeanCudaImpl<DTypeToType_t<DType::Float32>>);
-  REGISTER_OP_IMPL(meanOnDim, CUDA, Float32, &reduceOpMeanDimCudaImpl<DTypeToType_t<DType::Float32>>);
-  REGISTER_OP_IMPL(meanOnDims, CUDA, Float32, &reduceOpMeanDimsCudaImpl<DTypeToType_t<DType::Float32>>);
+  REG_REDUCE_CUDA_FLT_NO_OP(mean, reduceOpMeanCudaImpl);
+  REG_REDUCE_CUDA_FLT_NO_OP(meanOnDim, reduceOpMeanDimCudaImpl);
+  REG_REDUCE_CUDA_FLT_NO_OP(meanOnDims, reduceOpMeanDimsCudaImpl);
 
   // varMean
-  REGISTER_OP_IMPL(varMean, CUDA, Float32, &reduceOpVarMeanCudaImpl<DTypeToType_t<DType::Float32>>);
-  REGISTER_OP_IMPL(varMeanOnDim, CUDA, Float32, &reduceOpVarMeanDimCudaImpl<DTypeToType_t<DType::Float32>>);
-  REGISTER_OP_IMPL(varMeanOnDims, CUDA, Float32, &reduceOpVarMeanDimsCudaImpl<DTypeToType_t<DType::Float32>>);
+  REG_REDUCE_CUDA_FLT_NO_OP(varMean, reduceOpVarMeanCudaImpl);
+  REG_REDUCE_CUDA_FLT_NO_OP(varMeanOnDim, reduceOpVarMeanDimCudaImpl);
+  REG_REDUCE_CUDA_FLT_NO_OP(varMeanOnDims, reduceOpVarMeanDimsCudaImpl);
 }
 
-void registerReduceCuda() { registerReduceCudaFloat32(); }
+void registerReduceCuda() { registerReduceCudaFloat(); }
 
 }  // namespace tinytorch::op

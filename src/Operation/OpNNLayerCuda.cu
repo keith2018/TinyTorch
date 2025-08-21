@@ -8,32 +8,35 @@
 
 namespace tinytorch::op {
 
-#define REG_NN_LAYER_CUDA_F32(NAME, FUNC) REGISTER_OP_IMPL(NAME, CUDA, Float32, &(FUNC<DTypeToType_t<DType::Float32>>))
+#define REG_NN_LAYER_CUDA_FLT(NAME, FUNC)                                       \
+  REGISTER_OP_IMPL(NAME, CUDA, Float32, &(FUNC<DTypeToType_t<DType::Float32>>)) \
+  REGISTER_OP_IMPL(NAME, CUDA, Float16, &(FUNC<DTypeToType_t<DType::Float16>>)) \
+  REGISTER_OP_IMPL(NAME, CUDA, BFloat16, &(FUNC<DTypeToType_t<DType::BFloat16>>))
 
 void registerNNLayerCuda() {
   // softmax
-  REG_NN_LAYER_CUDA_F32(softmax, softmaxOpCudaImpl);
-  REG_NN_LAYER_CUDA_F32(softmaxOut, softmaxOpOutCudaImpl);
-  REG_NN_LAYER_CUDA_F32(softmaxBackward, softmaxOpBackwardCudaImpl);
+  REG_NN_LAYER_CUDA_FLT(softmax, softmaxOpCudaImpl);
+  REG_NN_LAYER_CUDA_FLT(softmaxOut, softmaxOpOutCudaImpl);
+  REG_NN_LAYER_CUDA_FLT(softmaxBackward, softmaxOpBackwardCudaImpl);
 
   // logSoftmax
-  REG_NN_LAYER_CUDA_F32(logSoftmax, logSoftmaxOpCudaImpl);
-  REG_NN_LAYER_CUDA_F32(logSoftmaxOut, logSoftmaxOpOutCudaImpl);
-  REG_NN_LAYER_CUDA_F32(logSoftmaxBackward, logSoftmaxOpBackwardCudaImpl);
+  REG_NN_LAYER_CUDA_FLT(logSoftmax, logSoftmaxOpCudaImpl);
+  REG_NN_LAYER_CUDA_FLT(logSoftmaxOut, logSoftmaxOpOutCudaImpl);
+  REG_NN_LAYER_CUDA_FLT(logSoftmaxBackward, logSoftmaxOpBackwardCudaImpl);
 
   // dropout
-  REG_NN_LAYER_CUDA_F32(dropout, dropoutOpCudaImpl);
-  REG_NN_LAYER_CUDA_F32(dropoutMasked, dropoutMaskedOpCudaImpl);
+  REG_NN_LAYER_CUDA_FLT(dropout, dropoutOpCudaImpl);
+  REG_NN_LAYER_CUDA_FLT(dropoutMasked, dropoutMaskedOpCudaImpl);
 
   // layerNorm
-  REG_NN_LAYER_CUDA_F32(layerNorm, layerNormOpCudaImpl);
+  REG_NN_LAYER_CUDA_FLT(layerNorm, layerNormOpCudaImpl);
 
   // rmsNorm
-  REG_NN_LAYER_CUDA_F32(rmsNorm, rmsNormOpCudaImpl);
+  REG_NN_LAYER_CUDA_FLT(rmsNorm, rmsNormOpCudaImpl);
 
   // rope
-  REG_NN_LAYER_CUDA_F32(ropeInit, ropeInitOpCudaImpl);
-  REG_NN_LAYER_CUDA_F32(ropeApply, ropeApplyOpCudaImpl);
+  REG_NN_LAYER_CUDA_FLT(ropeInit, ropeInitOpCudaImpl);
+  REG_NN_LAYER_CUDA_FLT(ropeApply, ropeApplyOpCudaImpl);
 }
 
 }  // namespace tinytorch::op

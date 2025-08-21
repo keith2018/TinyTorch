@@ -8,13 +8,20 @@
 
 namespace tinytorch::op {
 
-void registerLinalgCpu() {
+#define REG_LINALG_CPU_FLT(NAME, FUNC)                                         \
+  REGISTER_OP_IMPL(NAME, CPU, Float32, &(FUNC<DTypeToType_t<DType::Float32>>)) \
+  REGISTER_OP_IMPL(NAME, CPU, Float16, &(FUNC<DTypeToType_t<DType::Float16>>)) \
+  REGISTER_OP_IMPL(NAME, CPU, BFloat16, &(FUNC<DTypeToType_t<DType::BFloat16>>))
+
+void registerLinalgCpuFloat() {
   // dot
-  REGISTER_OP_IMPL_DTYPE_TPL(dot, CPU, dotOpCpuImpl);
+  REG_LINALG_CPU_FLT(dot, dotOpCpuImpl);
 
   // matmul
-  REGISTER_OP_IMPL_DTYPE_TPL(im2col, CPU, im2colOpCpuImpl);
-  REGISTER_OP_IMPL_DTYPE_TPL(col2im, CPU, col2imOpCpuImpl);
+  REG_LINALG_CPU_FLT(im2col, im2colOpCpuImpl);
+  REG_LINALG_CPU_FLT(col2im, col2imOpCpuImpl);
 }
+
+void registerLinalgCpu() { registerLinalgCpuFloat(); }
 
 }  // namespace tinytorch::op

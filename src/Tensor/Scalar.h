@@ -15,15 +15,14 @@ namespace tinytorch {
 
 class Scalar {
  public:
-  using ValueType = std::variant<float, uint16_t, int32_t, int64_t, bool>;
+  using ValueType = std::variant<float, Half, BFloat16, int32_t, int64_t, bool>;
 
   // NOLINTNEXTLINE(google-explicit-constructor)
   Scalar(float v) : dtype_(DType::Float32), value_(v) {}
-  Scalar(uint16_t v, DType dtype) {
-    ASSERT(dtype == DType::Float16 || dtype == DType::BFloat16);
-    dtype_ = dtype;
-    value_ = v;
-  }
+  // NOLINTNEXTLINE(google-explicit-constructor)
+  Scalar(Half v):dtype_(DType::Float16), value_(v) {}
+  // NOLINTNEXTLINE(google-explicit-constructor)
+  Scalar(BFloat16 v):dtype_(DType::BFloat16), value_(v) {}
   // NOLINTNEXTLINE(google-explicit-constructor)
   Scalar(int32_t v) : dtype_(DType::Int32), value_(v) {}
   // NOLINTNEXTLINE(google-explicit-constructor)

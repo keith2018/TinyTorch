@@ -218,6 +218,10 @@ Tensor Tensor::to(Device device) const {
   return ret;
 }
 
+Tensor Tensor::to(DType type, Device device) const {
+  return to(type).to(device);
+}
+
 void Tensor::fill_(const Scalar &val) { op::fill(*this, val); }
 void Tensor::fillMasked_(const Tensor &mask, const Scalar &val) { op::fillMaskedInplace(*this, mask, val); }
 void Tensor::fillZero_() { op::fill(*this, 0); }

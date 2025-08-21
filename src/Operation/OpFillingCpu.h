@@ -7,6 +7,7 @@
 #pragma once
 
 #include "OpFilling.h"
+#include "Utils/RandomGenerator.h"
 
 namespace tinytorch::op {
 
@@ -71,6 +72,39 @@ void fillOpLinSpaceCpuImpl(Tensor& self, const Scalar& start, const Scalar& step
   T stepVal = step.to<T>();
   for (int64_t i = 0; i < steps; i++) {
     selfPtr[i] = startVal + static_cast<T>(i) * stepVal;
+  }
+}
+
+template <typename T>
+void fillOpRandUniformCpuImpl(Tensor& self, float min, float max) {
+  self.copyOnWrite();
+  auto* selfPtr = self.dataPtr<T>();
+  auto generator = RandomGeneratorCPU::getGenerator();
+  std::uniform_real_distribution distribution(min, max);
+  for (int64_t i = 0; i < self.numel(); i++) {
+    selfPtr[i] = static_cast<T>(distribution(generator));
+  }
+}
+
+template <typename T>
+void fillOpRandNormalCpuImpl(Tensor& self, float mean, float stddev) {
+  self.copyOnWrite();
+  auto* selfPtr = self.dataPtr<T>();
+  auto generator = RandomGeneratorCPU::getGenerator();
+  std::normal_distribution distribution(mean, stddev);
+  for (int64_t i = 0; i < self.numel(); i++) {
+    selfPtr[i] = static_cast<T>(distribution(generator));
+  }
+}
+
+template <typename T>
+void fillOpRandBernoulliCpuImpl(Tensor& self, float p) {
+  self.copyOnWrite();
+  auto* selfPtr = self.dataPtr<T>();
+  auto generator = RandomGeneratorCPU::getGenerator();
+  std::bernoulli_distribution distribution(p);
+  for (int64_t i = 0; i < self.numel(); i++) {
+    selfPtr[i] = static_cast<T>(distribution(generator));
   }
 }
 

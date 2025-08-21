@@ -107,7 +107,7 @@ struct OpCpuTanh {
 struct OpCpuRelu {
   template <typename T>
   static T apply(const T& a) {
-    return a > 0 ? a : 0;
+    return a > 0 ? a : T(0);
   }
 };
 

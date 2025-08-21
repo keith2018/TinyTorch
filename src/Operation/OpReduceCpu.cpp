@@ -47,36 +47,43 @@ int64_t ReducerCpu::getReduceDstIndex(const Tensor& t, int64_t idx, const DimArr
   return retIdx;
 }
 
-#define REG_REDUCE_CPU_F32(NAME, FUNC, OP) \
-  REGISTER_OP_IMPL(NAME, CPU, Float32, &(FUNC<DTypeToType_t<DType::Float32>, OP>))
+#define REG_REDUCE_CPU_FLT(NAME, FUNC, OP)                                         \
+  REGISTER_OP_IMPL(NAME, CPU, Float32, &(FUNC<DTypeToType_t<DType::Float32>, OP>)) \
+  REGISTER_OP_IMPL(NAME, CPU, Float16, &(FUNC<DTypeToType_t<DType::Float16>, OP>)) \
+  REGISTER_OP_IMPL(NAME, CPU, BFloat16, &(FUNC<DTypeToType_t<DType::BFloat16>, OP>))
 
-void registerReduceCpuFloat32() {
+#define REG_REDUCE_CPU_FLT_NO_OP(NAME, FUNC)                                   \
+  REGISTER_OP_IMPL(NAME, CPU, Float32, &(FUNC<DTypeToType_t<DType::Float32>>)) \
+  REGISTER_OP_IMPL(NAME, CPU, Float16, &(FUNC<DTypeToType_t<DType::Float16>>)) \
+  REGISTER_OP_IMPL(NAME, CPU, BFloat16, &(FUNC<DTypeToType_t<DType::BFloat16>>))
+
+void registerReduceCpuFloat() {
   // min/argmin
-  REG_REDUCE_CPU_F32(min, reduceOpAllCpuImpl, OpCpuReduceMin);
-  REG_REDUCE_CPU_F32(argmin, reduceOpArgMinMaxCpuImpl, OpCpuReduceMin);
-  REG_REDUCE_CPU_F32(minOnDim, reduceOpMinMaxDimCpuImpl, OpCpuReduceMin);
+  REG_REDUCE_CPU_FLT(min, reduceOpAllCpuImpl, OpCpuReduceMin);
+  REG_REDUCE_CPU_FLT(argmin, reduceOpArgMinMaxCpuImpl, OpCpuReduceMin);
+  REG_REDUCE_CPU_FLT(minOnDim, reduceOpMinMaxDimCpuImpl, OpCpuReduceMin);
 
   // max/argmax
-  REG_REDUCE_CPU_F32(max, reduceOpAllCpuImpl, OpCpuReduceMax);
-  REG_REDUCE_CPU_F32(argmax, reduceOpArgMinMaxCpuImpl, OpCpuReduceMax);
-  REG_REDUCE_CPU_F32(maxOnDim, reduceOpMinMaxDimCpuImpl, OpCpuReduceMax);
+  REG_REDUCE_CPU_FLT(max, reduceOpAllCpuImpl, OpCpuReduceMax);
+  REG_REDUCE_CPU_FLT(argmax, reduceOpArgMinMaxCpuImpl, OpCpuReduceMax);
+  REG_REDUCE_CPU_FLT(maxOnDim, reduceOpMinMaxDimCpuImpl, OpCpuReduceMax);
 
   // sum
-  REGISTER_OP_IMPL(sum, CPU, Float32, &reduceOpSumCpuImpl<DTypeToType_t<DType::Float32>>);
-  REGISTER_OP_IMPL(sumOnDim, CPU, Float32, &reduceOpSumDimCpuImpl<DTypeToType_t<DType::Float32>>);
-  REGISTER_OP_IMPL(sumOnDims, CPU, Float32, &reduceOpSumDimsCpuImpl<DTypeToType_t<DType::Float32>>);
+  REG_REDUCE_CPU_FLT_NO_OP(sum, reduceOpSumCpuImpl);
+  REG_REDUCE_CPU_FLT_NO_OP(sumOnDim, reduceOpSumDimCpuImpl);
+  REG_REDUCE_CPU_FLT_NO_OP(sumOnDims, reduceOpSumDimsCpuImpl);
 
   // mean
-  REGISTER_OP_IMPL(mean, CPU, Float32, &reduceOpMeanCpuImpl<DTypeToType_t<DType::Float32>>);
-  REGISTER_OP_IMPL(meanOnDim, CPU, Float32, &reduceOpMeanDimCpuImpl<DTypeToType_t<DType::Float32>>);
-  REGISTER_OP_IMPL(meanOnDims, CPU, Float32, &reduceOpMeanDimsCpuImpl<DTypeToType_t<DType::Float32>>);
+  REG_REDUCE_CPU_FLT_NO_OP(mean, reduceOpMeanCpuImpl);
+  REG_REDUCE_CPU_FLT_NO_OP(meanOnDim, reduceOpMeanDimCpuImpl);
+  REG_REDUCE_CPU_FLT_NO_OP(meanOnDims, reduceOpMeanDimsCpuImpl);
 
   // varMean
-  REGISTER_OP_IMPL(varMean, CPU, Float32, &reduceOpVarMeanCpuImpl<DTypeToType_t<DType::Float32>>);
-  REGISTER_OP_IMPL(varMeanOnDim, CPU, Float32, &reduceOpVarMeanDimCpuImpl<DTypeToType_t<DType::Float32>>);
-  REGISTER_OP_IMPL(varMeanOnDims, CPU, Float32, &reduceOpVarMeanDimsCpuImpl<DTypeToType_t<DType::Float32>>);
+  REG_REDUCE_CPU_FLT_NO_OP(varMean, reduceOpVarMeanCpuImpl);
+  REG_REDUCE_CPU_FLT_NO_OP(varMeanOnDim, reduceOpVarMeanDimCpuImpl);
+  REG_REDUCE_CPU_FLT_NO_OP(varMeanOnDims, reduceOpVarMeanDimsCpuImpl);
 }
 
-void registerReduceCpu() { registerReduceCpuFloat32(); }
+void registerReduceCpu() { registerReduceCpuFloat(); }
 
 }  // namespace tinytorch::op

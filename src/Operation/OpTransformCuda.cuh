@@ -385,7 +385,8 @@ Tensor transpose2dOpCudaImpl(const Tensor& self) {
 
   SizeVector retShape = {self.shape(1), self.shape(0)};
   auto ret = Tensor::empty(retShape, self.options().noGrad());
-  cudaTranspose2d(ret.dataPtr<T>(), self.dataPtr<T>(), retShape[0], retShape[1], self.device());
+  using CudaT = typename cuda::CudaTypeMap<T>::type;
+  cudaTranspose2d(ret.dataPtr<CudaT>(), self.dataPtr<CudaT>(), retShape[0], retShape[1], self.device());
   return ret;
 }
 

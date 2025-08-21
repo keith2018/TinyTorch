@@ -182,7 +182,7 @@ bool Serializer::load(nn::Module& module, const std::string& path, bool strict) 
   // check missing keys
   for (const auto& [name, tensor] : name2tensor) {
     if (!fileKeys.count(name)) {
-      LOGE("Missing key: %s", name.c_str());
+      LOGW("Missing key: %s", name.c_str());
       if (strict) {
         success = false;
       }

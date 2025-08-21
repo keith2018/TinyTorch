@@ -89,7 +89,9 @@ __global__ void kMultinomialNoReplacement(const T* prob, int64_t* output, float*
 
     for (int64_t s = 0; s < numSamples; s++) {
       float total = 0.f;
-      for (int64_t i = 0; i < n; ++i) total += batchWorkspace[i];
+      for (int64_t i = 0; i < n; i++) {
+        total += batchWorkspace[i];
+      }
 
       int64_t outputIdx = batchIdx * numSamples + s;
       if (total > 0) {
@@ -134,17 +136,18 @@ TensorPair topkOpCudaImpl(const Tensor& self, int64_t k, int64_t dim, bool large
     innerSize *= self.shape(i);
   }
 
-  const auto* selfPtr = self.dataPtr<T>();
-  auto* valPtr = values.dataPtr<T>();
+  using CudaT = typename cuda::CudaTypeMap<T>::type;
+  const CudaT* selfPtr = self.dataPtr<CudaT>();
+  CudaT* valPtr = values.dataPtr<CudaT>();
   auto* idxPtr = indices.dataPtr<int64_t>();
 
   const auto stream = cuda::getCurrentCUDAStream(self.device().index).stream;
   auto policy = thrust::cuda::par.on(stream);
 
-  Storage tmpValues(static_cast<int64_t>(n * sizeof(T)), self.device());
+  Storage tmpValues(static_cast<int64_t>(n * sizeof(CudaT)), self.device());
   Storage tmpIndices(static_cast<int64_t>(n * sizeof(int64_t)), self.device());
 
-  auto* tmpValuesPtr = tmpValues.dataPtr<T>();
+  CudaT* tmpValuesPtr = tmpValues.dataPtr<CudaT>();
   auto* tmpIndicesPtr = tmpIndices.dataPtr<int64_t>();
 
   for (int64_t o = 0; o < outerSize; o++) {
@@ -152,7 +155,7 @@ TensorPair topkOpCudaImpl(const Tensor& self, int64_t k, int64_t dim, bool large
       int64_t base = o * n * innerSize + in;
 
       // init values & indices
-      thrust::device_ptr<T> dstPtr = thrust::device_pointer_cast(tmpValuesPtr);
+      thrust::device_ptr<CudaT> dstPtr = thrust::device_pointer_cast(tmpValuesPtr);
       auto inputIter =
           thrust::make_transform_iterator(thrust::counting_iterator<int64_t>(0),
                                           [=] __host__ __device__(int64_t i) { return selfPtr[base + i * innerSize]; });
@@ -164,7 +167,7 @@ TensorPair topkOpCudaImpl(const Tensor& self, int64_t k, int64_t dim, bool large
       if (largest) {
         thrust::sort_by_key(policy, thrust::device_pointer_cast(tmpValuesPtr),
                             thrust::device_pointer_cast(tmpValuesPtr + n), thrust::device_pointer_cast(tmpIndicesPtr),
-                            thrust::greater<T>());
+                            thrust::greater<CudaT>());
       } else {
         thrust::sort_by_key(policy, thrust::device_pointer_cast(tmpValuesPtr),
                             thrust::device_pointer_cast(tmpValuesPtr + n), thrust::device_pointer_cast(tmpIndicesPtr),
@@ -174,7 +177,7 @@ TensorPair topkOpCudaImpl(const Tensor& self, int64_t k, int64_t dim, bool large
       // copy results
       auto outputValIter = thrust::make_transform_iterator(
           thrust::counting_iterator<int64_t>(0),
-          [=] __host__ __device__(int64_t i) -> T& { return valPtr[(o * k + i) * innerSize + in]; });
+          [=] __host__ __device__(int64_t i) -> CudaT& { return valPtr[(o * k + i) * innerSize + in]; });
 
       auto outputIdxIter = thrust::make_transform_iterator(
           thrust::counting_iterator<int64_t>(0),
@@ -192,7 +195,6 @@ TensorPair topkOpCudaImpl(const Tensor& self, int64_t k, int64_t dim, bool large
 template <typename T>
 Tensor multinomialOpCudaImpl(const Tensor& self, int64_t nSamples, bool replacement) {
   ASSERT(self.dim() == 1 || self.dim() == 2);
-  ASSERT(self.dtype() == DType::Float32);
 
   int64_t batch = (self.dim() == 2) ? self.shape(0) : 1;
   int64_t n = (self.dim() == 2) ? self.shape(1) : self.shape(0);
@@ -209,7 +211,8 @@ Tensor multinomialOpCudaImpl(const Tensor& self, int64_t nSamples, bool replacem
     return ret;
   }
 
-  const T* selfPtr = self.dataPtr<T>();
+  using CudaT = typename cuda::CudaTypeMap<T>::type;
+  const CudaT* selfPtr = self.dataPtr<CudaT>();
   auto* retPtr = ret.dataPtr<int64_t>();
 
   auto seed = RandomGeneratorCUDA::getSeed();
@@ -260,8 +263,9 @@ TensorPair sortOpCudaImpl(const Tensor& self, int64_t dim, bool descending) {
     inner *= self.shape(i);
   }
 
-  const T* selfPtr = self.dataPtr<T>();
-  T* valPtr = values.dataPtr<T>();
+  using CudaT = typename cuda::CudaTypeMap<T>::type;
+  const CudaT* selfPtr = self.dataPtr<CudaT>();
+  CudaT* valPtr = values.dataPtr<CudaT>();
   auto* idxPtr = indices.dataPtr<int64_t>();
 
   const auto stream = cuda::getCurrentCUDAStream(self.device().index).stream;
@@ -280,7 +284,7 @@ TensorPair sortOpCudaImpl(const Tensor& self, int64_t dim, bool descending) {
     int64_t o = seg / inner;
     int64_t in = seg % inner;
 
-    T* valSegmentStart = valPtr + o * n * inner + in;
+    CudaT* valSegmentStart = valPtr + o * n * inner + in;
     int64_t* idxSegmentStart = idxPtr + o * n * inner + in;
 
     auto valIter = thrust::make_permutation_iterator(
@@ -309,9 +313,10 @@ Tensor cumsumOpCudaImpl(const Tensor& self, int64_t dim) {
   }
   ASSERT(dim >= 0 && dim < self.dim());
 
+  using CudaT = typename cuda::CudaTypeMap<T>::type;
   Tensor ret = Tensor::empty(self.shape(), self.options().noGrad());
-  const T* selfPtr = self.dataPtr<T>();
-  T* retPtr = ret.dataPtr<T>();
+  const CudaT* selfPtr = self.dataPtr<CudaT>();
+  CudaT* retPtr = ret.dataPtr<CudaT>();
 
   int64_t outer = 1, inner = 1, n = self.shape(dim);
   for (int64_t i = 0; i < dim; i++) {
@@ -335,8 +340,8 @@ Tensor cumsumOpCudaImpl(const Tensor& self, int64_t dim) {
                          int64_t inIdx = row % inner;
                          int64_t base = o * n * inner + inIdx;
 
-                         T sum = 0;
-                         for (int64_t i = 0; i < n; ++i) {
+                         CudaT sum = 0;
+                         for (int64_t i = 0; i < n; i++) {
                            sum += selfPtr[base + i * inner];
                            retPtr[base + i * inner] = sum;
                          }

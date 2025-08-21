@@ -69,7 +69,6 @@ TensorPair topkOpCpuImpl(const Tensor& self, int64_t k, int64_t dim, bool larges
 template <typename T>
 Tensor multinomialOpCpuImpl(const Tensor& self, int64_t numSamples, bool replacement) {
   ASSERT(self.dim() == 1 || self.dim() == 2);
-  ASSERT(self.dtype() == DType::Float32);
 
   int64_t batch = (self.dim() == 2) ? self.shape(0) : 1;
   int64_t n = (self.dim() == 2) ? self.shape(1) : self.shape(0);

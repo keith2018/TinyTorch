@@ -56,4 +56,10 @@ struct StaticCaller {
 
 #define STATIC_CALL(func) static StaticCaller _static_caller_##func(func);
 
+#if defined(__CUDACC__)
+#define HOST_DEVICE __host__ __device__
+#else
+#define HOST_DEVICE
+#endif
+
 }  // namespace tinytorch
