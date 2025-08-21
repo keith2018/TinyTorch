@@ -140,6 +140,7 @@ class Tensor {
   // convert
   Tensor to(DType type) const;
   Tensor to(Device device) const;
+  Tensor to(DType type, Device device) const;
 
   // fill
   void fill_(const Scalar& val);
@@ -334,13 +335,15 @@ Tensor Tensor::linspace(T start, T end, int64_t steps, Options options) {
 template <typename T>
 std::vector<T> Tensor::toList() const {
   ASSERT(defined());
-  return impl_->toList<T>();
+  auto tmp = to(TypeToDType_v<T>);
+  return tmp.impl_->template toList<T>();
 }
 
 template <typename T>
 T Tensor::item() const {
   ASSERT(defined());
-  return impl_->item<T>();
+  auto tmp = to(TypeToDType_v<T>);
+  return tmp.impl_->template item<T>();
 }
 
 }  // namespace tinytorch

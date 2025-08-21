@@ -8,6 +8,7 @@
 
 #include "OpFilling.h"
 #include "Utils/CUDAUtils.h"
+#include "Utils/RandomGenerator.h"
 
 namespace tinytorch::op {
 
@@ -56,6 +57,73 @@ __global__ void kFillLinSpace(T* dst, const T start, const T step, const int64_t
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < n) {
     dst[index] = start + static_cast<T>(index) * step;
+  }
+}
+
+template <typename T>
+__global__ void kFillRandUniform(T* t, const float minVal, const float maxVal, const unsigned long seed,
+                                 const unsigned long seq, const int64_t n) {
+  const auto index = (blockIdx.x * blockDim.x + threadIdx.x) * 4;
+  if (index < n) {
+    curandStatePhilox4_32_10_t state;
+    curand_init(seed, seq, index, &state);
+    const auto rand = curand_uniform4(&state);
+    const auto range = maxVal - minVal;
+
+    if (index + 3 < n) {
+      t[index] = static_cast<T>(rand.x * range + minVal);
+      t[index + 1] = static_cast<T>(rand.y * range + minVal);
+      t[index + 2] = static_cast<T>(rand.z * range + minVal);
+      t[index + 3] = static_cast<T>(rand.w * range + minVal);
+    } else {
+      if (index < n) t[index] = static_cast<T>(rand.x * range + minVal);
+      if (index + 1 < n) t[index + 1] = static_cast<T>(rand.y * range + minVal);
+      if (index + 2 < n) t[index + 2] = static_cast<T>(rand.z * range + minVal);
+    }
+  }
+}
+
+template <typename T>
+__global__ void kFillRandNormal(T* t, const float mean, const float stddev, const unsigned long seed,
+                                const unsigned long seq, const int64_t n) {
+  const auto index = (blockIdx.x * blockDim.x + threadIdx.x) * 4;
+  if (index < n) {
+    curandStatePhilox4_32_10_t state;
+    curand_init(seed, seq, index, &state);
+    const auto rand = curand_normal4(&state);
+
+    if (index + 3 < n) {
+      t[index] = static_cast<T>(rand.x * stddev + mean);
+      t[index + 1] = static_cast<T>(rand.y * stddev + mean);
+      t[index + 2] = static_cast<T>(rand.z * stddev + mean);
+      t[index + 3] = static_cast<T>(rand.w * stddev + mean);
+    } else {
+      if (index < n) t[index] = static_cast<T>(rand.x * stddev + mean);
+      if (index + 1 < n) t[index + 1] = static_cast<T>(rand.y * stddev + mean);
+      if (index + 2 < n) t[index + 2] = static_cast<T>(rand.z * stddev + mean);
+    }
+  }
+}
+
+template <typename T>
+__global__ void kFillRandBernoulli(T* t, const float p, const unsigned long seed, const unsigned long seq,
+                                   const int64_t n) {
+  const auto index = (blockIdx.x * blockDim.x + threadIdx.x) * 4;
+  if (index < n) {
+    curandStatePhilox4_32_10_t state;
+    curand_init(seed, seq, index, &state);
+    const auto rand = curand_uniform4(&state);
+
+    if (index + 3 < n) {
+      t[index] = rand.x < p ? T(1.f) : T(0.f);
+      t[index + 1] = rand.y < p ? T(1.f) : T(0.f);
+      t[index + 2] = rand.z < p ? T(1.f) : T(0.f);
+      t[index + 3] = rand.w < p ? T(1.f) : T(0.f);
+    } else {
+      if (index < n) t[index] = rand.x < p ? T(1.f) : T(0.f);
+      if (index + 1 < n) t[index + 1] = rand.y < p ? T(1.f) : T(0.f);
+      if (index + 2 < n) t[index + 2] = rand.z < p ? T(1.f) : T(0.f);
+    }
   }
 }
 
@@ -130,6 +198,42 @@ void fillOpLinSpaceCudaImpl(Tensor& self, const Scalar& start, const Scalar& ste
 
   auto params = cuda::getKernelLaunchParams(self.device().index, n);
   CUDA_LAUNCH_KERNEL(kFillLinSpace, params, selfPtr, startVal, stepVal, n);
+}
+
+template <typename T>
+void fillOpRandUniformCudaImpl(Tensor& self, float min, float max) {
+  self.copyOnWrite();
+  auto* selfPtr = self.dataPtr<T>();
+  auto seed = RandomGeneratorCUDA::getSeed();
+  auto seq = RandomGeneratorCUDA::nextSequence();
+  int64_t n = self.numel();
+
+  auto params = cuda::getKernelLaunchParams(self.device().index, n, 4);
+  CUDA_LAUNCH_KERNEL(kFillRandUniform<T>, params, selfPtr, min, max, seed, seq, n);
+}
+
+template <typename T>
+void fillOpRandNormalCudaImpl(Tensor& self, float mean, float stddev) {
+  self.copyOnWrite();
+  auto* selfPtr = self.dataPtr<T>();
+  auto seed = RandomGeneratorCUDA::getSeed();
+  auto seq = RandomGeneratorCUDA::nextSequence();
+  int64_t n = self.numel();
+
+  auto params = cuda::getKernelLaunchParams(self.device().index, n, 4);
+  CUDA_LAUNCH_KERNEL(kFillRandNormal<T>, params, selfPtr, mean, stddev, seed, seq, n);
+}
+
+template <typename T>
+void fillOpRandBernoulliCudaImpl(Tensor& self, float p) {
+  self.copyOnWrite();
+  auto* selfPtr = self.dataPtr<T>();
+  auto seed = RandomGeneratorCUDA::getSeed();
+  auto seq = RandomGeneratorCUDA::nextSequence();
+  int64_t n = self.numel();
+
+  auto params = cuda::getKernelLaunchParams(self.device().index, n, 4);
+  CUDA_LAUNCH_KERNEL(kFillRandBernoulli<T>, params, selfPtr, p, seed, seq, n);
 }
 
 }  // namespace tinytorch::op

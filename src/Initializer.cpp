@@ -15,17 +15,14 @@ void Initializer::zeros(Tensor &tensor) { tensor.fillZero_(); }
 void Initializer::ones(Tensor &tensor) { tensor.fillOne_(); }
 
 void Initializer::normal(Tensor &tensor, float mean, float stddev) {
-  ASSERT(tensor.dtype() == DType::Float32);
   tensor.fillNormal_(mean, stddev);
 }
 
 void Initializer::uniform(Tensor &tensor, float min, float max) {
-  ASSERT(tensor.dtype() == DType::Float32);
   tensor.fillUniform_(min, max);
 }
 
 void Initializer::kaimingUniform(Tensor &tensor, float a, FanMode mode) {
-  ASSERT(tensor.dtype() == DType::Float32);
   auto fan = calculateFan(tensor, mode);
   auto gain = calculateGain(a);
   auto std = gain / std::sqrt(static_cast<float>(fan));

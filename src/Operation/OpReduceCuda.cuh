@@ -10,6 +10,7 @@
 #include "OpReduce.h"
 #include "OpTransformCuda.cuh"
 #include "Tensor/Storage.h"
+#include "Utils/CUDAMath.h"
 #include "Utils/CUDAUtils.h"
 
 namespace tinytorch::op {
@@ -17,7 +18,7 @@ namespace tinytorch::op {
 struct OpCudaReduceMin {
   template <typename T>
   __device__ static T apply(const T& a, const T& b) {
-    return ::min(a, b);
+    return cuda::min(a, b);
   }
 
   template <typename T>
@@ -27,14 +28,14 @@ struct OpCudaReduceMin {
 
   template <typename T>
   __device__ static T defaultVal() {
-    return cuda::Inf<T>();
+    return cuda::max<T>();
   }
 };
 
 struct OpCudaReduceMax {
   template <typename T>
   __device__ static T apply(const T& a, const T& b) {
-    return ::max(a, b);
+    return cuda::max(a, b);
   }
 
   template <typename T>
@@ -44,7 +45,7 @@ struct OpCudaReduceMax {
 
   template <typename T>
   __device__ static T defaultVal() {
-    return -cuda::Inf<T>();
+    return -cuda::max<T>();
   }
 };
 
@@ -311,29 +312,78 @@ __global__ void kReduceIdxDim(cuda::TensorCudaCtx values, int64_t* indices, cons
   }
 }
 
-// TODO optimize
-template <typename T>
-__global__ void kReduceMultiDimSum(T* retPtr, const cuda::TensorCudaCtx t, const DimArray<int64_t> inAxis,
-                                   const int64_t n) {
-  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (index < n) {
-    const int64_t retIdx = cudaGetReduceDstIndex(t.shape, t.strides, inAxis.data, index, t.ndim);
-    const auto* tPtr = static_cast<T*>(t.data);
-    atomicAdd(&retPtr[retIdx], tPtr[index]);
+template <typename T, int BLOCK_SIZE>
+__global__ void kReduceMultiDimSum(T* outPtr, const cuda::TensorCudaCtx t, const DimArray<int64_t> inAxis,
+                                   const int64_t reduceCnt, const int64_t n) {
+  __shared__ T sdata[BLOCK_SIZE];
+
+  const int64_t outIdx = blockIdx.x;
+  if (outIdx >= n) {
+    return;
+  }
+
+  const auto* inPtr = static_cast<const T*>(t.data);
+  T localSum = 0;
+
+  for (int64_t r = threadIdx.x; r < reduceCnt; r += BLOCK_SIZE) {
+    int64_t inIndex = 0;
+    int64_t tmpOut = outIdx;
+    int64_t tmpR = r;
+
+    for (int64_t d = t.ndim - 1; d >= 0; d--) {
+      int64_t coord;
+      if (inAxis.data[d] == 0) {
+        coord = tmpOut % t.shape[d];
+        tmpOut /= t.shape[d];
+      } else {
+        coord = tmpR % t.shape[d];
+        tmpR /= t.shape[d];
+      }
+      inIndex += coord * t.strides[d];
+    }
+
+    localSum += inPtr[inIndex];
+  }
+
+  sdata[threadIdx.x] = localSum;
+  __syncthreads();
+
+  for (int s = BLOCK_SIZE / 2; s > 0; s >>= 1) {
+    if (threadIdx.x < s) {
+      sdata[threadIdx.x] += sdata[threadIdx.x + s];
+    }
+    __syncthreads();
+  }
+
+  if (threadIdx.x == 0) {
+    outPtr[outIdx] = sdata[0];
   }
 }
 
-// TODO optimize
 template <typename T>
 __global__ void kReduceMultiDimVar(T* retPtr, const cuda::TensorCudaCtx t, const T* meanValues,
                                    const DimArray<int64_t> inAxis, const int64_t n) {
-  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (index < n) {
-    const int64_t retIdx = cudaGetReduceDstIndex(t.shape, t.strides, inAxis.data, index, t.ndim);
-    const auto* tPtr = static_cast<T*>(t.data);
-    const T diff = tPtr[index] - meanValues[retIdx];
-    atomicAdd(&retPtr[retIdx], diff * diff);
+  const int64_t outIdx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (outIdx >= n) {
+    return;
   }
+
+  const auto* tPtr = static_cast<const T*>(t.data);
+  const T mean = meanValues[outIdx];
+
+  T sum = 0;
+  int64_t count = 0;
+
+  for (int64_t inIdx = 0; inIdx < t.numel; inIdx++) {
+    const auto dstIdx = cudaGetReduceDstIndex(t.shape, t.strides, inAxis.data, inIdx, t.ndim);
+    if (dstIdx == outIdx) {
+      T diff = tPtr[inIdx] - mean;
+      sum += diff * diff;
+      count++;
+    }
+  }
+
+  retPtr[outIdx] = sum;
 }
 
 template <typename T>
@@ -573,48 +623,53 @@ TensorPair ReducerCuda::reduceIdxDim(const Tensor& t, int64_t dim, bool keepDims
 
 template <typename T, typename OP>
 Tensor reduceOpAllCudaImpl(const Tensor& t) {
+  using CudaT = typename cuda::CudaTypeMap<T>::type;
   if (t.isScalar()) {
     return t;
   }
   auto ret = Tensor::scalar(0, t.options().noGrad());
-  const T* tPtr = t.dataPtr<T>();
-  T* retPtr = ret.dataPtr<T>();
-  ReducerCuda::reduceMerge<T, OP, CudaReduceIndexAll>(retPtr, tPtr, t.device(), t.numel());
+  const CudaT* tPtr = t.dataPtr<CudaT>();
+  CudaT* retPtr = ret.dataPtr<CudaT>();
+  ReducerCuda::reduceMerge<CudaT, OP, CudaReduceIndexAll>(retPtr, tPtr, t.device(), t.numel());
   return ret;
 }
 
 template <typename T, typename OP>
 Tensor reduceOpArgMinMaxCudaImpl(const Tensor& t) {
+  using CudaT = typename cuda::CudaTypeMap<T>::type;
   auto ret = Tensor::scalar(0, t.options().noGrad().indices());
   if (t.isScalar()) {
     return ret;
   }
-  const T* tPtr = t.dataPtr<T>();
+  const CudaT* tPtr = t.dataPtr<CudaT>();
   auto* retPtr = ret.dataPtr<int64_t>();
-  ReducerCuda::reduceIdxMerge<T, OP, CudaReduceIndexAll>(nullptr, retPtr, tPtr, t.device(), t.numel());
+  ReducerCuda::reduceIdxMerge<CudaT, OP, CudaReduceIndexAll>(nullptr, retPtr, tPtr, t.device(), t.numel());
   return ret;
 }
 
 template <typename T, typename OP>
 TensorPair reduceOpMinMaxDimCudaImpl(const Tensor& t, int64_t dim, bool keepDims = false) {
+  using CudaT = typename cuda::CudaTypeMap<T>::type;
   if (t.isScalar()) {
     return {t, Tensor::scalar(0, t.options().noGrad().indices())};
   }
-  return ReducerCuda::reduceIdxDim<T, OP>(t, dim, keepDims);
+  return ReducerCuda::reduceIdxDim<CudaT, OP>(t, dim, keepDims);
 }
 
 template <typename T>
 Tensor reduceOpSumDimsCudaImpl(const Tensor& t, const IntArrayView dims, bool keepDims = false) {
+  using CudaT = typename cuda::CudaTypeMap<T>::type;
   if (t.isScalar()) {
     return t;
   }
   ASSERT(!dims.empty());
 
   if (dims.size() == 1) {
-    return ReducerCuda::reduceDim<T, OpCudaReduceSum>(t, dims[0], keepDims);
+    return ReducerCuda::reduceDim<CudaT, OpCudaReduceSum>(t, dims[0], keepDims);
   }
 
   DimArray<int64_t> inAxis{};
+  int64_t reduceCnt = 1;
   for (int64_t d : dims) {
     if (d < 0) {
       d += t.dim();
@@ -625,6 +680,7 @@ Tensor reduceOpSumDimsCudaImpl(const Tensor& t, const IntArrayView dims, bool ke
       return {};
     }
     inAxis.data[d] = 1;
+    reduceCnt *= t.shape(d);
   }
 
   const auto retShape = getReduceShape(t, inAxis, keepDims);
@@ -632,8 +688,15 @@ Tensor reduceOpSumDimsCudaImpl(const Tensor& t, const IntArrayView dims, bool ke
 
   auto ctxT = cuda::getTensorCudaCtx(t);
 
-  auto params = cuda::getKernelLaunchParams(t.device().index, t.numel());
-  CUDA_LAUNCH_KERNEL((kReduceMultiDimSum<T>), params, ret.dataPtr<T>(), ctxT, inAxis, t.numel());
+  constexpr int blockSize = 512;
+  ASSERT(blockSize <= cuda::getMaxThreadsPerBlock(t.device().index));
+
+  dim3 grid(t.numel());
+  dim3 block(blockSize);
+  const auto stream = cuda::getCurrentCUDAStream(t.device().index).stream;
+  kReduceMultiDimSum<CudaT, blockSize>
+      <<<grid, block, 0, stream>>>(ret.dataPtr<CudaT>(), ctxT, inAxis, reduceCnt, t.numel());
+  CUDA_KERNEL_CHECK();
   return ret;
 }
 
@@ -649,10 +712,11 @@ Tensor reduceOpSumCudaImpl(const Tensor& t) {
 
 template <typename T>
 Tensor reduceOpMeanCudaImpl(const Tensor& t) {
+  using CudaT = typename cuda::CudaTypeMap<T>::type;
   if (t.isScalar()) {
     return t;
   }
-  auto ret = reduceOpAllCudaImpl<T, OpCudaReduceSum>(t);
+  auto ret = reduceOpAllCudaImpl<CudaT, OpCudaReduceSum>(t);
   const auto r = 1.f / static_cast<float>(t.numel());
   op::mulInplace(ret, Tensor::scalar(r, ret.options().noGrad()));
   return ret;
@@ -660,11 +724,12 @@ Tensor reduceOpMeanCudaImpl(const Tensor& t) {
 
 template <typename T>
 Tensor reduceOpMeanDimsCudaImpl(const Tensor& t, const IntArrayView dims, bool keepDims = false) {
+  using CudaT = typename cuda::CudaTypeMap<T>::type;
   if (t.isScalar()) {
     return t;
   }
   ASSERT(!dims.empty());
-  auto ret = reduceOpSumDimsCudaImpl<T>(t, dims, keepDims);
+  auto ret = reduceOpSumDimsCudaImpl<CudaT>(t, dims, keepDims);
   if (ret.defined()) {
     auto r = static_cast<float>(ret.numel()) / static_cast<float>(t.numel());
     op::mulInplace(ret, Tensor::scalar(r, ret.options().noGrad()));
@@ -679,22 +744,23 @@ Tensor reduceOpMeanDimCudaImpl(const Tensor& t, const int64_t dim, bool keepDims
 
 template <typename T>
 TensorPair reduceOpVarMeanCudaImpl(const Tensor& t, bool unbiased = true) {
+  using CudaT = typename cuda::CudaTypeMap<T>::type;
   if (t.isScalar()) {
     return {Tensor::scalar(0, t.options().noGrad()), t};
   }
   const auto meanVal = op::mean(t);
   auto squaredDiff = Tensor::empty({t.numel()}, t.options().noGrad());
 
-  const T* tPtr = t.dataPtr<T>();
-  const T* meanPtr = meanVal.dataPtr<T>();
-  T* squaredDiffPtr = squaredDiff.dataPtr<T>();
+  const CudaT* tPtr = t.dataPtr<CudaT>();
+  const CudaT* meanPtr = meanVal.dataPtr<CudaT>();
+  CudaT* squaredDiffPtr = squaredDiff.dataPtr<CudaT>();
 
   auto params = cuda::getKernelLaunchParams(t.device().index, t.numel());
-  CUDA_LAUNCH_KERNEL((kSquaredDiff<T>), params, squaredDiffPtr, tPtr, meanPtr, t.numel());
+  CUDA_LAUNCH_KERNEL((kSquaredDiff<CudaT>), params, squaredDiffPtr, tPtr, meanPtr, t.numel());
 
   auto varVal = Tensor::empty({}, t.options().noGrad());
-  T* varPtr = varVal.dataPtr<T>();
-  ReducerCuda::reduceMerge<T, OpCudaReduceSum, CudaReduceIndexAll>(varPtr, squaredDiffPtr, t.device(), t.numel());
+  CudaT* varPtr = varVal.dataPtr<CudaT>();
+  ReducerCuda::reduceMerge<CudaT, OpCudaReduceSum, CudaReduceIndexAll>(varPtr, squaredDiffPtr, t.device(), t.numel());
 
   const auto n = static_cast<float>(t.numel());
   auto r = 1.f / n;
@@ -708,6 +774,7 @@ TensorPair reduceOpVarMeanCudaImpl(const Tensor& t, bool unbiased = true) {
 template <typename T>
 TensorPair reduceOpVarMeanDimsCudaImpl(const Tensor& t, IntArrayView dims, bool unbiased = true,
                                        bool keepDims = false) {
+  using CudaT = typename cuda::CudaTypeMap<T>::type;
   if (t.isScalar()) {
     return {Tensor::scalar(0, t.options().noGrad()), t};
   }
@@ -732,11 +799,11 @@ TensorPair reduceOpVarMeanDimsCudaImpl(const Tensor& t, IntArrayView dims, bool 
   auto varVal = Tensor::zeros(retShape, t.options().noGrad());
 
   auto ctxT = cuda::getTensorCudaCtx(t);
-  const T* meanPtr = meanVal.dataPtr<T>();
-  T* varPtr = varVal.dataPtr<T>();
+  const CudaT* meanPtr = meanVal.dataPtr<CudaT>();
+  CudaT* varPtr = varVal.dataPtr<CudaT>();
 
-  auto params = cuda::getKernelLaunchParams(t.device().index, t.numel());
-  CUDA_LAUNCH_KERNEL((kReduceMultiDimVar<T>), params, varPtr, ctxT, meanPtr, inAxis, t.numel());
+  auto params = cuda::getKernelLaunchParams(t.device().index, varVal.numel());
+  CUDA_LAUNCH_KERNEL((kReduceMultiDimVar<CudaT>), params, varPtr, ctxT, meanPtr, inAxis, varVal.numel());
 
   auto reduceSize = static_cast<float>(t.numel()) / static_cast<float>(varVal.numel());
   auto r = 1.f / reduceSize;

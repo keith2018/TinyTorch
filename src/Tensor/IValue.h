@@ -22,6 +22,8 @@ class IValue {
                                  int32_t,             //
                                  int64_t,             //
                                  float,               //
+                                 Half,                //
+                                 BFloat16,            //
                                  double,              //
                                  Scalar,              //
                                  Dim2D,               //
@@ -49,6 +51,8 @@ class IValue {
   int32_t toInt32() const { return std::get<int32_t>(value_); }
   int64_t toInt64() const { return std::get<int64_t>(value_); }
   float toFloat() const { return std::get<float>(value_); }
+  Half toHalf() const { return std::get<Half>(value_); }
+  BFloat16 toBFloat16() const { return std::get<BFloat16>(value_); }
   double toDouble() const { return std::get<double>(value_); }
   Scalar toScalar() const { return std::get<Scalar>(value_); }
   Dim2D toDim2D() const { return std::get<Dim2D>(value_); }

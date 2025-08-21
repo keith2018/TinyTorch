@@ -8,6 +8,8 @@
 
 #ifdef USE_CUDA
 #include <cublas_v2.h>
+#include <cuda_bf16.h>
+#include <cuda_fp16.h>
 #include <cuda_runtime.h>
 #include <curand_kernel.h>
 #endif
@@ -146,32 +148,42 @@ struct ALIGN(16) TensorCudaCtx {
 TensorCudaCtx getTensorCudaCtx(const Tensor& t);
 
 template <typename T>
-__host__ __device__ static T Inf();
-
+struct CudaTypeMap {
+  static_assert(sizeof(T) == 0, "Unsupported type for CUDA");
+};
 template <>
-inline __host__ __device__ uint8_t Inf<uint8_t>() {
-  return UINT8_MAX;
-}
-
+struct CudaTypeMap<float> {
+  using type = float;
+};
 template <>
-inline __host__ __device__ uint16_t Inf<uint16_t>() {
-  return UINT16_MAX;
-}
-
+struct CudaTypeMap<Half> {
+  using type = __half;
+};
 template <>
-inline __host__ __device__ int32_t Inf<int32_t>() {
-  return INT32_MAX;
-}
-
+struct CudaTypeMap<BFloat16> {
+  using type = __nv_bfloat16;
+};
 template <>
-inline __host__ __device__ int64_t Inf<int64_t>() {
-  return INT64_MAX;
-}
-
+struct CudaTypeMap<__half> {
+  using type = __half;
+};
 template <>
-inline __host__ __device__ float Inf<float>() {
-  return FLT_MAX;
-}
+struct CudaTypeMap<__nv_bfloat16> {
+  using type = __nv_bfloat16;
+};
+template <>
+struct CudaTypeMap<int32_t> {
+  using type = int32_t;
+};
+template <>
+struct CudaTypeMap<int64_t> {
+  using type = int64_t;
+};
+template <>
+struct CudaTypeMap<uint8_t> {
+  using type = uint8_t;
+};
+
 #endif
 
 bool deviceAvailable();

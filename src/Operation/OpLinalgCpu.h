@@ -58,7 +58,7 @@ Tensor im2colOpCpuImpl(const Tensor& self, Dim2D kernel, Dim2D stride, Dim2D pad
               int64_t ih = hStride + i;
               int64_t iw = wStride + j;
               colPtr[i * kernel.w + j] =
-                  (ih >= 0 && ih < height && iw >= 0 && iw < width) ? imPtr[ih * width + iw] : 0.f;
+                  (ih >= 0 && ih < height && iw >= 0 && iw < width) ? imPtr[ih * width + iw] : T(0);
             }
           }
         }
@@ -121,13 +121,13 @@ void gemmCpuImpl(T* c, const T* a, const T* b, int64_t m, int64_t k, int64_t n, 
   cblas_sgemm(CblasRowMajor, ta, tb, (int)m, (int)n, (int)k, 1.0f, a, transA ? (int)m : (int)k, b,
               transB ? (int)k : (int)n, 0.0f, c, (int)n);
 #else
-  for (int i = 0; i < m * n; i++) {
+  for (int64_t i = 0; i < m * n; i++) {
     c[i] = 0;
   }
 
-  for (int i = 0; i < m; i++) {
-    for (int j = 0; j < n; j++) {
-      for (int p = 0; p < k; p++) {
+  for (int64_t i = 0; i < m; i++) {
+    for (int64_t j = 0; j < n; j++) {
+      for (int64_t p = 0; p < k; p++) {
         T aVal = transA ? a[p * m + i] : a[i * k + p];
         T bVal = transB ? b[j * k + p] : b[p * n + j];
         c[i * n + j] += aVal * bVal;
@@ -141,6 +141,18 @@ template <>
 void gemmImpl<float, DeviceType::CPU>(float* c, const float* a, const float* b, int64_t m, int64_t k, int64_t n,
                                       bool transA, bool transB, DeviceIndex device) {
   gemmCpuImpl<float>(c, a, b, m, k, n, transA, transB);
+}
+
+template <>
+void gemmImpl<Half, DeviceType::CPU>(Half* c, const Half* a, const Half* b, int64_t m, int64_t k, int64_t n,
+                                     bool transA, bool transB, DeviceIndex device) {
+  gemmCpuImpl<Half>(c, a, b, m, k, n, transA, transB);
+}
+
+template <>
+void gemmImpl<BFloat16, DeviceType::CPU>(BFloat16* c, const BFloat16* a, const BFloat16* b, int64_t m, int64_t k,
+                                         int64_t n, bool transA, bool transB, DeviceIndex device) {
+  gemmCpuImpl<BFloat16>(c, a, b, m, k, n, transA, transB);
 }
 
 }  // namespace tinytorch::op

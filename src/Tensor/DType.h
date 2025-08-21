@@ -11,6 +11,8 @@
 #include <type_traits>
 #include <vector>
 
+#include "Utils/BFloat16.h"
+#include "Utils/Half.h"
 #include "Utils/Macros.h"
 
 namespace tinytorch {
@@ -54,11 +56,11 @@ struct DTypeToType<DType::Float32> {
 };
 template <>
 struct DTypeToType<DType::Float16> {
-  using type = uint16_t;
+  using type = Half;
 };
 template <>
 struct DTypeToType<DType::BFloat16> {
-  using type = uint16_t;
+  using type = BFloat16;
 };
 template <>
 struct DTypeToType<DType::Int32> {
@@ -85,6 +87,16 @@ struct TypeToDType<float> {
 };
 
 template <>
+struct TypeToDType<Half> {
+  static constexpr DType value = DType::Float16;
+};
+
+template <>
+struct TypeToDType<BFloat16> {
+  static constexpr DType value = DType::BFloat16;
+};
+
+template <>
 struct TypeToDType<int32_t> {
   static constexpr DType value = DType::Int32;
 };
@@ -106,8 +118,10 @@ template <typename T>
 void CheckDTypeMatch(DType dtype) {
   if (dtype == DType::Float32) {
     ASSERT((std::is_same_v<T, float>) && "Type mismatch: expected float");
-  } else if (dtype == DType::Float16 || dtype == DType::BFloat16) {
-    ASSERT((std::is_same_v<T, uint16_t>) && "Type mismatch: expected uint16_t for Float16/BFloat16");
+  } else if (dtype == DType::Float16) {
+    ASSERT((std::is_same_v<T, Half>) && "Type mismatch: expected Half");
+  } else if (dtype == DType::BFloat16) {
+    ASSERT((std::is_same_v<T, BFloat16>) && "Type mismatch: expected BFloat16");
   } else if (dtype == DType::Int32) {
     ASSERT((std::is_same_v<T, int32_t>) && "Type mismatch: expected int32_t");
   } else if (dtype == DType::Int64) {

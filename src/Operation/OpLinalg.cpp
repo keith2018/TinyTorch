@@ -166,6 +166,8 @@ Tensor matmulOpImpl(const Tensor &a, const Tensor &b, bool transA, bool transB) 
 
 void registerLinalgCommon() {
   REGISTER_OP_IMPL_ALL_DEVICES(matmul, Float32, &(matmulOpImpl<DTypeToType_t<DType::Float32>>));
+  REGISTER_OP_IMPL_ALL_DEVICES(matmul, Float16, &(matmulOpImpl<DTypeToType_t<DType::Float16>>));
+  REGISTER_OP_IMPL_ALL_DEVICES(matmul, BFloat16, &(matmulOpImpl<DTypeToType_t<DType::BFloat16>>));
 }
 
 }  // namespace tinytorch::op

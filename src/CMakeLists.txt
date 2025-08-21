@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if (${TINYTORCH_USE_CUDA})
     set(CMAKE_CUDA_ARCHITECTURES "60;70;75;80")
-    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --extended-lambda")
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --extended-lambda --expt-relaxed-constexpr")
     find_package(CUDAToolkit REQUIRED)
     enable_language(CUDA)
 endif ()

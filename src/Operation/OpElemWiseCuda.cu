@@ -11,8 +11,15 @@ namespace tinytorch::op {
 #define REG_ELEM_WISE_CUDA_BOOL(NAME, FUNC, OP) \
   REGISTER_OP_IMPL(NAME, CUDA, Bool, &(FUNC<DTypeToType_t<DType::Bool>, OP>))
 
-#define REG_ELEM_WISE_CUDA_F32(NAME, FUNC, OP) \
-  REGISTER_OP_IMPL(NAME, CUDA, Float32, &(FUNC<DTypeToType_t<DType::Float32>, OP>))
+#define REG_ELEM_WISE_CUDA_FLT(NAME, FUNC, OP)                                      \
+  REGISTER_OP_IMPL(NAME, CUDA, Float32, &(FUNC<DTypeToType_t<DType::Float32>, OP>)) \
+  REGISTER_OP_IMPL(NAME, CUDA, Float16, &(FUNC<DTypeToType_t<DType::Float16>, OP>)) \
+  REGISTER_OP_IMPL(NAME, CUDA, BFloat16, &(FUNC<DTypeToType_t<DType::BFloat16>, OP>))
+
+#define REG_ELEM_WISE_CUDA_FLT_NO_OP(NAME, FUNC)                                \
+  REGISTER_OP_IMPL(NAME, CUDA, Float32, &(FUNC<DTypeToType_t<DType::Float32>>)) \
+  REGISTER_OP_IMPL(NAME, CUDA, Float16, &(FUNC<DTypeToType_t<DType::Float16>>)) \
+  REGISTER_OP_IMPL(NAME, CUDA, BFloat16, &(FUNC<DTypeToType_t<DType::BFloat16>>))
 
 #define REG_ELEM_WISE_CUDA_I64(NAME, FUNC, OP) \
   REGISTER_OP_IMPL(NAME, CUDA, Int64, &(FUNC<DTypeToType_t<DType::Int64>, OP>))
@@ -34,150 +41,150 @@ void registerUnaryCudaBool() {
   REG_ELEM_WISE_CUDA_BOOL(logicOrInplace, binaryOpInplaceCudaImpl, OpCudaLogicOr);
 }
 
-void registerUnaryCudaFloat32() {
+void registerUnaryCudaFloat() {
   // abs
-  REG_ELEM_WISE_CUDA_F32(abs, unaryOpCudaImpl, OpCudaAbs);
-  REG_ELEM_WISE_CUDA_F32(absOut, unaryOpOutCudaImpl, OpCudaAbs);
-  REG_ELEM_WISE_CUDA_F32(absInplace, unaryOpInplaceCudaImpl, OpCudaAbs);
+  REG_ELEM_WISE_CUDA_FLT(abs, unaryOpCudaImpl, OpCudaAbs);
+  REG_ELEM_WISE_CUDA_FLT(absOut, unaryOpOutCudaImpl, OpCudaAbs);
+  REG_ELEM_WISE_CUDA_FLT(absInplace, unaryOpInplaceCudaImpl, OpCudaAbs);
 
   // neg
-  REG_ELEM_WISE_CUDA_F32(neg, unaryOpCudaImpl, OpCudaNeg);
-  REG_ELEM_WISE_CUDA_F32(negOut, unaryOpOutCudaImpl, OpCudaNeg);
-  REG_ELEM_WISE_CUDA_F32(negInplace, unaryOpInplaceCudaImpl, OpCudaNeg);
+  REG_ELEM_WISE_CUDA_FLT(neg, unaryOpCudaImpl, OpCudaNeg);
+  REG_ELEM_WISE_CUDA_FLT(negOut, unaryOpOutCudaImpl, OpCudaNeg);
+  REG_ELEM_WISE_CUDA_FLT(negInplace, unaryOpInplaceCudaImpl, OpCudaNeg);
 
   // sign
-  REG_ELEM_WISE_CUDA_F32(sign, unaryOpCudaImpl, OpCudaSign);
-  REG_ELEM_WISE_CUDA_F32(signOut, unaryOpOutCudaImpl, OpCudaSign);
-  REG_ELEM_WISE_CUDA_F32(signInplace, unaryOpInplaceCudaImpl, OpCudaSign);
+  REG_ELEM_WISE_CUDA_FLT(sign, unaryOpCudaImpl, OpCudaSign);
+  REG_ELEM_WISE_CUDA_FLT(signOut, unaryOpOutCudaImpl, OpCudaSign);
+  REG_ELEM_WISE_CUDA_FLT(signInplace, unaryOpInplaceCudaImpl, OpCudaSign);
 
   // sqrt
-  REG_ELEM_WISE_CUDA_F32(sqrt, unaryOpCudaImpl, OpCudaSqrt);
-  REG_ELEM_WISE_CUDA_F32(sqrtOut, unaryOpOutCudaImpl, OpCudaSqrt);
-  REG_ELEM_WISE_CUDA_F32(sqrtInplace, unaryOpInplaceCudaImpl, OpCudaSqrt);
+  REG_ELEM_WISE_CUDA_FLT(sqrt, unaryOpCudaImpl, OpCudaSqrt);
+  REG_ELEM_WISE_CUDA_FLT(sqrtOut, unaryOpOutCudaImpl, OpCudaSqrt);
+  REG_ELEM_WISE_CUDA_FLT(sqrtInplace, unaryOpInplaceCudaImpl, OpCudaSqrt);
 
   // square
-  REG_ELEM_WISE_CUDA_F32(square, unaryOpCudaImpl, OpCudaSquare);
-  REG_ELEM_WISE_CUDA_F32(squareOut, unaryOpOutCudaImpl, OpCudaSquare);
-  REG_ELEM_WISE_CUDA_F32(squareInplace, unaryOpInplaceCudaImpl, OpCudaSquare);
+  REG_ELEM_WISE_CUDA_FLT(square, unaryOpCudaImpl, OpCudaSquare);
+  REG_ELEM_WISE_CUDA_FLT(squareOut, unaryOpOutCudaImpl, OpCudaSquare);
+  REG_ELEM_WISE_CUDA_FLT(squareInplace, unaryOpInplaceCudaImpl, OpCudaSquare);
 
   // exp
-  REG_ELEM_WISE_CUDA_F32(exp, unaryOpCudaImpl, OpCudaExp);
-  REG_ELEM_WISE_CUDA_F32(expOut, unaryOpOutCudaImpl, OpCudaExp);
-  REG_ELEM_WISE_CUDA_F32(expInplace, unaryOpInplaceCudaImpl, OpCudaExp);
+  REG_ELEM_WISE_CUDA_FLT(exp, unaryOpCudaImpl, OpCudaExp);
+  REG_ELEM_WISE_CUDA_FLT(expOut, unaryOpOutCudaImpl, OpCudaExp);
+  REG_ELEM_WISE_CUDA_FLT(expInplace, unaryOpInplaceCudaImpl, OpCudaExp);
 
   // log
-  REG_ELEM_WISE_CUDA_F32(log, unaryOpCudaImpl, OpCudaLog);
-  REG_ELEM_WISE_CUDA_F32(logOut, unaryOpOutCudaImpl, OpCudaLog);
-  REG_ELEM_WISE_CUDA_F32(logInplace, unaryOpInplaceCudaImpl, OpCudaLog);
+  REG_ELEM_WISE_CUDA_FLT(log, unaryOpCudaImpl, OpCudaLog);
+  REG_ELEM_WISE_CUDA_FLT(logOut, unaryOpOutCudaImpl, OpCudaLog);
+  REG_ELEM_WISE_CUDA_FLT(logInplace, unaryOpInplaceCudaImpl, OpCudaLog);
 
   // sin
-  REG_ELEM_WISE_CUDA_F32(sin, unaryOpCudaImpl, OpCudaSin);
-  REG_ELEM_WISE_CUDA_F32(sinOut, unaryOpOutCudaImpl, OpCudaSin);
-  REG_ELEM_WISE_CUDA_F32(sinInplace, unaryOpInplaceCudaImpl, OpCudaSin);
-  REG_ELEM_WISE_CUDA_F32(sinBackwardP1, unaryOpBackwardCudaImpl, OpCudaSinBackwardP1);
+  REG_ELEM_WISE_CUDA_FLT(sin, unaryOpCudaImpl, OpCudaSin);
+  REG_ELEM_WISE_CUDA_FLT(sinOut, unaryOpOutCudaImpl, OpCudaSin);
+  REG_ELEM_WISE_CUDA_FLT(sinInplace, unaryOpInplaceCudaImpl, OpCudaSin);
+  REG_ELEM_WISE_CUDA_FLT(sinBackwardP1, unaryOpBackwardCudaImpl, OpCudaSinBackwardP1);
 
   // cos
-  REG_ELEM_WISE_CUDA_F32(cos, unaryOpCudaImpl, OpCudaCos);
-  REG_ELEM_WISE_CUDA_F32(cosOut, unaryOpOutCudaImpl, OpCudaCos);
-  REG_ELEM_WISE_CUDA_F32(cosInplace, unaryOpInplaceCudaImpl, OpCudaCos);
-  REG_ELEM_WISE_CUDA_F32(cosBackwardP1, unaryOpBackwardCudaImpl, OpCudaCosBackwardP1);
+  REG_ELEM_WISE_CUDA_FLT(cos, unaryOpCudaImpl, OpCudaCos);
+  REG_ELEM_WISE_CUDA_FLT(cosOut, unaryOpOutCudaImpl, OpCudaCos);
+  REG_ELEM_WISE_CUDA_FLT(cosInplace, unaryOpInplaceCudaImpl, OpCudaCos);
+  REG_ELEM_WISE_CUDA_FLT(cosBackwardP1, unaryOpBackwardCudaImpl, OpCudaCosBackwardP1);
 
   // sigmoid
-  REG_ELEM_WISE_CUDA_F32(sigmoid, unaryOpCudaImpl, OpCudaSigmoid);
-  REG_ELEM_WISE_CUDA_F32(sigmoidOut, unaryOpOutCudaImpl, OpCudaSigmoid);
-  REG_ELEM_WISE_CUDA_F32(sigmoidInplace, unaryOpInplaceCudaImpl, OpCudaSigmoid);
+  REG_ELEM_WISE_CUDA_FLT(sigmoid, unaryOpCudaImpl, OpCudaSigmoid);
+  REG_ELEM_WISE_CUDA_FLT(sigmoidOut, unaryOpOutCudaImpl, OpCudaSigmoid);
+  REG_ELEM_WISE_CUDA_FLT(sigmoidInplace, unaryOpInplaceCudaImpl, OpCudaSigmoid);
 
   // tanh
-  REG_ELEM_WISE_CUDA_F32(tanh, unaryOpCudaImpl, OpCudaTanh);
-  REG_ELEM_WISE_CUDA_F32(tanhOut, unaryOpOutCudaImpl, OpCudaTanh);
-  REG_ELEM_WISE_CUDA_F32(tanhInplace, unaryOpInplaceCudaImpl, OpCudaTanh);
+  REG_ELEM_WISE_CUDA_FLT(tanh, unaryOpCudaImpl, OpCudaTanh);
+  REG_ELEM_WISE_CUDA_FLT(tanhOut, unaryOpOutCudaImpl, OpCudaTanh);
+  REG_ELEM_WISE_CUDA_FLT(tanhInplace, unaryOpInplaceCudaImpl, OpCudaTanh);
 
   // relu
-  REG_ELEM_WISE_CUDA_F32(relu, unaryOpCudaImpl, OpCudaRelu);
-  REG_ELEM_WISE_CUDA_F32(reluOut, unaryOpOutCudaImpl, OpCudaRelu);
-  REG_ELEM_WISE_CUDA_F32(reluInplace, unaryOpInplaceCudaImpl, OpCudaRelu);
+  REG_ELEM_WISE_CUDA_FLT(relu, unaryOpCudaImpl, OpCudaRelu);
+  REG_ELEM_WISE_CUDA_FLT(reluOut, unaryOpOutCudaImpl, OpCudaRelu);
+  REG_ELEM_WISE_CUDA_FLT(reluInplace, unaryOpInplaceCudaImpl, OpCudaRelu);
 
   // gelu
-  REG_ELEM_WISE_CUDA_F32(gelu, unaryOpCudaImpl, OpCudaGelu);
-  REG_ELEM_WISE_CUDA_F32(geluOut, unaryOpOutCudaImpl, OpCudaGelu);
-  REG_ELEM_WISE_CUDA_F32(geluInplace, unaryOpInplaceCudaImpl, OpCudaGelu);
+  REG_ELEM_WISE_CUDA_FLT(gelu, unaryOpCudaImpl, OpCudaGelu);
+  REG_ELEM_WISE_CUDA_FLT(geluOut, unaryOpOutCudaImpl, OpCudaGelu);
+  REG_ELEM_WISE_CUDA_FLT(geluInplace, unaryOpInplaceCudaImpl, OpCudaGelu);
 
   // silu
-  REG_ELEM_WISE_CUDA_F32(silu, unaryOpCudaImpl, OpCudaSilu);
-  REG_ELEM_WISE_CUDA_F32(siluOut, unaryOpOutCudaImpl, OpCudaSilu);
-  REG_ELEM_WISE_CUDA_F32(siluInplace, unaryOpInplaceCudaImpl, OpCudaSilu);
+  REG_ELEM_WISE_CUDA_FLT(silu, unaryOpCudaImpl, OpCudaSilu);
+  REG_ELEM_WISE_CUDA_FLT(siluOut, unaryOpOutCudaImpl, OpCudaSilu);
+  REG_ELEM_WISE_CUDA_FLT(siluInplace, unaryOpInplaceCudaImpl, OpCudaSilu);
 }
 
-void registerBinaryCudaFloat32() {
+void registerBinaryCudaFloat() {
   // add
-  REG_ELEM_WISE_CUDA_F32(add, binaryOpAlphaCudaImpl, OpCudaAdd);
-  REG_ELEM_WISE_CUDA_F32(addOut, binaryOpAlphaOutCudaImpl, OpCudaAdd);
-  REG_ELEM_WISE_CUDA_F32(addInplace, binaryOpAlphaInplaceCudaImpl, OpCudaAdd);
+  REG_ELEM_WISE_CUDA_FLT(add, binaryOpAlphaCudaImpl, OpCudaAdd);
+  REG_ELEM_WISE_CUDA_FLT(addOut, binaryOpAlphaOutCudaImpl, OpCudaAdd);
+  REG_ELEM_WISE_CUDA_FLT(addInplace, binaryOpAlphaInplaceCudaImpl, OpCudaAdd);
 
   // sub
-  REG_ELEM_WISE_CUDA_F32(sub, binaryOpAlphaCudaImpl, OpCudaSub);
-  REG_ELEM_WISE_CUDA_F32(subOut, binaryOpAlphaOutCudaImpl, OpCudaSub);
-  REG_ELEM_WISE_CUDA_F32(subInplace, binaryOpAlphaInplaceCudaImpl, OpCudaSub);
+  REG_ELEM_WISE_CUDA_FLT(sub, binaryOpAlphaCudaImpl, OpCudaSub);
+  REG_ELEM_WISE_CUDA_FLT(subOut, binaryOpAlphaOutCudaImpl, OpCudaSub);
+  REG_ELEM_WISE_CUDA_FLT(subInplace, binaryOpAlphaInplaceCudaImpl, OpCudaSub);
 
   // mul
-  REG_ELEM_WISE_CUDA_F32(mul, binaryOpCudaImpl, OpCudaMul);
-  REG_ELEM_WISE_CUDA_F32(mulOut, binaryOpOutCudaImpl, OpCudaMul);
-  REG_ELEM_WISE_CUDA_F32(mulInplace, binaryOpInplaceCudaImpl, OpCudaMul);
+  REG_ELEM_WISE_CUDA_FLT(mul, binaryOpCudaImpl, OpCudaMul);
+  REG_ELEM_WISE_CUDA_FLT(mulOut, binaryOpOutCudaImpl, OpCudaMul);
+  REG_ELEM_WISE_CUDA_FLT(mulInplace, binaryOpInplaceCudaImpl, OpCudaMul);
 
   // div
-  REG_ELEM_WISE_CUDA_F32(div, binaryOpCudaImpl, OpCudaDiv);
-  REG_ELEM_WISE_CUDA_F32(divOut, binaryOpOutCudaImpl, OpCudaDiv);
-  REG_ELEM_WISE_CUDA_F32(divInplace, binaryOpInplaceCudaImpl, OpCudaDiv);
-  REG_ELEM_WISE_CUDA_F32(divBackwardP2, binaryOpBackwardCudaImpl, OpCudaDivBackwardP2);
+  REG_ELEM_WISE_CUDA_FLT(div, binaryOpCudaImpl, OpCudaDiv);
+  REG_ELEM_WISE_CUDA_FLT(divOut, binaryOpOutCudaImpl, OpCudaDiv);
+  REG_ELEM_WISE_CUDA_FLT(divInplace, binaryOpInplaceCudaImpl, OpCudaDiv);
+  REG_ELEM_WISE_CUDA_FLT(divBackwardP2, binaryOpBackwardCudaImpl, OpCudaDivBackwardP2);
 
   // pow
-  REG_ELEM_WISE_CUDA_F32(pow, binaryOpCudaImpl, OpCudaPow);
-  REG_ELEM_WISE_CUDA_F32(powOut, binaryOpOutCudaImpl, OpCudaPow);
-  REG_ELEM_WISE_CUDA_F32(powInplace, binaryOpInplaceCudaImpl, OpCudaPow);
-  REG_ELEM_WISE_CUDA_F32(powBackwardP1, binaryOpBackwardCudaImpl, OpCudaPowBackwardP1);
-  REG_ELEM_WISE_CUDA_F32(powBackwardP2, binaryOpBackwardCudaImpl, OpCudaPowBackwardP2);
+  REG_ELEM_WISE_CUDA_FLT(pow, binaryOpCudaImpl, OpCudaPow);
+  REG_ELEM_WISE_CUDA_FLT(powOut, binaryOpOutCudaImpl, OpCudaPow);
+  REG_ELEM_WISE_CUDA_FLT(powInplace, binaryOpInplaceCudaImpl, OpCudaPow);
+  REG_ELEM_WISE_CUDA_FLT(powBackwardP1, binaryOpBackwardCudaImpl, OpCudaPowBackwardP1);
+  REG_ELEM_WISE_CUDA_FLT(powBackwardP2, binaryOpBackwardCudaImpl, OpCudaPowBackwardP2);
 
   // maximum
-  REG_ELEM_WISE_CUDA_F32(maximum, binaryOpCudaImpl, OpCudaMaximum);
-  REG_ELEM_WISE_CUDA_F32(maximumOut, binaryOpOutCudaImpl, OpCudaMaximum);
+  REG_ELEM_WISE_CUDA_FLT(maximum, binaryOpCudaImpl, OpCudaMaximum);
+  REG_ELEM_WISE_CUDA_FLT(maximumOut, binaryOpOutCudaImpl, OpCudaMaximum);
 
   // minimum
-  REG_ELEM_WISE_CUDA_F32(minimum, binaryOpCudaImpl, OpCudaMinimum);
-  REG_ELEM_WISE_CUDA_F32(minimumOut, binaryOpOutCudaImpl, OpCudaMinimum);
+  REG_ELEM_WISE_CUDA_FLT(minimum, binaryOpCudaImpl, OpCudaMinimum);
+  REG_ELEM_WISE_CUDA_FLT(minimumOut, binaryOpOutCudaImpl, OpCudaMinimum);
 
   // equal
-  REG_ELEM_WISE_CUDA_F32(eq, binaryOpCompareCudaImpl, OpCudaEq);
-  REG_ELEM_WISE_CUDA_F32(eqOut, binaryOpCompareOutCudaImpl, OpCudaEq);
+  REG_ELEM_WISE_CUDA_FLT(eq, binaryOpCompareCudaImpl, OpCudaEq);
+  REG_ELEM_WISE_CUDA_FLT(eqOut, binaryOpCompareOutCudaImpl, OpCudaEq);
 
   // not equal
-  REG_ELEM_WISE_CUDA_F32(ne, binaryOpCompareCudaImpl, OpCudaNe);
-  REG_ELEM_WISE_CUDA_F32(neOut, binaryOpCompareOutCudaImpl, OpCudaNe);
+  REG_ELEM_WISE_CUDA_FLT(ne, binaryOpCompareCudaImpl, OpCudaNe);
+  REG_ELEM_WISE_CUDA_FLT(neOut, binaryOpCompareOutCudaImpl, OpCudaNe);
 
   // less than
-  REG_ELEM_WISE_CUDA_F32(lt, binaryOpCompareCudaImpl, OpCudaLt);
-  REG_ELEM_WISE_CUDA_F32(ltOut, binaryOpCompareOutCudaImpl, OpCudaLt);
+  REG_ELEM_WISE_CUDA_FLT(lt, binaryOpCompareCudaImpl, OpCudaLt);
+  REG_ELEM_WISE_CUDA_FLT(ltOut, binaryOpCompareOutCudaImpl, OpCudaLt);
 
   // less equal
-  REG_ELEM_WISE_CUDA_F32(le, binaryOpCompareCudaImpl, OpCudaLe);
-  REG_ELEM_WISE_CUDA_F32(leOut, binaryOpCompareOutCudaImpl, OpCudaLe);
+  REG_ELEM_WISE_CUDA_FLT(le, binaryOpCompareCudaImpl, OpCudaLe);
+  REG_ELEM_WISE_CUDA_FLT(leOut, binaryOpCompareOutCudaImpl, OpCudaLe);
 
   // greater than
-  REG_ELEM_WISE_CUDA_F32(gt, binaryOpCompareCudaImpl, OpCudaGt);
-  REG_ELEM_WISE_CUDA_F32(gtOut, binaryOpCompareOutCudaImpl, OpCudaGt);
+  REG_ELEM_WISE_CUDA_FLT(gt, binaryOpCompareCudaImpl, OpCudaGt);
+  REG_ELEM_WISE_CUDA_FLT(gtOut, binaryOpCompareOutCudaImpl, OpCudaGt);
 
   // greater equal
-  REG_ELEM_WISE_CUDA_F32(ge, binaryOpCompareCudaImpl, OpCudaGe);
-  REG_ELEM_WISE_CUDA_F32(geOut, binaryOpCompareOutCudaImpl, OpCudaGe);
+  REG_ELEM_WISE_CUDA_FLT(ge, binaryOpCompareCudaImpl, OpCudaGe);
+  REG_ELEM_WISE_CUDA_FLT(geOut, binaryOpCompareOutCudaImpl, OpCudaGe);
 
   // clampMin
-  REG_ELEM_WISE_CUDA_F32(clampMin, binaryOpCudaImpl, OpCudaClampMin);
-  REG_ELEM_WISE_CUDA_F32(clampMinOut, binaryOpOutCudaImpl, OpCudaClampMin);
-  REG_ELEM_WISE_CUDA_F32(clampMinInplace, binaryOpInplaceCudaImpl, OpCudaClampMin);
+  REG_ELEM_WISE_CUDA_FLT(clampMin, binaryOpCudaImpl, OpCudaClampMin);
+  REG_ELEM_WISE_CUDA_FLT(clampMinOut, binaryOpOutCudaImpl, OpCudaClampMin);
+  REG_ELEM_WISE_CUDA_FLT(clampMinInplace, binaryOpInplaceCudaImpl, OpCudaClampMin);
 
   // clampMax
-  REG_ELEM_WISE_CUDA_F32(clampMax, binaryOpCudaImpl, OpCudaClampMax);
-  REG_ELEM_WISE_CUDA_F32(clampMaxOut, binaryOpOutCudaImpl, OpCudaClampMax);
-  REG_ELEM_WISE_CUDA_F32(clampMaxInplace, binaryOpInplaceCudaImpl, OpCudaClampMax);
+  REG_ELEM_WISE_CUDA_FLT(clampMax, binaryOpCudaImpl, OpCudaClampMax);
+  REG_ELEM_WISE_CUDA_FLT(clampMaxOut, binaryOpOutCudaImpl, OpCudaClampMax);
+  REG_ELEM_WISE_CUDA_FLT(clampMaxInplace, binaryOpInplaceCudaImpl, OpCudaClampMax);
 }
 
 void registerBinaryCudaInt64() {
@@ -224,26 +231,26 @@ void registerBinaryCudaInt64() {
   REG_ELEM_WISE_CUDA_I64(clampMaxInplace, binaryOpInplaceCudaImpl, OpCudaClampMax);
 }
 
-void registerTernaryCudaFloat32() {
+void registerTernaryCudaFloat() {
   // clamp
-  REG_ELEM_WISE_CUDA_F32(clamp, ternaryOpCudaImpl, OpCudaClamp);
-  REG_ELEM_WISE_CUDA_F32(clampOut, ternaryOpOutCudaImpl, OpCudaClamp);
-  REG_ELEM_WISE_CUDA_F32(clampInplace, ternaryOpInplaceCudaImpl, OpCudaClamp);
+  REG_ELEM_WISE_CUDA_FLT(clamp, ternaryOpCudaImpl, OpCudaClamp);
+  REG_ELEM_WISE_CUDA_FLT(clampOut, ternaryOpOutCudaImpl, OpCudaClamp);
+  REG_ELEM_WISE_CUDA_FLT(clampInplace, ternaryOpInplaceCudaImpl, OpCudaClamp);
 
   // addcmul
-  REGISTER_OP_IMPL(addcmul, CUDA, Float32, addcmulOpCudaImpl<DTypeToType_t<DType::Float32>>);
-  REGISTER_OP_IMPL(addcmulOut, CUDA, Float32, addcmulOpOutCudaImpl<DTypeToType_t<DType::Float32>>);
-  REGISTER_OP_IMPL(addcmulInplace, CUDA, Float32, addcmulOpInplaceCudaImpl<DTypeToType_t<DType::Float32>>);
+  REG_ELEM_WISE_CUDA_FLT_NO_OP(addcmul, addcmulOpCudaImpl);
+  REG_ELEM_WISE_CUDA_FLT_NO_OP(addcmulOut, addcmulOpOutCudaImpl);
+  REG_ELEM_WISE_CUDA_FLT_NO_OP(addcmulInplace, addcmulOpInplaceCudaImpl);
 }
 
 void registerElemWiseCuda() {
   registerUnaryCudaBool();
-  registerUnaryCudaFloat32();
+  registerUnaryCudaFloat();
 
-  registerBinaryCudaFloat32();
+  registerBinaryCudaFloat();
   registerBinaryCudaInt64();
 
-  registerTernaryCudaFloat32();
+  registerTernaryCudaFloat();
 }
 
 }  // namespace tinytorch::op
