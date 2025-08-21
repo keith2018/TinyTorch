@@ -116,23 +116,28 @@ Tensor col2imOpCpuImpl(const Tensor& self, const IntArrayView shape, Dim2D kerne
 template <typename T>
 void gemmCpuImpl(T* c, const T* a, const T* b, int64_t m, int64_t k, int64_t n, bool transA, bool transB) {
 #ifdef __APPLE__
-  CBLAS_TRANSPOSE ta = transA ? CblasTrans : CblasNoTrans;
-  CBLAS_TRANSPOSE tb = transB ? CblasTrans : CblasNoTrans;
-  cblas_sgemm(CblasRowMajor, ta, tb, (int)m, (int)n, (int)k, 1.0f, a, transA ? (int)m : (int)k, b,
-              transB ? (int)k : (int)n, 0.0f, c, (int)n);
-#else
-  for (int64_t i = 0; i < m * n; i++) {
-    c[i] = 0;
-  }
+  if constexpr (std::is_same_v<T, float>) {
+    CBLAS_TRANSPOSE ta = transA ? CblasTrans : CblasNoTrans;
+    CBLAS_TRANSPOSE tb = transB ? CblasTrans : CblasNoTrans;
 
-  for (int64_t i = 0; i < m; i++) {
-    for (int64_t j = 0; j < n; j++) {
-      for (int64_t p = 0; p < k; p++) {
-        T aVal = transA ? a[p * m + i] : a[i * k + p];
-        T bVal = transB ? b[j * k + p] : b[p * n + j];
-        c[i * n + j] += aVal * bVal;
+    cblas_sgemm(CblasRowMajor, ta, tb, (int)m, (int)n, (int)k, 1.0f, a, transA ? (int)m : (int)k, b,
+                transB ? (int)k : (int)n, 0.0f, c, (int)n);
+  } else {
+#endif
+    for (int64_t i = 0; i < m * n; i++) {
+      c[i] = 0;
+    }
+
+    for (int64_t i = 0; i < m; i++) {
+      for (int64_t j = 0; j < n; j++) {
+        for (int64_t p = 0; p < k; p++) {
+          T aVal = transA ? a[p * m + i] : a[i * k + p];
+          T bVal = transB ? b[j * k + p] : b[p * n + j];
+          c[i * n + j] += aVal * bVal;
+        }
       }
     }
+#ifdef __APPLE__
   }
 #endif
 }
