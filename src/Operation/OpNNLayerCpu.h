@@ -305,7 +305,7 @@ TensorPair ropeInitOpCpuImpl(int64_t headDim, int64_t contextLength, float theta
 }
 
 template <typename T>
-Tensor ropeApplyOpCpuImpl(const Tensor& input, const TensorPair& rope) {
+Tensor ropeApplyOpCpuImpl(const Tensor& input, const TensorPair& rope, int64_t offset) {
   const auto& shape = input.shape();  // [batch, numHead, seqLen, headDim]
   ASSERT(shape.size() == 4);
 
@@ -330,8 +330,11 @@ Tensor ropeApplyOpCpuImpl(const Tensor& input, const TensorPair& rope) {
         int64_t base = ((b * numHead + h) * seqLen + t) * headDim;
         const T* xPtr = inputPtr + base;
         T* yPtr = outPtr + base;
-        const T* cosRow = cosPtr + t * headDim;
-        const T* sinRow = sinPtr + t * headDim;
+
+        int64_t posIndex = offset + t;
+        const T* cosRow = cosPtr + posIndex * headDim;
+        const T* sinRow = sinPtr + posIndex * headDim;
+
         for (int64_t i = 0; i < halfDim; i++) {
           float x1 = xPtr[i];
           float x2 = xPtr[halfDim + i];

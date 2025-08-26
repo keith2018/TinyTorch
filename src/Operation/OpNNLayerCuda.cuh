@@ -403,7 +403,7 @@ __global__ void kRopePrecomputeCosSin(const T* invFreqPtr, T* cosPtr, T* sinPtr,
 
 template <typename T>
 __global__ void kRopeApply(const T* input, const T* cos, const T* sin, T* output, int64_t batch, int64_t numHead,
-                           int64_t seqLen, int64_t headDim) {
+                           int64_t seqLen, int64_t headDim, int64_t offset) {
   const int64_t b = blockIdx.x / numHead;
   const int64_t h = blockIdx.x % numHead;
   const int64_t t = blockIdx.y * blockDim.x + threadIdx.x;
@@ -412,8 +412,10 @@ __global__ void kRopeApply(const T* input, const T* cos, const T* sin, T* output
     const int64_t base = ((b * numHead + h) * seqLen + t) * headDim;
     const T* xPtr = input + base;
     T* yPtr = output + base;
-    const T* cosRow = cos + t * headDim;
-    const T* sinRow = sin + t * headDim;
+
+    const int64_t posIndex = offset + t;
+    const T* cosRow = cos + posIndex * headDim;
+    const T* sinRow = sin + posIndex * headDim;
 
     auto halfDim = headDim >> 1;
     for (int64_t i = 0; i < halfDim; i++) {
@@ -646,7 +648,7 @@ TensorPair ropeInitOpCudaImpl(int64_t headDim, int64_t contextLength, float thet
 }
 
 template <typename T>
-Tensor ropeApplyOpCudaImpl(const Tensor& input, const TensorPair& rope) {
+Tensor ropeApplyOpCudaImpl(const Tensor& input, const TensorPair& rope, int64_t offset) {
   const auto& shape = input.shape();  // [batch, numHead, seqLen, headDim]
   ASSERT(shape.size() == 4);
 
@@ -671,7 +673,8 @@ Tensor ropeApplyOpCudaImpl(const Tensor& input, const TensorPair& rope) {
   dim3 blockDim(blockSize);
 
   auto stream = cuda::getCurrentCUDAStream(input.device().index).stream;
-  kRopeApply<CudaT><<<gridDim, blockDim, 0, stream>>>(inputPtr, cosPtr, sinPtr, outPtr, batch, numHead, seqLen, headDim);
+  kRopeApply<CudaT>
+      <<<gridDim, blockDim, 0, stream>>>(inputPtr, cosPtr, sinPtr, outPtr, batch, numHead, seqLen, headDim, offset);
   CUDA_KERNEL_CHECK();
   return out;
 }
