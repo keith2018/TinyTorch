@@ -147,6 +147,7 @@ class RoPE : public Module {
                 std::optional<RopeScalingConfig> scaling = std::nullopt, Options options = {});
 
   Tensor forward(const Tensor &input) override;
+  Tensor forward(const Tensor &input, int64_t offset);
   void resetParameters() override;
 
   TensorPair &rope() { return rope_; }
@@ -154,7 +155,7 @@ class RoPE : public Module {
   Tensor &cos() { return rope_.first; }
   Tensor &sin() { return rope_.second; }
 
-protected:
+ protected:
   std::vector<std::pair<std::string, TensorPtr>> namedStates_() override;
 
  private:

@@ -274,8 +274,8 @@ class FuncSDPAttention : public Function<FuncSDPAttention> {
 
 class FuncRoPE : public Function<FuncRoPE> {
  public:
-  static Tensor forward(AutogradContext* ctx, const Tensor& input, const TensorPair& rope) {
-    return op::ropeApply(input, rope);
+  static Tensor forward(AutogradContext* ctx, const Tensor& input, const TensorPair& rope, int64_t offset) {
+    return op::ropeApply(input, rope, offset);
   }
   static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
 };
@@ -313,6 +313,6 @@ inline Tensor sdpAttention(const Tensor& query, const Tensor& key, const Tensor&
                            std::optional<float> scale = std::nullopt) {
   return FuncSDPAttention::apply(query, key, value, isCausal, attnMask, dropoutP, scale);
 }
-inline Tensor ropeApply(const Tensor& input, const TensorPair& rope) { return FuncRoPE::apply(input, rope); }
+inline Tensor ropeApply(const Tensor& input, const TensorPair& rope, int64_t offset = 0) { return FuncRoPE::apply(input, rope, offset); }
 
 }  // namespace tinytorch::function
