@@ -224,6 +224,11 @@ Tensor multinomialOpCudaImpl(const Tensor& self, int64_t nSamples, bool replacem
   Storage tmpProb(static_cast<int64_t>(batch * n * sizeof(float)), self.device());
   auto* tmpPtr = tmpProb.dataPtr<float>();
 
+  if (nSamples == 1) {
+    // faster path
+    replacement = true;
+  }
+
   if (replacement) {
     kPrepareProbabilities<<<batch, blockSize, 0, stream>>>(selfPtr, tmpPtr, n, batch);
     CUDA_KERNEL_CHECK();
@@ -238,6 +243,7 @@ Tensor multinomialOpCudaImpl(const Tensor& self, int64_t nSamples, bool replacem
     kMultinomialWithReplacement<<<gridSize, blockSize, 0, stream>>>(tmpPtr, retPtr, batch, n, nSamples, seed, seq);
     CUDA_KERNEL_CHECK();
   } else {
+    // TODO optimize
     kMultinomialNoReplacement<<<batch, blockSize, 0, stream>>>(selfPtr, retPtr, tmpPtr, batch, n, nSamples, seed, seq);
     CUDA_KERNEL_CHECK();
   }
