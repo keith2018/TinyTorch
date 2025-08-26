@@ -9,8 +9,8 @@
 #include "OpNNLayer.h"
 #include "OpReduceCuda.cuh"
 #include "Tensor/TensorIterator.cuh"
-#include "Utils/CUDAUtils.h"
 #include "Utils/CUDAMath.h"
+#include "Utils/CUDAUtils.h"
 #include "Utils/MathUtils.h"
 #include "Utils/RandomGenerator.h"
 
@@ -352,7 +352,8 @@ template <typename T>
 __global__ void kRopeComputeInvFreq(T* invFreqPtr, int64_t halfDim, float thetaBase) {
   const auto idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx < halfDim) {
-    invFreqPtr[idx] = static_cast<T>(1.f / powf(thetaBase, static_cast<float>(idx << 1) / static_cast<float>(halfDim << 1)));
+    invFreqPtr[idx] =
+        static_cast<T>(1.f / powf(thetaBase, static_cast<float>(idx << 1) / static_cast<float>(halfDim << 1)));
   }
 }
 
@@ -638,7 +639,8 @@ TensorPair ropeInitOpCudaImpl(int64_t headDim, int64_t contextLength, float thet
 
   auto blockSize = cuda::getKernelBlockSize(options.device_.index);
   auto stream = cuda::getCurrentCUDAStream(options.device_.index).stream;
-  kRopePrecomputeCosSin<CudaT><<<contextLength, blockSize, 0, stream>>>(invFreqPtr, cosPtr, sinPtr, contextLength, headDim);
+  kRopePrecomputeCosSin<CudaT>
+      <<<contextLength, blockSize, 0, stream>>>(invFreqPtr, cosPtr, sinPtr, contextLength, headDim);
   CUDA_KERNEL_CHECK();
   return {cos, sin};
 }
