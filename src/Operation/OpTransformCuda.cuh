@@ -311,30 +311,17 @@ __global__ void kIndexSelect(T* out, const T* in, const int64_t* indices, int64_
 }
 
 template <typename T>
-__global__ void kRepeatInterleave(T* out, const T* in, int64_t n, int64_t ndim, int64_t dim, int64_t repeats,
-                                  const DimArray<int64_t> inStrides, const DimArray<int64_t> outStrides) {
+__global__ void kRepeatInterleave(T* out, const T* in, int64_t n, int64_t dimSize, int64_t repeats, int64_t innerSize) {
   const int64_t idx = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (idx < n) {
-    int64_t tmpIdx = idx;
-    int64_t coords[MAX_TENSOR_DIM];
+    int64_t innerIdx = idx % innerSize;
+    int64_t rest = idx / innerSize;
+    int64_t dimIdx = rest % (dimSize * repeats);
+    int64_t outerIdx = rest / (dimSize * repeats);
 
-#pragma unroll
-    for (int d = 0; d < ndim; d++) {
-      coords[d] = tmpIdx / outStrides.data[d];
-      tmpIdx %= outStrides.data[d];
-    }
-
-    int64_t inIdx = 0;
-
-#pragma unroll
-    for (int d = 0; d < ndim; d++) {
-      if (d == dim) {
-        inIdx += (coords[d] / repeats) * inStrides.data[d];
-      } else {
-        inIdx += coords[d] * inStrides.data[d];
-      }
-    }
+    int64_t inDimIdx = dimIdx / repeats;
+    int64_t inIdx = outerIdx * (dimSize * innerSize) + inDimIdx * innerSize + innerIdx;
 
     out[idx] = in[inIdx];
   }
@@ -686,17 +673,16 @@ Tensor repeatInterleaveOpCudaImpl(const Tensor& self, int64_t repeats, int64_t d
   const auto* selfPtr = self.dataPtr<T>();
   auto* retPtr = ret.dataPtr<T>();
 
-  DimArray<int64_t> inStrides{};
-  DimArray<int64_t> outStrides{};
-
-  for (int64_t i = 0; i < ndim; i++) {
-    inStrides.data[i] = self.stride(i);
-    outStrides.data[i] = ret.stride(i);
+  int64_t outerSize = 1, innerSize = 1;
+  for (int64_t i = 0; i < dim; i++) {
+    outerSize *= self.shape(i);
+  }
+  for (int64_t i = dim + 1; i < ndim; i++) {
+    innerSize *= self.shape(i);
   }
 
   auto params = cuda::getKernelLaunchParams(self.device().index, ret.numel());
-  CUDA_LAUNCH_KERNEL(kRepeatInterleave<T>, params, retPtr, selfPtr, ret.numel(), ndim, dim, repeats, inStrides,
-                     outStrides);
+  CUDA_LAUNCH_KERNEL(kRepeatInterleave<T>, params, retPtr, selfPtr, ret.numel(), self.shape(dim), repeats, innerSize);
   return ret;
 }
 
