@@ -34,6 +34,7 @@ void offsetToIndices(int64_t* indices, IntArrayView shape, int64_t offset);
 void reorderIndices(int64_t* indices, int64_t ndim, IntArrayView order);
 
 using CastOpFn = void (*)(Tensor& dst, const Tensor& src);
+using CheckOpFn = void (*)(const Tensor& self);
 
 using ReshapeOpFn = Tensor (*)(const Tensor& self, IntArrayView shape);
 using ReshapeOpInplaceFn = void (*)(Tensor& self, IntArrayView shape);
@@ -85,6 +86,9 @@ using RepeatInterleaveOpFn = Tensor (*)(const Tensor& self, int64_t repeats, int
 
 // dtype cast
 DEFINE_OP(dtypeCast, CastOpFn)
+
+// check
+DEFINE_OP(check, CheckOpFn)
 
 // reshape/view
 DEFINE_OP(reshape, ReshapeOpFn)

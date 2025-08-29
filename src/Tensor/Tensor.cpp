@@ -195,6 +195,10 @@ bool Tensor::isLeaf() const {
   return gradMeta_->isLeaf();
 }
 
+void Tensor::check() const {
+  op::check(*this);
+}
+
 Tensor Tensor::to(DType type) const {
   if (dtype() == type) {
     return *this;

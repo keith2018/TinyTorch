@@ -137,6 +137,8 @@ class Tensor {
   template <typename T>
   T item() const;
 
+  void check() const;
+
   // convert
   Tensor to(DType type) const;
   Tensor to(Device device) const;

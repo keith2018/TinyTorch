@@ -425,4 +425,16 @@ Tensor repeatInterleaveOpCpuImpl(const Tensor& self, int64_t repeats, int64_t di
   return ret;
 }
 
+template <typename T>
+void checkOpCpuImpl(const Tensor& self) {
+  if constexpr (std::is_same_v<T, float> || std::is_same_v<T, BFloat16> || std::is_same_v<T, Half>) {
+    const auto* selfPtr = self.dataPtr<T>();
+    for (int64_t i = 0; i < self.numel(); i++) {
+      auto v = static_cast<float>(selfPtr[i]);
+      ASSERT(!std::isnan(v));
+      ASSERT(!std::isinf(v));
+    }
+  }
+}
+
 }  // namespace tinytorch::op

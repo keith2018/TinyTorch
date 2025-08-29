@@ -51,6 +51,9 @@ void registerTransformCpu() {
   // dtype cast
   REGISTER_OP_IMPL_ALL_DTYPES(dtypeCast, CPU, dtypeCastOpCpuImpl);
 
+  // check
+  REGISTER_OP_IMPL_DTYPE_TPL(check, CPU, checkOpCpuImpl);
+
   // permute
   REGISTER_OP_IMPL_DTYPE_TPL(permute, CPU, permuteOpCpuImpl);
   REGISTER_OP_IMPL_DTYPE_TPL(permuteAll, CPU, permuteAllOpCpuImpl);
