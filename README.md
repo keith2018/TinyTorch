@@ -12,11 +12,11 @@ For more details, please refer to my blog post: [Write a nn training framework f
 
 ## Key Features
 
-* **PyTorch-Style API**: Adopts similar class and function naming conventions as PyTorch, such as `Tensor`, `Functions`, `nn.Module`, and `Optimizer`, to make it intuitive for users familiar with the original framework.
-* **Pure C++ Implementation**: The entire framework is written in C++ with no dependency on external deep learning libraries, making it perfect for understanding the fundamentals.
-* **CPU and CUDA Support**: The framework is built to run on both **CPU** and **CUDA** enabled GPUs, allowing for flexible development and experimentation.
-* **Data Type Support**: The framework supports various data types, including float32, float16, and bfloat16.
-* **LLM Inference**: Supports inference for gpt2 and llama3.2 models: [https://github.com/keith2018/TinyGPT](https://github.com/keith2018/TinyGPT)
+* **PyTorch-Style API**: Adopts similar class and function naming conventions as PyTorch, such as `Tensor`, `Functions`, `nn.Module`, and `Optimizer`.
+* **Pure C++ Implementation**: The entire framework is written in C++ with no dependency on external deep learning libraries.
+* **CPU and CUDA Support**: The framework is built to run on both **CPU** and **CUDA** enabled GPUs.
+* **Mixed Precision Support**: The framework supports multiple precisions such as FP16, FP32, and BF16.
+* **LLM Inference**: Supports inference for gpt2/llama/qwen models: [https://github.com/keith2018/TinyGPT](https://github.com/keith2018/TinyGPT)
 
 ## Implemented Operators and Components
 
