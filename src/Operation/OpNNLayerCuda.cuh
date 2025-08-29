@@ -41,35 +41,39 @@ __global__ void kSoftmaxForward(T* out, const T* self, int64_t dimSize, int64_t 
   auto base = (outer * dimSize * innerSize) + inner;
 
   // max
-  T maxVal = -cuda::max<T>();
+  float maxVal = std::numeric_limits<float>::lowest();
   for (auto i = tid; i < dimSize; i += blockDim.x) {
-    maxVal = cuda::max(maxVal, self[base + i * innerSize]);
+    auto idx = base + i * innerSize;
+    maxVal = cuda::max(maxVal, static_cast<float>(self[idx]));
   }
-  T blockMax = cudaBlockReduce<T, OpCudaReduceMax>(maxVal, -cuda::max<T>());
+  auto blockMax = cudaBlockReduce<float, OpCudaReduceMax>(maxVal, std::numeric_limits<float>::lowest());
 
   // sum of exp
-  T sum = 0;
+  float sum = 0;
   for (auto i = tid; i < dimSize; i += blockDim.x) {
-    sum += cuda::exp(self[base + i * innerSize] - blockMax);
+    auto idx = base + i * innerSize;
+    sum += cuda::exp(static_cast<float>(self[idx]) - blockMax);
   }
-  T blockSum = cudaBlockReduce<T, OpCudaReduceSum>(sum, T(0));
+  auto blockSum = cudaBlockReduce<float, OpCudaReduceSum>(sum, 0.f);
 
   // output
   if constexpr (type == SoftmaxType::Softmax) {
     for (auto i = tid; i < dimSize; i += blockDim.x) {
-      out[base + i * innerSize] = cuda::exp(self[base + i * innerSize] - blockMax) / blockSum;
+      auto idx = base + i * innerSize;
+      out[idx] = static_cast<T>(cuda::exp(static_cast<float>(self[idx]) - blockMax) / blockSum);
     }
   } else {
-    T logSum = cuda::log(blockSum);
+    float logSum = cuda::log(blockSum);
     for (auto i = tid; i < dimSize; i += blockDim.x) {
-      out[base + i * innerSize] = self[base + i * innerSize] - blockMax - logSum;
+      auto idx = base + i * innerSize;
+      out[idx] = static_cast<T>(static_cast<float>(self[idx]) - blockMax - logSum);
     }
   }
 }
 
 template <typename T, SoftmaxType type>
 __global__ void kSoftmaxForwardLargeDim(T* out, const T* self, int64_t dimSize, int64_t innerSize) {
-  __shared__ T shared[2];  // max, sum
+  __shared__ float shared[2];  // max, sum
 
   auto blockPerRow = gridDim.x;
   auto blockId = blockIdx.x;
@@ -84,42 +88,42 @@ __global__ void kSoftmaxForwardLargeDim(T* out, const T* self, int64_t dimSize, 
   auto base = (outer * dimSize * innerSize) + inner;
 
   // max
-  T localMax = -cuda::max<T>();
+  float localMax = std::numeric_limits<float>::lowest();
   for (auto i = tileStart + tid; i < tileEnd; i += blockDim.x) {
     auto idx = base + i * innerSize;
-    localMax = cuda::max(localMax, self[idx]);
+    localMax = cuda::max(localMax, static_cast<float>(self[idx]));
   }
-  T tileMax = cudaBlockReduce<T, OpCudaReduceMax>(localMax, -cuda::max<T>());
+  auto tileMax = cudaBlockReduce<float, OpCudaReduceMax>(localMax, std::numeric_limits<float>::lowest());
   if (tid == 0) shared[blockId] = tileMax;
   __syncthreads();
 
-  T globalMax = -cuda::max<T>();
+  float globalMax = std::numeric_limits<float>::lowest();
   if (blockId == 0) {
     for (auto i = tid; i < blockPerRow; i += blockDim.x) {
       globalMax = cuda::max(globalMax, shared[i]);
     }
-    globalMax = cudaBlockReduce<T, OpCudaReduceMax>(globalMax, -cuda::max<T>());
+    globalMax = cudaBlockReduce<float, OpCudaReduceMax>(globalMax, std::numeric_limits<float>::lowest());
     if (tid == 0) shared[blockPerRow] = globalMax;
   }
   __syncthreads();
   globalMax = shared[blockPerRow];
 
   // sum of exp
-  T localSum = 0;
+  float localSum = 0;
   for (auto i = tileStart + tid; i < tileEnd; i += blockDim.x) {
     auto idx = base + i * innerSize;
-    localSum += cuda::exp(self[idx] - globalMax);
+    localSum += cuda::exp(static_cast<float>(self[idx]) - globalMax);
   }
-  T tileSum = cudaBlockReduce<T, OpCudaReduceSum>(localSum, T(0));
+  auto tileSum = cudaBlockReduce<float, OpCudaReduceSum>(localSum, 0.f);
   if (tid == 0) shared[blockId] = tileSum;
   __syncthreads();
 
-  T globalSum = 0;
+  float globalSum = 0;
   if (blockId == 0) {
     for (auto i = tid; i < blockPerRow; i += blockDim.x) {
       globalSum += shared[i];
     }
-    globalSum = cudaBlockReduce<T, OpCudaReduceSum>(globalSum, T(0));
+    globalSum = cudaBlockReduce<float, OpCudaReduceSum>(globalSum, 0.f);
     if (tid == 0) shared[blockPerRow] = globalSum;
   }
   __syncthreads();
@@ -129,32 +133,36 @@ __global__ void kSoftmaxForwardLargeDim(T* out, const T* self, int64_t dimSize, 
   if constexpr (type == SoftmaxType::Softmax) {
     for (auto i = tileStart + tid; i < tileEnd; i += blockDim.x) {
       auto idx = base + i * innerSize;
-      out[idx] = cuda::exp(self[idx] - globalMax) / globalSum;
+      out[idx] = static_cast<T>(cuda::exp(static_cast<float>(self[idx]) - globalMax) / globalSum);
     }
   } else {
-    T logSum = cuda::log(globalSum);
+    float logSum = cuda::log(globalSum);
     for (auto i = tileStart + tid; i < tileEnd; i += blockDim.x) {
       auto idx = base + i * innerSize;
-      out[idx] = self[idx] - globalMax - logSum;
+      out[idx] = static_cast<T>(static_cast<float>(self[idx]) - globalMax - logSum);
     }
   }
 }
 
 template <typename T>
 struct OpCudaSoftmaxBackward {
-  __device__ static T computePartialSum(const T* output, const T* grad, int64_t idx) { return output[idx] * grad[idx]; }
+  __device__ static float computePartialSum(const T* output, const T* grad, int64_t idx) {
+    return static_cast<float>(output[idx]) * static_cast<float>(grad[idx]);
+  }
 
-  __device__ static T computeResult(const T* output, const T* grad, T totalSum, int64_t idx) {
-    return output[idx] * (grad[idx] - totalSum);
+  __device__ static float computeResult(const T* output, const T* grad, float totalSum, int64_t idx) {
+    return static_cast<float>(output[idx]) * (static_cast<float>(grad[idx]) - totalSum);
   }
 };
 
 template <typename T>
 struct OpCudaLogSoftmaxBackward {
-  __device__ static T computePartialSum(const T* output, const T* grad, int64_t idx) { return grad[idx]; }
+  __device__ static float computePartialSum(const T* output, const T* grad, int64_t idx) {
+    return static_cast<float>(grad[idx]);
+  }
 
-  __device__ static T computeResult(const T* output, const T* grad, T totalSum, int64_t idx) {
-    return grad[idx] - cuda::exp(output[idx]) * totalSum;
+  __device__ static float computeResult(const T* output, const T* grad, float totalSum, int64_t idx) {
+    return static_cast<float>(grad[idx]) - cuda::exp(static_cast<float>(output[idx])) * totalSum;
   }
 };
 
@@ -165,21 +173,21 @@ __global__ void kSoftmaxBackward(T* out, const T* output, const T* grad, int64_t
   auto tid = threadIdx.x;
   auto base = (outer * dimSize * innerSize) + inner;
 
-  T sum = 0;
+  float sum = 0;
   for (auto i = tid; i < dimSize; i += blockDim.x) {
     auto idx = base + i * innerSize;
     sum += Op::computePartialSum(output, grad, idx);
   }
-  T blockSum = cudaBlockReduce<T, OpCudaReduceSum>(sum, T(0));
+  auto blockSum = cudaBlockReduce<float, OpCudaReduceSum>(sum, 0.f);
 
   for (auto i = tid; i < dimSize; i += blockDim.x) {
     auto idx = base + i * innerSize;
-    out[idx] = Op::computeResult(output, grad, blockSum, idx);
+    out[idx] = static_cast<T>(Op::computeResult(output, grad, blockSum, idx));
   }
 }
 
 template <typename T, typename Op, bool isPhase1>
-__global__ void kSoftmaxBackwardLarge(T* out, const T* output, const T* grad, T* partialSums, int64_t dimSize,
+__global__ void kSoftmaxBackwardLarge(T* out, const T* output, const T* grad, float* partialSums, int64_t dimSize,
                                       int64_t innerSize, int64_t numBlocks) {
   auto outer = blockIdx.z;
   auto inner = blockIdx.y;
@@ -192,28 +200,28 @@ __global__ void kSoftmaxBackwardLarge(T* out, const T* output, const T* grad, T*
   auto end = cuda::min(start + elemsPerBlock, dimSize);
 
   if constexpr (isPhase1) {
-    T sum = 0;
+    float sum = 0;
     for (auto i = start + tid; i < end; i += blockDim.x) {
       auto idx = base + i * innerSize;
       sum += Op::computePartialSum(output, grad, idx);
     }
-    T blockSum = cudaBlockReduce<T, OpCudaReduceSum>(sum, T(0));
+    auto blockSum = cudaBlockReduce<float, OpCudaReduceSum>(sum, 0.f);
 
     if (tid == 0) {
       auto partialIdx = (outer * innerSize + inner) * numBlocks + blockId;
       partialSums[partialIdx] = blockSum;
     }
   } else {
-    T totalSum = 0;
+    float totalSum = 0;
     auto partialBase = (outer * innerSize + inner) * numBlocks;
     for (auto i = tid; i < numBlocks; i += blockDim.x) {
       totalSum += partialSums[partialBase + i];
     }
-    T blockSum = cudaBlockReduce<T, OpCudaReduceSum>(totalSum, T(0));
+    auto blockSum = cudaBlockReduce<float, OpCudaReduceSum>(totalSum, 0.f);
 
     for (auto i = start + tid; i < end; i += blockDim.x) {
       auto idx = base + i * innerSize;
-      out[idx] = Op::computeResult(output, grad, blockSum, idx);
+      out[idx] = static_cast<T>(Op::computeResult(output, grad, blockSum, idx));
     }
   }
 }
@@ -242,108 +250,108 @@ __global__ void kDropout(T* out, const T* self, const float p, const unsigned lo
 }
 
 template <typename T, NormType normType>
-__global__ void kNormSmall(T* out, const T* input, const T* weight, const T* bias, int64_t dim, T eps) {
+__global__ void kNormSmall(T* out, const T* input, const T* weight, const T* bias, int64_t dim, float eps) {
   auto row = blockIdx.x;
   auto tid = threadIdx.x;
   auto base = row * dim;
 
-  T sum = 0;
+  float sum = 0;
   for (auto i = tid; i < dim; i += blockDim.x) {
     if constexpr (normType == NormType::LayerNorm) {
-      sum += input[base + i];
+      sum += static_cast<float>(input[base + i]);
     } else {  // RMSNorm
-      T val = input[base + i];
+      auto val = static_cast<float>(input[base + i]);
       sum += val * val;
     }
   }
 
-  T stat = cudaBlockReduce<T, OpCudaReduceSum>(sum, T(0)) / static_cast<T>(dim);
+  float stat = cudaBlockReduce<float, OpCudaReduceSum>(sum, 0.f) / static_cast<float>(dim);
 
-  T invStd;
+  float invStd;
   if constexpr (normType == NormType::LayerNorm) {
-    T mean = stat;
+    float mean = stat;
     // var
-    T varSum = 0;
+    float varSum = 0;
     for (auto i = tid; i < dim; i += blockDim.x) {
-      T diff = input[base + i] - mean;
+      float diff = static_cast<float>(input[base + i]) - mean;
       varSum += diff * diff;
     }
-    T var = cudaBlockReduce<T, OpCudaReduceSum>(varSum, T(0)) / static_cast<T>(dim);
-    invStd = cuda::rsqrt(var + static_cast<T>(eps));
+    float var = cudaBlockReduce<float, OpCudaReduceSum>(varSum, 0.f) / static_cast<float>(dim);
+    invStd = cuda::rsqrt(var + eps);
 
     // norm + affine
     for (auto i = tid; i < dim; i += blockDim.x) {
-      T normed = (input[base + i] - mean) * invStd;
-      if (weight) normed *= weight[i];
-      if (bias) normed += bias[i];
-      out[base + i] = normed;
+      float normed = (static_cast<float>(input[base + i]) - mean) * invStd;
+      if (weight) normed *= static_cast<float>(weight[i]);
+      if (bias) normed += static_cast<float>(bias[i]);
+      out[base + i] = static_cast<T>(normed);
     }
   } else {
-    invStd = cuda::rsqrt(stat + static_cast<T>(eps));
+    invStd = cuda::rsqrt(stat + eps);
 
     // norm + affine
     for (auto i = tid; i < dim; i += blockDim.x) {
-      T normed = input[base + i] * invStd;
-      if (weight) normed *= weight[i];
-      out[base + i] = normed;
+      float normed = static_cast<float>(input[base + i]) * invStd;
+      if (weight) normed *= static_cast<float>(weight[i]);
+      out[base + i] = static_cast<T>(normed);
     }
   }
 }
 
 template <typename T, NormType normType>
 __global__ void kNormLarge(T* out, const T* input, const T* weight, const T* bias, int64_t dim, float eps) {
-  __shared__ T sharedMem[2];  // mean, var
-  T* sharedStats = sharedMem;
+  __shared__ float sharedMem[2];  // mean, var
+  float* sharedStats = sharedMem;
 
   auto row = blockIdx.x;
   auto tid = threadIdx.x;
   auto base = row * dim;
 
-  T sum = 0;
+  float sum = 0;
   for (auto i = tid; i < dim; i += blockDim.x) {
     if constexpr (normType == NormType::LayerNorm) {
-      sum += input[base + i];
+      sum += static_cast<float>(input[base + i]);
     } else {  // RMSNorm
-      T val = input[base + i];
+      auto val = static_cast<float>(input[base + i]);
       sum += val * val;
     }
   }
 
-  T stat = cudaBlockReduce<T, OpCudaReduceSum>(sum, T(0));
-  if (tid == 0) sharedStats[0] = stat / static_cast<T>(dim);
+  auto stat = cudaBlockReduce<float, OpCudaReduceSum>(sum, 0.f);
+  if (tid == 0) sharedStats[0] = stat / static_cast<float>(dim);
   __syncthreads();
   stat = sharedStats[0];
 
-  T invStd;
+  float invStd;
   if constexpr (normType == NormType::LayerNorm) {
-    T mean = stat;
+    float mean = stat;
     // var
-    T varSum = 0;
+    float varSum = 0;
     for (auto i = tid; i < dim; i += blockDim.x) {
-      T diff = input[base + i] - mean;
+      float diff = static_cast<float>(input[base + i]) - mean;
       varSum += diff * diff;
     }
-    T var = cudaBlockReduce<T, OpCudaReduceSum>(varSum, T(0));
-    if (tid == 0) sharedStats[1] = var / static_cast<T>(dim);
+    auto var = cudaBlockReduce<float, OpCudaReduceSum>(varSum, 0.f);
+    if (tid == 0) sharedStats[1] = var / static_cast<float>(dim);
     __syncthreads();
     var = sharedStats[1];
-    invStd = cuda::rsqrt(var + static_cast<T>(eps));
+    invStd = cuda::rsqrt(var + eps);
 
     // norm + affine
     for (auto i = tid; i < dim; i += blockDim.x) {
-      T normed = (input[base + i] - mean) * invStd;
-      if (weight) normed *= weight[i];
-      if (bias) normed += bias[i];
-      out[base + i] = normed;
+      float normed = (static_cast<float>(input[base + i]) - mean) * invStd;
+      if (weight) normed *= static_cast<float>(weight[i]);
+      if (bias) normed += static_cast<float>(bias[i]);
+      out[base + i] = static_cast<T>(normed);
     }
   } else {
-    invStd = cuda::rsqrt(stat + static_cast<T>(eps));
+    invStd = cuda::rsqrt(stat + eps);
 
     // norm + affine
     for (auto i = tid; i < dim; i += blockDim.x) {
-      T normed = input[base + i] * invStd;
-      if (weight) normed *= weight[i];
-      out[base + i] = normed;
+      float normed = static_cast<float>(input[base + i]) * invStd;
+      if (weight) normed *= static_cast<float>(weight[i]);
+      out[base + i] = static_cast<T>(normed);
     }
   }
 }
@@ -353,7 +361,7 @@ __global__ void kRopeComputeInvFreq(T* invFreqPtr, int64_t halfDim, float thetaB
   const auto idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx < halfDim) {
     invFreqPtr[idx] =
-        static_cast<T>(1.f / powf(thetaBase, static_cast<float>(idx << 1) / static_cast<float>(halfDim << 1)));
+        static_cast<T>(1.f / cuda::pow(thetaBase, static_cast<float>(idx << 1) / static_cast<float>(halfDim << 1)));
   }
 }
 
@@ -402,8 +410,8 @@ __global__ void kRopePrecomputeCosSin(const T* invFreqPtr, T* cosPtr, T* sinPtr,
 }
 
 template <typename T>
-__global__ void kRopeApply(const T* input, const T* cos, const T* sin, T* output, int64_t batch, int64_t numHead,
-                           int64_t seqLen, int64_t headDim, int64_t offset) {
+__global__ void kRopeApply(const T* input, const float* cos, const float* sin, T* output, int64_t batch,
+                           int64_t numHead, int64_t seqLen, int64_t headDim, int64_t offset) {
   const int64_t b = blockIdx.x / numHead;
   const int64_t h = blockIdx.x % numHead;
   const int64_t t = blockIdx.y * blockDim.x + threadIdx.x;
@@ -414,18 +422,18 @@ __global__ void kRopeApply(const T* input, const T* cos, const T* sin, T* output
     T* yPtr = output + base;
 
     const int64_t posIndex = offset + t;
-    const T* cosRow = cos + posIndex * headDim;
-    const T* sinRow = sin + posIndex * headDim;
+    const float* cosRow = cos + posIndex * headDim;
+    const float* sinRow = sin + posIndex * headDim;
 
     auto halfDim = headDim >> 1;
     for (int64_t i = 0; i < halfDim; i++) {
-      T x1 = xPtr[i];
-      T x2 = xPtr[halfDim + i];
-      T c = cosRow[i];
-      T s = sinRow[i];
+      float x1 = static_cast<float>(xPtr[i]);
+      float x2 = static_cast<float>(xPtr[halfDim + i]);
+      float c = cosRow[i];
+      float s = sinRow[i];
 
-      yPtr[i] = x1 * c - x2 * s;
-      yPtr[halfDim + i] = x2 * c + x1 * s;
+      yPtr[i] = static_cast<T>(x1 * c - x2 * s);
+      yPtr[halfDim + i] = static_cast<T>(x2 * c + x1 * s);
     }
   }
 }
@@ -435,7 +443,7 @@ void softmaxForwardCudaImpl(Tensor& out, const Tensor& self, int64_t dim) {
   ASSERT(out.shape() == self.shape());
   auto info = getSoftmaxDimInfo(self, dim);
 
-  using CudaT = typename cuda::CudaTypeMap<T>::type;
+  using CudaT = typename cuda::CudaTypeCast<T>::type;
   const CudaT* selfPtr = self.dataPtr<CudaT>();
   CudaT* outPtr = out.dataPtr<CudaT>();
 
@@ -471,7 +479,7 @@ Tensor softmaxBackwardCudaImplDetail(const Tensor& grad, const Tensor& output, i
   auto info = getSoftmaxDimInfo(output, dim);
   Tensor out(output.shape(), output.options().noGrad());
 
-  using CudaT = typename cuda::CudaTypeMap<T>::type;
+  using CudaT = typename cuda::CudaTypeCast<T>::type;
   const CudaT* outputPtr = output.dataPtr<CudaT>();
   const CudaT* gradPtr = grad.dataPtr<CudaT>();
   CudaT* outPtr = out.dataPtr<CudaT>();
@@ -486,8 +494,8 @@ Tensor softmaxBackwardCudaImplDetail(const Tensor& grad, const Tensor& output, i
     const int64_t numBlocks = std::min(maxBlocksPerDim, (info.dimSize + 1023) / 1024);
     const int64_t partialSumsSize = info.outerSize * info.innerSize * numBlocks;
 
-    Storage partialSums(static_cast<int64_t>(partialSumsSize * sizeof(CudaT)), output.device());
-    auto* partialSumsPtr = partialSums.dataPtr<CudaT>();
+    Storage partialSums(static_cast<int64_t>(partialSumsSize * sizeof(float)), output.device());
+    auto* partialSumsPtr = partialSums.dataPtr<float>();
 
     dim3 block(cuda::getKernelBlockSize(output.device().index));
     dim3 grid(numBlocks, info.innerSize, info.outerSize);
@@ -506,7 +514,7 @@ Tensor softmaxBackwardCudaImplDetail(const Tensor& grad, const Tensor& output, i
 
 template <typename T>
 Tensor softmaxOpBackwardCudaImpl(const Tensor& grad, const Tensor& output, int64_t dim) {
-  using CudaT = typename cuda::CudaTypeMap<T>::type;
+  using CudaT = typename cuda::CudaTypeCast<T>::type;
   return softmaxBackwardCudaImplDetail<CudaT, OpCudaSoftmaxBackward<CudaT>>(grad, output, dim);
 }
 
@@ -524,13 +532,13 @@ Tensor logSoftmaxOpCudaImpl(const Tensor& self, int64_t dim) {
 
 template <typename T>
 Tensor logSoftmaxOpBackwardCudaImpl(const Tensor& grad, const Tensor& output, int64_t dim) {
-  using CudaT = typename cuda::CudaTypeMap<T>::type;
+  using CudaT = typename cuda::CudaTypeCast<T>::type;
   return softmaxBackwardCudaImplDetail<CudaT, OpCudaLogSoftmaxBackward<CudaT>>(grad, output, dim);
 }
 
 template <typename T>
 Tensor dropoutOpCudaImpl(const Tensor& self, float p) {
-  using CudaT = typename cuda::CudaTypeMap<T>::type;
+  using CudaT = typename cuda::CudaTypeCast<T>::type;
   Tensor out(self.shape(), self.options().noGrad());
   const auto* selfPtr = self.dataPtr<CudaT>();
   auto* outPtr = out.dataPtr<CudaT>();
@@ -550,7 +558,7 @@ Tensor dropoutMaskedOpCudaImpl(const Tensor& self, const Tensor& mask, float p) 
   auto outShape = iterator.setupBroadcast();
   ASSERT(iterator.isBroadcastOk());
   Tensor out(outShape, self.options().noGrad());
-  using CudaT = typename cuda::CudaTypeMap<T>::type;
+  using CudaT = typename cuda::CudaTypeCast<T>::type;
   auto tp = static_cast<CudaT>(p);
   iterator.template forEach<CudaT>(out,
                                    [tp] __device__(const CudaT& a, const CudaT& b) -> CudaT { return a * b / tp; });
@@ -567,7 +575,7 @@ Tensor normOpCudaImplDetail(const Tensor& self, IntArrayView normalizedShape, co
 
   Tensor out(self.shape(), self.options().noGrad());
 
-  using CudaT = typename cuda::CudaTypeMap<T>::type;
+  using CudaT = typename cuda::CudaTypeCast<T>::type;
   const CudaT* inputPtr = self.dataPtr<CudaT>();
   const CudaT* weightPtr = weight.defined() ? weight.dataPtr<CudaT>() : nullptr;
   const CudaT* biasPtr = bias.defined() ? bias.dataPtr<CudaT>() : nullptr;
@@ -614,21 +622,21 @@ TensorPair ropeInitOpCudaImpl(int64_t headDim, int64_t contextLength, float thet
                               std::optional<RopeScalingConfig> scaling, Options options) {
   ASSERT(!options.requiresGrad_);
   ASSERT(options.device_.type == DeviceType::CUDA);
+  options.dtype_ = DType::Float32;
 
   ASSERT(headDim % 2 == 0);
   int64_t halfDim = headDim >> 1;
-  using CudaT = typename cuda::CudaTypeMap<T>::type;
 
   // inverse frequency
   Tensor invFreq({halfDim}, options);
-  auto* invFreqPtr = invFreq.dataPtr<CudaT>();
+  auto* invFreqPtr = invFreq.dataPtr<float>();
 
   auto params = cuda::getKernelLaunchParams(options.device_.index, halfDim);
-  CUDA_LAUNCH_KERNEL(kRopeComputeInvFreq<CudaT>, params, invFreqPtr, halfDim, thetaBase);
+  CUDA_LAUNCH_KERNEL(kRopeComputeInvFreq<float>, params, invFreqPtr, halfDim, thetaBase);
 
   // apply scaling if needed
   if (scaling.has_value()) {
-    CUDA_LAUNCH_KERNEL(kRopeApplyScaling<CudaT>, params, invFreqPtr, halfDim,
+    CUDA_LAUNCH_KERNEL(kRopeApplyScaling<float>, params, invFreqPtr, halfDim,
                        static_cast<float>(scaling->originalContextLength), scaling->lowFreqFactor,
                        scaling->highFreqFactor, scaling->factor);
   }
@@ -636,12 +644,12 @@ TensorPair ropeInitOpCudaImpl(int64_t headDim, int64_t contextLength, float thet
   // precompute cos/sin
   Tensor cos({contextLength, headDim}, options);
   Tensor sin({contextLength, headDim}, options);
-  auto* cosPtr = cos.dataPtr<CudaT>();
-  auto* sinPtr = sin.dataPtr<CudaT>();
+  auto* cosPtr = cos.dataPtr<float>();
+  auto* sinPtr = sin.dataPtr<float>();
 
   auto blockSize = cuda::getKernelBlockSize(options.device_.index);
   auto stream = cuda::getCurrentCUDAStream(options.device_.index).stream;
-  kRopePrecomputeCosSin<CudaT>
+  kRopePrecomputeCosSin<float>
       <<<contextLength, blockSize, 0, stream>>>(invFreqPtr, cosPtr, sinPtr, contextLength, headDim);
   CUDA_KERNEL_CHECK();
   return {cos, sin};
@@ -658,10 +666,10 @@ Tensor ropeApplyOpCudaImpl(const Tensor& input, const TensorPair& rope, int64_t 
   int64_t headDim = shape[3];
   ASSERT(headDim % 2 == 0);
 
-  using CudaT = typename cuda::CudaTypeMap<T>::type;
+  using CudaT = typename cuda::CudaTypeCast<T>::type;
   const auto* inputPtr = input.dataPtr<CudaT>();
-  const auto* cosPtr = rope.first.dataPtr<CudaT>();
-  const auto* sinPtr = rope.second.dataPtr<CudaT>();
+  const auto* cosPtr = rope.first.dataPtr<float>();
+  const auto* sinPtr = rope.second.dataPtr<float>();
 
   Tensor out(shape, input.options().noGrad());
   auto* outPtr = out.dataPtr<CudaT>();

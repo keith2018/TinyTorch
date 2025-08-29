@@ -148,6 +148,8 @@ class RoPE : public Module {
 
   Tensor forward(const Tensor &input) override;
   Tensor forward(const Tensor &input, int64_t offset);
+  Tensor operator()(const Tensor &input, int64_t offset = 0) { return forward(input, offset); }
+
   void resetParameters() override;
 
   TensorPair &rope() { return rope_; }

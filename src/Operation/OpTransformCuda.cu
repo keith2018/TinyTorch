@@ -18,11 +18,14 @@ __global__ void kDtypeCast(const SrcT* src, DstT* dst, int64_t numel) {
 
 template <typename SrcT, typename DstT>
 void dtypeCastCudaKernelLauncher(const void* src, void* dst, int64_t numel, const Device& device) {
-  const SrcT* srcPtr = static_cast<const SrcT*>(src);
-  DstT* dstPtr = static_cast<DstT*>(dst);
+  using CudaSrcT = typename cuda::CudaTypeCast<SrcT>::type;
+  using CudaDstT = typename cuda::CudaTypeCast<DstT>::type;
+
+  const auto* srcPtr = static_cast<const CudaSrcT*>(src);
+  auto* dstPtr = static_cast<CudaDstT*>(dst);
 
   auto params = cuda::getKernelLaunchParams(device.index, numel);
-  CUDA_LAUNCH_KERNEL((kDtypeCast<SrcT, DstT>), params, srcPtr, dstPtr, numel);
+  CUDA_LAUNCH_KERNEL((kDtypeCast<CudaSrcT, CudaDstT>), params, srcPtr, dstPtr, numel);
 }
 
 template <typename SrcT>

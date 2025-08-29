@@ -136,7 +136,7 @@ TensorPair topkOpCudaImpl(const Tensor& self, int64_t k, int64_t dim, bool large
     innerSize *= self.shape(i);
   }
 
-  using CudaT = typename cuda::CudaTypeMap<T>::type;
+  using CudaT = typename cuda::CudaTypeCast<T>::type;
   const CudaT* selfPtr = self.dataPtr<CudaT>();
   CudaT* valPtr = values.dataPtr<CudaT>();
   auto* idxPtr = indices.dataPtr<int64_t>();
@@ -211,7 +211,7 @@ Tensor multinomialOpCudaImpl(const Tensor& self, int64_t nSamples, bool replacem
     return ret;
   }
 
-  using CudaT = typename cuda::CudaTypeMap<T>::type;
+  using CudaT = typename cuda::CudaTypeCast<T>::type;
   const CudaT* selfPtr = self.dataPtr<CudaT>();
   auto* retPtr = ret.dataPtr<int64_t>();
 
@@ -269,7 +269,7 @@ TensorPair sortOpCudaImpl(const Tensor& self, int64_t dim, bool descending) {
     inner *= self.shape(i);
   }
 
-  using CudaT = typename cuda::CudaTypeMap<T>::type;
+  using CudaT = typename cuda::CudaTypeCast<T>::type;
   const CudaT* selfPtr = self.dataPtr<CudaT>();
   CudaT* valPtr = values.dataPtr<CudaT>();
   auto* idxPtr = indices.dataPtr<int64_t>();
@@ -319,7 +319,7 @@ Tensor cumsumOpCudaImpl(const Tensor& self, int64_t dim) {
   }
   ASSERT(dim >= 0 && dim < self.dim());
 
-  using CudaT = typename cuda::CudaTypeMap<T>::type;
+  using CudaT = typename cuda::CudaTypeCast<T>::type;
   Tensor ret = Tensor::empty(self.shape(), self.options().noGrad());
   const CudaT* selfPtr = self.dataPtr<CudaT>();
   CudaT* retPtr = ret.dataPtr<CudaT>();

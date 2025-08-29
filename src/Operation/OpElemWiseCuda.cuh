@@ -15,7 +15,7 @@ namespace tinytorch::op {
 struct OpCudaAbs {
   template <typename T>
   __device__ static T apply(const T& a) {
-    return ::fabsf(a);
+    return cuda::abs(a);
   }
 };
 
@@ -29,14 +29,14 @@ struct OpCudaNeg {
 struct OpCudaSign {
   template <typename T>
   __device__ static T apply(const T& a) {
-    return a > 0 ? 1 : -1;
+    return cuda::sign(a);
   }
 };
 
 struct OpCudaSqrt {
   template <typename T>
   __device__ static T apply(const T& a) {
-    return ::sqrtf(a);
+    return cuda::sqrt(a);
   }
 };
 
@@ -50,79 +50,83 @@ struct OpCudaSquare {
 struct OpCudaExp {
   template <typename T>
   __device__ static T apply(const T& a) {
-    return ::expf(a);
+    return cuda::exp(a);
   }
 };
 
 struct OpCudaLog {
   template <typename T>
   __device__ static T apply(const T& a) {
-    return ::logf(a);
+    return cuda::log(a);
   }
 };
 
 struct OpCudaSin {
   template <typename T>
   __device__ static T apply(const T& a) {
-    return ::sinf(a);
+    return cuda::sin(a);
   }
 };
 
 struct OpCudaSinBackwardP1 {
   template <typename T>
   __device__ static T apply(const T& self, const T& grad) {
-    return ::cosf(self) * grad;
+    return cuda::cos(self) * grad;
   }
 };
 
 struct OpCudaCos {
   template <typename T>
   __device__ static T apply(const T& a) {
-    return ::cosf(a);
+    return cuda::cos(a);
   }
 };
 
 struct OpCudaCosBackwardP1 {
   template <typename T>
   __device__ static T apply(const T& self, const T& grad) {
-    return -::sinf(self) * grad;
+    return -cuda::sin(self) * grad;
   }
 };
 
 struct OpCudaSigmoid {
   template <typename T>
   __device__ static T apply(const T& a) {
-    return 1 / (1 + ::expf(-a));
+    return T(1) / (T(1) + cuda::exp(-a));
   }
 };
 
 struct OpCudaTanh {
   template <typename T>
   __device__ static T apply(const T& a) {
-    return ::tanhf(a);
+    return cuda::tanh(a);
   }
 };
 
 struct OpCudaRelu {
   template <typename T>
   __device__ static T apply(const T& a) {
-    return a > 0 ? a : T(0);
+    return a > T(0) ? a : T(0);
   }
 };
 
 struct OpCudaGelu {
   template <typename T>
   __device__ static T apply(const T& a) {
+    auto fa = static_cast<float>(a);
     constexpr float sqrt2OverPi = 0.7978845608f;  // sqrt(2/pi)
-    float tanhArg = sqrt2OverPi * (a + 0.044715f * a * a * a);
-    return 0.5f * a * (1.0f + ::tanhf(tanhArg));
+    float tanhArg = sqrt2OverPi * (fa + 0.044715f * fa * fa * fa);
+    auto ret = 0.5f * a * (1.0f + cuda::tanh(tanhArg));
+    return static_cast<T>(ret);
   }
 };
 
 struct OpCudaSilu {
   template <typename T>
   __device__ static T apply(const T& a) {
-    return a / (1.0f + ::expf(-a));
+    auto fa = static_cast<float>(a);
+    auto ret = fa / (1.f + cuda::exp(-fa));
+    return static_cast<T>(ret);
   }
 };
 
@@ -174,35 +178,35 @@ struct OpCudaDivBackwardP2 {
 struct OpCudaPow {
   template <typename T>
   __device__ static T apply(const T& a, const T& b) {
-    return ::powf(a, b);
+    return cuda::pow(a, b);
   }
 };
 
 struct OpCudaPowBackwardP1 {
   template <typename T>
   __device__ static T apply(const T& a, const T& b, const T& grad) {
-    return grad * b * ::powf(a, b - 1);
+    return grad * b * cuda::pow(a, b - T(1));
   }
 };
 
 struct OpCudaPowBackwardP2 {
   template <typename T>
   __device__ static T apply(const T& a, const T& b, const T& grad) {
-    return grad * ::powf(a, b) * ::logf(a);
+    return grad * cuda::pow(a, b) * cuda::log(a);
   }
 };
 
 struct OpCudaMaximum {
   template <typename T>
   __device__ static T apply(const T& a, const T& b) {
-    return ::max(a, b);
+    return cuda::max(a, b);
   }
 };
 
 struct OpCudaMinimum {
   template <typename T>
   __device__ static T apply(const T& a, const T& b) {
-    return ::min(a, b);
+    return cuda::min(a, b);
   }
 };
 
