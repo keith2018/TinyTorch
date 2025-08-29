@@ -80,7 +80,7 @@ __global__ void kCol2Im(T* ret, const T* self, const int64_t n, const int64_t ch
 
 template <typename T>
 Tensor dotOpCudaImpl(const Tensor& self, const Tensor& other) {
-  using CudaT = typename cuda::CudaTypeMap<T>::type;
+  using CudaT = typename cuda::CudaTypeCast<T>::type;
   auto ret = Tensor::scalar(0, self.options().noGrad());
 
   int64_t n = self.numel();
@@ -108,7 +108,7 @@ Tensor im2colOpCudaImpl(const Tensor& self, Dim2D kernel, Dim2D stride, Dim2D pa
   int64_t colH = outH * outW;
   int64_t colW = channels * kernel.h * kernel.w;
 
-  using CudaT = typename cuda::CudaTypeMap<T>::type;
+  using CudaT = typename cuda::CudaTypeCast<T>::type;
   auto ret = Tensor::empty({batch * colH, colW}, self.options().noGrad());
   const auto* selfPtr = self.dataPtr<CudaT>();
   auto* retPtr = ret.dataPtr<CudaT>();
@@ -136,7 +136,7 @@ Tensor col2imOpCudaImpl(const Tensor& self, const IntArrayView shape, Dim2D kern
   // int64_t colH = outH * outW;
   // int64_t colW = channels * kernel.h * kernel.w;
 
-  using CudaT = typename cuda::CudaTypeMap<T>::type;
+  using CudaT = typename cuda::CudaTypeCast<T>::type;
   auto ret = Tensor::zeros(shape, self.options().noGrad());
   const auto* selfPtr = self.dataPtr<CudaT>();
   auto* retPtr = ret.dataPtr<CudaT>();

@@ -90,7 +90,7 @@ class Module {
   }
 
   virtual Tensor forward(const Tensor &input) { return {}; }
-  Tensor operator()(const Tensor &input) { return forward(input); }
+  virtual Tensor operator()(const Tensor &input) { return forward(input); }
 
   virtual void to(DType type) {
     auto allStates = namedStates();

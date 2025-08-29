@@ -7,6 +7,7 @@
 #pragma once
 
 #include <numeric>
+#include <cassert>
 
 #include "OpFilling.h"
 #include "OpTransform.h"
@@ -372,7 +373,7 @@ Tensor transpose2dOpCudaImpl(const Tensor& self) {
 
   SizeVector retShape = {self.shape(1), self.shape(0)};
   auto ret = Tensor::empty(retShape, self.options().noGrad());
-  using CudaT = typename cuda::CudaTypeMap<T>::type;
+  using CudaT = typename cuda::CudaTypeCast<T>::type;
   cudaTranspose2d(ret.dataPtr<CudaT>(), self.dataPtr<CudaT>(), retShape[0], retShape[1], self.device());
   return ret;
 }

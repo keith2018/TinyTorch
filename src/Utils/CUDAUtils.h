@@ -8,8 +8,6 @@
 
 #ifdef USE_CUDA
 #include <cublas_v2.h>
-#include <cuda_bf16.h>
-#include <cuda_fp16.h>
 #include <cuda_runtime.h>
 #include <curand_kernel.h>
 #endif
@@ -17,6 +15,8 @@
 #include <cfloat>
 #include <iostream>
 
+#include "CUDAMath.h"
+#include "CUDATypes.h"
 #include "Macros.h"
 #include "Tensor/DType.h"
 #include "Tensor/Device.h"
@@ -146,43 +146,6 @@ struct ALIGN(16) TensorCudaCtx {
 };
 
 TensorCudaCtx getTensorCudaCtx(const Tensor& t);
-
-template <typename T>
-struct CudaTypeMap {
-  static_assert(sizeof(T) == 0, "Unsupported type for CUDA");
-};
-template <>
-struct CudaTypeMap<float> {
-  using type = float;
-};
-template <>
-struct CudaTypeMap<Half> {
-  using type = __half;
-};
-template <>
-struct CudaTypeMap<BFloat16> {
-  using type = __nv_bfloat16;
-};
-template <>
-struct CudaTypeMap<__half> {
-  using type = __half;
-};
-template <>
-struct CudaTypeMap<__nv_bfloat16> {
-  using type = __nv_bfloat16;
-};
-template <>
-struct CudaTypeMap<int32_t> {
-  using type = int32_t;
-};
-template <>
-struct CudaTypeMap<int64_t> {
-  using type = int64_t;
-};
-template <>
-struct CudaTypeMap<uint8_t> {
-  using type = uint8_t;
-};
 
 #endif
 
