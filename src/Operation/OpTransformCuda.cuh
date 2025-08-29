@@ -329,6 +329,16 @@ __global__ void kRepeatInterleave(T* out, const T* in, int64_t n, int64_t dimSiz
 }
 
 template <typename T>
+__global__ void kDataCheck(const T* selfPtr, int64_t n) {
+  auto idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < n) {
+    auto v = static_cast<float>(selfPtr[idx]);
+    assert(!isnan(v));
+    assert(!isinf(v));
+  }
+}
+
+template <typename T>
 void cudaTranspose2d(T* out, const T* in, int64_t width, int64_t height, const Device& device) {
   dim3 blockSize(TRANSPOSE_TILE_DIM, TRANSPOSE_TILE_DIM);
   dim3 gridSize((width + TRANSPOSE_TILE_DIM - 1) / TRANSPOSE_TILE_DIM,
@@ -685,6 +695,16 @@ Tensor repeatInterleaveOpCudaImpl(const Tensor& self, int64_t repeats, int64_t d
   auto params = cuda::getKernelLaunchParams(self.device().index, ret.numel());
   CUDA_LAUNCH_KERNEL(kRepeatInterleave<T>, params, retPtr, selfPtr, ret.numel(), self.shape(dim), repeats, innerSize);
   return ret;
+}
+
+template <typename T>
+void checkOpCudaImpl(const Tensor& self) {
+  if constexpr (std::is_same_v<T, float> || std::is_same_v<T, BFloat16> || std::is_same_v<T, Half>) {
+    using CudaT = typename cuda::CudaTypeCast<T>::type;
+    const auto* selfPtr = self.dataPtr<CudaT>();
+    auto params = cuda::getKernelLaunchParams(self.device().index, self.numel());
+    CUDA_LAUNCH_KERNEL((kDataCheck<CudaT>), params, selfPtr, self.numel());
+  }
 }
 
 }  // namespace tinytorch::op

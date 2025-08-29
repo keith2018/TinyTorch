@@ -62,6 +62,9 @@ void registerTransformCuda() {
   // dtype cast
   REGISTER_OP_IMPL_ALL_DTYPES(dtypeCast, CUDA, dtypeCastOpCudaImpl);
 
+  // check
+  REGISTER_OP_IMPL_DTYPE_TPL(check, CUDA, checkOpCudaImpl);
+
   // permute
   REGISTER_OP_IMPL_DTYPE_TPL(permute, CUDA, permuteOpCudaImpl);
   REGISTER_OP_IMPL_DTYPE_TPL(permuteAll, CUDA, permuteAllOpCudaImpl);
