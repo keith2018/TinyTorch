@@ -407,29 +407,83 @@ Tensor transposeOpCudaImpl(const Tensor& self, int64_t dim0, int64_t dim1) {
     return self.clone();
   }
 
-  if (self.dim() == 2) {
-    return transpose2dOpCudaImpl<T>(self);
+  if (dim0 > dim1) {
+    std::swap(dim0, dim1);
   }
 
   SizeVector retShape(self.shape());
   std::swap(retShape[dim0], retShape[dim1]);
-  auto ret = Tensor::empty(retShape, self.options().noGrad());
 
-  const auto* selfPtr = self.dataPtr<T>();
-  auto* retPtr = ret.dataPtr<T>();
+  if ((self.size(dim0) == 1 || self.size(dim1) == 1) && dim1 - dim0 == 1) {
+    return op::view(self, retShape);
+  }
+
+  if (self.dim() == 2) {
+    return transpose2dOpCudaImpl<T>(self);
+  }
+
+  SizeVector mergedShape;
+  SizeVector mergedOutShape;
+
+  int64_t preSize = 1;
+  for (int64_t i = 0; i < dim0; i++) {
+    preSize *= self.size(i);
+  }
+  if (preSize > 1) {
+    mergedShape.pushBack(preSize);
+    mergedOutShape.pushBack(preSize);
+  }
+
+  mergedShape.pushBack(self.size(dim0));
+  mergedOutShape.pushBack(self.size(dim1));
+
+  int64_t midSize = 1;
+  for (int64_t i = dim0 + 1; i < dim1; i++) {
+    midSize *= self.size(i);
+  }
+  if (midSize > 1) {
+    mergedShape.pushBack(midSize);
+    mergedOutShape.pushBack(midSize);
+  }
+
+  mergedShape.pushBack(self.size(dim1));
+  mergedOutShape.pushBack(self.size(dim0));
+
+  int64_t postSize = 1;
+  for (int64_t i = dim1 + 1; i < self.dim(); i++) {
+    postSize *= self.size(i);
+  }
+  if (postSize > 1) {
+    mergedShape.pushBack(postSize);
+    mergedOutShape.pushBack(postSize);
+  }
+
+  Tensor mergedInput = op::reshape(self, mergedShape);
+  Tensor mergedOutput = Tensor::empty(mergedOutShape, self.options().noGrad());
+
+  int64_t newDim0 = 0, newDim1 = 0;
+  int pos = 0;
+  if (preSize > 1) {
+    pos++;
+  }
+  newDim0 = pos++;
+  if (midSize > 1) {
+    pos++;
+  }
+  newDim1 = pos;
 
   DimArray<int64_t> inStrides{};
   DimArray<int64_t> outStrides{};
-
-  for (auto i = 0; i < self.dim(); i++) {
-    inStrides.data[i] = self.stride(i);
-    outStrides.data[i] = ret.stride(i);
+  for (auto i = 0; i < mergedInput.dim(); i++) {
+    inStrides.data[i] = mergedInput.stride(i);
+    outStrides.data[i] = mergedOutput.stride(i);
   }
 
-  auto params = cuda::getKernelLaunchParams(self.device().index, self.numel());
-  CUDA_LAUNCH_KERNEL(kTransposeND<T>, params, retPtr, selfPtr, self.dim(), dim0, dim1, self.numel(), outStrides,
-                     inStrides);
-  return ret;
+  auto params = cuda::getKernelLaunchParams(self.device().index, mergedOutput.numel());
+  CUDA_LAUNCH_KERNEL(kTransposeND<T>, params, mergedOutput.dataPtr<T>(), mergedInput.dataPtr<T>(), mergedInput.dim(),
+                     newDim0, newDim1, mergedOutput.numel(), outStrides, inStrides);
+
+  return op::reshape(mergedOutput, retShape);
 }
 
 template <typename T>

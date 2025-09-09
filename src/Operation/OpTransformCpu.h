@@ -69,6 +69,12 @@ Tensor transposeOpCpuImpl(const Tensor& self, int64_t dim0, int64_t dim1) {
     return self.clone();
   }
 
+  if ((self.size(dim0) == 1 || self.size(dim1) == 1) && std::abs(dim0 - dim1) == 1) {
+    SizeVector retShape(self.shape());
+    std::swap(retShape[dim0], retShape[dim1]);
+    return op::view(self, retShape);
+  }
+
   if (self.dim() == 2) {
     return transpose2dOpCpuImpl<T>(self);
   }
