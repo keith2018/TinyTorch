@@ -195,9 +195,7 @@ bool Tensor::isLeaf() const {
   return gradMeta_->isLeaf();
 }
 
-void Tensor::check() const {
-  op::check(*this);
-}
+void Tensor::check() const { op::check(*this); }
 
 Tensor Tensor::to(DType type) const {
   if (dtype() == type) {
@@ -222,9 +220,7 @@ Tensor Tensor::to(Device device) const {
   return ret;
 }
 
-Tensor Tensor::to(DType type, Device device) const {
-  return to(type).to(device);
-}
+Tensor Tensor::to(DType type, Device device) const { return to(type).to(device); }
 
 void Tensor::fill_(const Scalar &val) { op::fill(*this, val); }
 void Tensor::fillMasked_(const Tensor &mask, const Scalar &val) { op::fillMaskedInplace(*this, mask, val); }
@@ -240,12 +236,8 @@ void Tensor::fillBernoulli_(float p) { op::fillRandBernoulli(*this, p); }
 void Tensor::scatter_(int64_t dim, const Tensor &index, const Tensor &src) {
   function::scatter_(*this, dim, index, src);
 }
-Tensor Tensor::tril(int64_t diagonal) const {
-  return function::tril(*this, diagonal);
-}
-Tensor Tensor::triu(int64_t diagonal) const {
-  return function::triu(*this, diagonal);
-}
+Tensor Tensor::tril(int64_t diagonal) const { return function::tril(*this, diagonal); }
+Tensor Tensor::triu(int64_t diagonal) const { return function::triu(*this, diagonal); }
 Tensor Tensor::operator+(const Tensor &other) const { return function::add(*this, other); }
 Tensor Tensor::operator-(const Tensor &other) const { return function::sub(*this, other); }
 Tensor Tensor::operator*(const Tensor &other) const { return function::mul(*this, other); }

@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include <numeric>
 #include <cassert>
+#include <numeric>
 
 #include "OpFilling.h"
 #include "OpTransform.h"
@@ -335,6 +335,7 @@ __global__ void kDataCheck(const T* selfPtr, int64_t n) {
     auto v = static_cast<float>(selfPtr[idx]);
     assert(!isnan(v));
     assert(!isinf(v));
+    UNUSED(v);
   }
 }
 
