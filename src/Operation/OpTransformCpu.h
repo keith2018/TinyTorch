@@ -181,22 +181,32 @@ void indexPutAdvanceOpCpuImpl(Tensor& self, ArrayView<Tensor> indices, const Ten
 template <typename T, bool LOWER>
 Tensor triangleOpCpuImpl(const Tensor& self, int64_t diagonal) {
   auto ret = Tensor::empty(self.shape(), self.options().noGrad());
-  const auto rows = self.shape(0);
-  const auto cols = self.shape(1);
+
+  const auto dims = self.dim();
+  const auto rows = self.shape(dims - 2);
+  const auto cols = self.shape(dims - 1);
+
+  int64_t batch = 1;
+  for (int i = 0; i < dims - 2; i++) {
+    batch *= self.shape(i);
+  }
 
   const T* selfPtr = self.dataPtr<T>();
   T* retPtr = ret.dataPtr<T>();
 
-  int64_t idx = 0;
-  for (auto i = 0; i < rows; i++) {
-    idx = i * cols;
-    for (auto j = 0; j < cols; j++) {
-      if ((LOWER && j <= i + diagonal) || (!LOWER && j >= i + diagonal)) {
-        retPtr[idx] = selfPtr[idx];
-      } else {
-        retPtr[idx] = 0;
+  const int64_t matrixSize = rows * cols;
+  for (int64_t b = 0; b < batch; b++) {
+    const T* selfBatchPtr = selfPtr + b * matrixSize;
+    T* retBatchPtr = retPtr + b * matrixSize;
+
+    for (int64_t i = 0; i < rows; i++) {
+      for (int64_t j = 0; j < cols; j++) {
+        if ((LOWER && j <= i + diagonal) || (!LOWER && j >= i + diagonal)) {
+          retBatchPtr[i * cols + j] = selfBatchPtr[i * cols + j];
+        } else {
+          retBatchPtr[i * cols + j] = static_cast<T>(0);
+        }
       }
-      idx++;
     }
   }
   return ret;
