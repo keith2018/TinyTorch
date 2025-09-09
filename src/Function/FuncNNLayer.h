@@ -313,6 +313,8 @@ inline Tensor sdpAttention(const Tensor& query, const Tensor& key, const Tensor&
                            std::optional<float> scale = std::nullopt) {
   return FuncSDPAttention::apply(query, key, value, isCausal, attnMask, dropoutP, scale);
 }
-inline Tensor ropeApply(const Tensor& input, const TensorPair& rope, int64_t offset = 0) { return FuncRoPE::apply(input, rope, offset); }
+inline Tensor ropeApply(const Tensor& input, const TensorPair& rope, int64_t offset = 0) {
+  return FuncRoPE::apply(input, rope, offset);
+}
 
 }  // namespace tinytorch::function

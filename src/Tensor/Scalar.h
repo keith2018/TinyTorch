@@ -20,9 +20,9 @@ class Scalar {
   // NOLINTNEXTLINE(google-explicit-constructor)
   Scalar(float v) : dtype_(DType::Float32), value_(v) {}
   // NOLINTNEXTLINE(google-explicit-constructor)
-  Scalar(Half v):dtype_(DType::Float16), value_(v) {}
+  Scalar(Half v) : dtype_(DType::Float16), value_(v) {}
   // NOLINTNEXTLINE(google-explicit-constructor)
-  Scalar(BFloat16 v):dtype_(DType::BFloat16), value_(v) {}
+  Scalar(BFloat16 v) : dtype_(DType::BFloat16), value_(v) {}
   // NOLINTNEXTLINE(google-explicit-constructor)
   Scalar(int32_t v) : dtype_(DType::Int32), value_(v) {}
   // NOLINTNEXTLINE(google-explicit-constructor)

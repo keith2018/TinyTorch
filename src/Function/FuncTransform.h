@@ -58,18 +58,14 @@ class FuncTranspose : public Function<FuncTranspose> {
 };
 
 class FuncTril : public Function<FuncTril> {
-public:
-  static Tensor forward(AutogradContext* ctx, const Tensor& self, int64_t diagonal) {
-    return op::tril(self, diagonal);
-  }
+ public:
+  static Tensor forward(AutogradContext* ctx, const Tensor& self, int64_t diagonal) { return op::tril(self, diagonal); }
   static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
 };
 
 class FuncTriu : public Function<FuncTriu> {
-public:
-  static Tensor forward(AutogradContext* ctx, const Tensor& self, int64_t diagonal) {
-    return op::triu(self, diagonal);
-  }
+ public:
+  static Tensor forward(AutogradContext* ctx, const Tensor& self, int64_t diagonal) { return op::triu(self, diagonal); }
   static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
 };
 
@@ -181,12 +177,8 @@ inline Tensor unsqueeze(const Tensor& self, int64_t dim) { return FuncUnsqueeze:
 inline Tensor transpose(const Tensor& self, int64_t dim0, int64_t dim1) {
   return FuncTranspose::apply(self, dim0, dim1);
 }
-inline Tensor tril(const Tensor& self, int64_t diagonal = 0) {
-  return FuncTril::apply(self, diagonal);
-}
-inline Tensor triu(const Tensor& self, int64_t diagonal = 0) {
-  return FuncTriu::apply(self, diagonal);
-}
+inline Tensor tril(const Tensor& self, int64_t diagonal = 0) { return FuncTril::apply(self, diagonal); }
+inline Tensor triu(const Tensor& self, int64_t diagonal = 0) { return FuncTriu::apply(self, diagonal); }
 inline std::vector<Tensor> split(const Tensor& self, int64_t splitSize, int64_t dim = 0) {
   return FuncSplit::apply(self, splitSize, dim);
 }

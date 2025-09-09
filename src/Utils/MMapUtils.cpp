@@ -64,7 +64,7 @@ MMappingResult MMapUtils::mapFileForRead(const std::string& path) {
     return result;
   }
 
-  struct stat st{};
+  struct stat st {};
   if (fstat(result.fd, &st) < 0) {
     close(result.fd);
     LOGE("fstat failed: %s", path.c_str());
