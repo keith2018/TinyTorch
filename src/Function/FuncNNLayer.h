@@ -243,15 +243,21 @@ class FuncSDPAttention : public Function<FuncSDPAttention> {
     auto L = query.size(-2);
     auto S = key.size(-2);
     float scaleFactor = scale.has_value() ? scale.value() : (1.f / std::sqrt(static_cast<float>(query.size(-1))));
-    auto attnBias = Tensor::zeros({L, S}, query.options().noGrad());
+
+    auto attnWeight = op::matmul(query, op::transpose(key, -2, -1), false, false);
+    op::mulInplace(attnWeight, Tensor::scalar(scaleFactor, attnWeight.options()));
+
+    Tensor attnBias;
     if (isCausal) {
       ASSERT(!attnMask.defined());
-      auto tempMask = Tensor::ones({L, S}, query.options().noGrad().dtype(DType::Bool));
+      attnBias = Tensor::zeros({L, S}, query.options().noGrad());
+      auto tempMask = Tensor::ones(attnBias.shape(), query.options().noGrad().dtype(DType::Bool));
       tempMask = op::tril(tempMask, 0);
       op::fillMaskedInplace(attnBias, op::logicNot(tempMask), -std::numeric_limits<float>::infinity());
     }
 
     if (attnMask.defined()) {
+      attnBias = Tensor::zeros(attnMask.shape(), query.options().noGrad());
       if (attnMask.dtype() == DType::Bool) {
         op::fillMaskedInplace(attnBias, op::logicNot(attnMask), -std::numeric_limits<float>::infinity());
       } else {
@@ -259,9 +265,9 @@ class FuncSDPAttention : public Function<FuncSDPAttention> {
       }
     }
 
-    auto attnWeight = op::matmul(query, op::transpose(key, -2, -1), false, false);
-    op::mulInplace(attnWeight, Tensor::scalar(scaleFactor, attnWeight.options()));
-    op::addInplace(attnWeight, attnBias, 1);
+    if (attnBias.defined()) {
+      op::addInplace(attnWeight, attnBias, 1);
+    }
     attnWeight = op::softmax(attnWeight, -1);
     if (dropoutP > 0.f) {
       attnWeight = op::dropout(attnWeight, dropoutP);
