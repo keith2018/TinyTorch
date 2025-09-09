@@ -190,16 +190,18 @@ __global__ void kIndexPut2D(T* self, const int64_t* indices0, const int64_t* ind
 }
 
 template <typename T, bool LOWER>
-__global__ void kTriangle(T* ret, const T* t, const int64_t rows, const int64_t cols, const int64_t diagonal) {
-  auto i = blockIdx.y * blockDim.y + threadIdx.y;
-  auto j = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void kTriangle(T* ret, const T* t, const int64_t batch, const int64_t rows, const int64_t cols,
+                          const int64_t diagonal, const int64_t matrixSize) {
+  const int64_t b = blockIdx.z;
+  const int64_t i = blockIdx.y * blockDim.y + threadIdx.y;
+  const int64_t j = blockIdx.x * blockDim.x + threadIdx.x;
 
-  if (i < rows && j < cols) {
-    const auto index = i * cols + j;
+  if (b < batch && i < rows && j < cols) {
+    const int64_t index = b * matrixSize + i * cols + j;
     if ((LOWER && j <= i + diagonal) || (!LOWER && j >= i + diagonal)) {
       ret[index] = t[index];
     } else {
-      ret[index] = 0;
+      ret[index] = static_cast<T>(0);
     }
   }
 }
@@ -568,17 +570,25 @@ void indexPutAdvanceOpCudaImpl(Tensor& self, ArrayView<Tensor> indices, const Te
 template <typename T, bool LOWER>
 Tensor triangleOpCudaImpl(const Tensor& self, int64_t diagonal) {
   auto ret = Tensor::empty(self.shape(), self.options().noGrad());
-  const auto rows = self.shape(0);
-  const auto cols = self.shape(1);
 
+  const auto dims = self.dim();
+  const auto rows = self.shape(dims - 2);
+  const auto cols = self.shape(dims - 1);
+
+  int64_t batch = 1;
+  for (int i = 0; i < dims - 2; i++) {
+    batch *= self.shape(i);
+  }
+
+  const int64_t matrixSize = rows * cols;
   const T* selfPtr = self.dataPtr<T>();
   T* retPtr = ret.dataPtr<T>();
 
-  dim3 blockSize(CUDA_WARP_SIZE, CUDA_WARP_SIZE);
-  dim3 gridSize((cols + blockSize.x - 1) / blockSize.x, (rows + blockSize.y - 1) / blockSize.y);
+  dim3 blockSize(16, 16);
+  dim3 gridSize((cols + blockSize.x - 1) / blockSize.x, (rows + blockSize.y - 1) / blockSize.y, batch);
 
   const auto stream = cuda::getCurrentCUDAStream(self.device().index).stream;
-  kTriangle<T, LOWER><<<gridSize, blockSize, 0, stream>>>(retPtr, selfPtr, rows, cols, diagonal);
+  kTriangle<T, LOWER><<<gridSize, blockSize, 0, stream>>>(retPtr, selfPtr, batch, rows, cols, diagonal, matrixSize);
   CUDA_KERNEL_CHECK();
   return ret;
 }
