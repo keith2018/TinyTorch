@@ -47,25 +47,25 @@ void Storage::copyOnDevice(void* dst, const Device& dstDevice, const void* src, 
   // CUDA -> CUDA
   if (dstDevice.isCuda() && srcDevice.isCuda()) {
     cuda::CudaDeviceGuard guard(dstDevice.index);
-    auto stream = cuda::getCurrentCUDAStream(dstDevice.index);
-    CUDA_CHECK(cudaMemcpyAsync(dst, src, nbytes, cudaMemcpyDeviceToDevice, stream.stream));
+    auto& stream = cuda::getCurrentCUDAStream(dstDevice.index);
+    CUDA_CHECK(cudaMemcpyAsync(dst, src, nbytes, cudaMemcpyDeviceToDevice, stream.stream()));
     return;
   }
 
   // CPU -> CUDA
   if (dstDevice.isCuda() && srcDevice.isCpu()) {
     cuda::CudaDeviceGuard guard(dstDevice.index);
-    auto stream = cuda::getCurrentCUDAStream(dstDevice.index);
-    CUDA_CHECK(cudaMemcpyAsync(dst, src, nbytes, cudaMemcpyHostToDevice, stream.stream));
+    auto& stream = cuda::getCurrentCUDAStream(dstDevice.index);
+    CUDA_CHECK(cudaMemcpyAsync(dst, src, nbytes, cudaMemcpyHostToDevice, stream.stream()));
     return;
   }
 
   // CUDA -> CPU
   if (dstDevice.isCpu() && srcDevice.isCuda()) {
     cuda::CudaDeviceGuard guard(srcDevice.index);
-    auto stream = cuda::getCurrentCUDAStream(srcDevice.index);
-    CUDA_CHECK(cudaMemcpyAsync(dst, src, nbytes, cudaMemcpyDeviceToHost, stream.stream));
-    cuda::streamSynchronize(stream);
+    auto& stream = cuda::getCurrentCUDAStream(srcDevice.index);
+    CUDA_CHECK(cudaMemcpyAsync(dst, src, nbytes, cudaMemcpyDeviceToHost, stream.stream()));
+    stream.synchronize();
     return;
   }
 #endif

@@ -23,7 +23,6 @@ class LayerNorm : public Module {
  protected:
   std::vector<std::pair<std::string, TensorPtr>> namedParameters_() override;
 
- private:
   SizeVector normalizedShape_;
   float eps_;
   bool useBias_;
@@ -43,7 +42,6 @@ class RMSNorm : public Module {
  protected:
   std::vector<std::pair<std::string, TensorPtr>> namedParameters_() override;
 
- private:
   SizeVector normalizedShape_;
   float eps_;
   Tensor weight_;

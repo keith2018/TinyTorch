@@ -24,12 +24,12 @@ struct RopeScalingConfig {
 
 namespace tinytorch::op {
 
-enum class SoftmaxType : int8_t {
+enum class SoftmaxType : uint8_t {
   Softmax,
   LogSoftmax
 };
 
-enum class NormType : int8_t {
+enum class NormType : uint8_t {
   LayerNorm,
   RMSNorm
 };
@@ -54,9 +54,9 @@ using LayerNormOpFn = Tensor (*)(const Tensor& self, IntArrayView normalizedShap
 
 using RMSNormOpFn = Tensor (*)(const Tensor& self, IntArrayView normalizedShape, const Tensor& weight, float eps);
 
-using RopeInitOpFn = TensorPair (*)(int64_t headDim, int64_t contextLength, float thetaBase,
-                                    std::optional<RopeScalingConfig> scaling, Options options);
-using RopeApplyOpFn = Tensor (*)(const Tensor& input, const TensorPair& rope, int64_t offset);
+using RopeInitOpFn = Tensor (*)(int64_t headDim, int64_t contextLength, float thetaBase,
+                                std::optional<RopeScalingConfig> scaling, Options options);
+using RopeApplyOpFn = Tensor (*)(const Tensor& input, const Tensor& positions, const Tensor& rope);
 
 // softmax
 DEFINE_OP(softmax, SoftmaxOpFn);

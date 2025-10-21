@@ -18,6 +18,7 @@ void FuncLeaf::backward(const Tensor& grad) {
   }
 
   owner->setGrad(grad);
+  owner->applyHooks();
 }
 
 }  // namespace tinytorch

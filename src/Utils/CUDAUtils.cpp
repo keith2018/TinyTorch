@@ -28,9 +28,7 @@ int getDeviceCount() {
 static int kMaxDevices = getDeviceCount();
 
 CudaDeviceGuard::CudaDeviceGuard(int newIndex) {
-  if (newIndex < 0 || newIndex >= kMaxDevices) {
-    return;
-  }
+  ASSERT(newIndex >= 0 && newIndex < kMaxDevices);
   CUDA_CHECK(cudaGetDevice(&oldIndex_));
   if (newIndex != oldIndex_) {
     CUDA_CHECK(cudaSetDevice(newIndex));
@@ -46,18 +44,8 @@ CudaDeviceGuard::~CudaDeviceGuard() {
   }
 }
 
-thread_local int currentDevice = 0;
 thread_local std::vector<CUDAStream> currentStreams(kMaxDevices);
 thread_local std::vector<cublasHandle_t> cublasHandles(kMaxDevices);
-
-struct DefaultStreamInitializer {
-  DefaultStreamInitializer() {
-    for (auto i = 0; i < kMaxDevices; i++) {
-      currentStreams[i] = CUDAStream(nullptr, i);
-    }
-  }
-};
-thread_local DefaultStreamInitializer _streamInit;
 
 struct CublasHandleInitializer {
   CublasHandleInitializer() {
@@ -76,45 +64,66 @@ struct CublasHandleInitializer {
 };
 thread_local CublasHandleInitializer _cublasHandleInit;
 
-void setCurrentDevice(int device) {
+void setDevice(int device) {
   if (device < 0 || device >= kMaxDevices) {
     LOGE("setCurrentDevice: invalid device: %d", device);
     return;
   }
-  currentDevice = device;
+  CUDA_CHECK(cudaSetDevice(device));
 }
 
-int getCurrentDevice() { return currentDevice; }
+Device getCurrentDevice() {
+  int currentDevice = -1;
+  CUDA_CHECK(cudaGetDevice(&currentDevice));
+  return {DeviceType::CUDA, static_cast<DeviceIndex>(currentDevice)};
+}
 
-void setCurrentCUDAStream(CUDAStream stream, int device) {
-  if (device < 0 || device >= kMaxDevices) {
-    LOGE("setCurrentCUDAStream: invalid device: %d", device);
+void CUDAStream::waitStream(const CUDAStream& other) const {
+  if (!valid() || !other.valid()) {
+    LOGE("Invalid CUDAStream in waitStream");
     return;
   }
-  currentStreams[device] = stream;
-}
-
-CUDAStream getCurrentCUDAStream(int device) {
-  if (device < 0 || device >= kMaxDevices) {
-    LOGE("getCurrentCUDAStream: invalid device: %d", device);
-    ASSERT(false);
-    return {};
+  if (deviceIdx_ != other.deviceIdx_) {
+    LOGE("Cannot wait on a stream from a different device");
+    return;
   }
-  return currentStreams[device];
+
+  CudaDeviceGuard guard(deviceIdx_);
+  CUDAEvent event(deviceIdx_, cudaEventDisableTiming);
+  event.record(other);
+  event.block(*this);
 }
 
-cublasHandle_t getCublasHandle(int device) {
+CUDAStream createCUDAStream(int device) { return CUDAStream(device); }
+
+CUDAEvent createCUDAEvent(int device, unsigned int flags) { return CUDAEvent(device, flags); }
+
+CUDAStream& getCurrentCUDAStream(int device) {
   if (device < 0 || device >= kMaxDevices) {
     LOGE("getCublasHandle: invalid device: %d", device);
-    return nullptr;
+    static CUDAStream empty{};
+    return empty;
+  }
+  auto& stream = currentStreams[device];
+  if (!stream.valid()) {
+    stream = createCUDAStream(device);
+  }
+  return stream;
+}
+
+cublasHandle_t& getCublasHandle(int device) {
+  if (device < 0 || device >= kMaxDevices) {
+    LOGE("getCublasHandle: invalid device: %d", device);
+    static cublasHandle_t empty = nullptr;
+    return empty;
   }
   cublasHandle_t& handle = cublasHandles[device];
   if (!handle) {
     CUBLAS_CHECK(cublasCreate(&handle));
   }
   // bind to stream
-  CUDAStream s = getCurrentCUDAStream(device);
-  CUBLAS_CHECK(cublasSetStream(handle, s.stream));
+  CUDAStream& s = getCurrentCUDAStream(device);
+  CUBLAS_CHECK(cublasSetStream(handle, s.stream()));
   return handle;
 }
 
@@ -151,11 +160,9 @@ unsigned int getKernelGridSize(unsigned int blockSize, int64_t n, size_t batch) 
 KernelLaunchParams getKernelLaunchParams(int device, int64_t n, size_t batch, size_t sharedMemBytes) {
   auto blockSize = cuda::getKernelBlockSize(device);
   auto gridSize = cuda::getKernelGridSize(blockSize, n, batch);
-  auto stream = cuda::getCurrentCUDAStream(device).stream;
+  auto stream = cuda::getCurrentCUDAStream(device).stream();
   return {gridSize, blockSize, sharedMemBytes, stream};
 }
-
-void streamSynchronize(const CUDAStream& stream) { CUDA_CHECK(cudaStreamSynchronize(stream.stream)); }
 
 TensorCudaCtx getTensorCudaCtx(const Tensor& t) {
   TensorCudaCtx ret{};

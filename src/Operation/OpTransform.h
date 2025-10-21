@@ -66,6 +66,8 @@ using IndexPutAdvanceOpFn = void (*)(Tensor& self, ArrayView<Tensor> indices, co
 using TriangularOpFn = Tensor (*)(const Tensor& self, int64_t diagonal);
 
 using SplitOpFn = std::vector<Tensor> (*)(const Tensor& self, int64_t splitSize, int64_t dim);
+using SplitSectionsOpFn = std::vector<Tensor> (*)(const Tensor& self, IntArrayView sections, int64_t dim);
+using ChunkOpFn = std::vector<Tensor> (*)(const Tensor& self, int64_t chunks, int64_t dim);
 using ConcatOpFn = Tensor (*)(ArrayView<Tensor> tensors, int64_t dim);
 using StackOpFn = Tensor (*)(ArrayView<Tensor> tensors, int64_t dim);
 using HStackOpFn = Tensor (*)(ArrayView<Tensor> tensors);
@@ -133,6 +135,10 @@ DEFINE_OP(triu, TriangularOpFn)
 
 // split
 DEFINE_OP(split, SplitOpFn)
+DEFINE_OP(splitSections, SplitSectionsOpFn)
+
+// chunk
+DEFINE_OP(chunk, ChunkOpFn)
 
 // concat
 DEFINE_OP(concat, ConcatOpFn)

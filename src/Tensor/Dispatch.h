@@ -25,7 +25,7 @@ struct DispatchKey {
   constexpr bool operator==(const DispatchKey& o) const { return device == o.device && dtype == o.dtype; }
 
   std::string toString() const {
-    return std::string("{ device: ") + device::toString(device) + ", dtype: " + dtype::toString(dtype) + "}";
+    return std::string("{ device: ") + deviceTypeToString(device) + ", dtype: " + dtypeToString(dtype) + "}";
   }
 };
 
@@ -84,7 +84,7 @@ DispatchKey getDispatchKeyFromArgs(First&& first, Rest&&... rest) {
     if (!fn) {                                                                                                     \
       std::cerr << "Error call op: " << #opname << ", no impl for dispatch key = " << key.toString() << std::endl; \
     }                                                                                                              \
-    ASSERT(fn && #opname);                                                                                         \
+    ASSERT(fn&& #opname);                                                                                          \
     return fn(std::forward<Args>(args)...);                                                                        \
   }                                                                                                                \
   struct opname##Register {                                                                                        \

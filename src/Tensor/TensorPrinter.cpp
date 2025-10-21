@@ -52,7 +52,7 @@ static std::string printArray(const std::vector<T>& vec, bool full) {
 
 static std::string printDevice(const Device& device) {
   std::ostringstream oss;
-  oss << "{ type:" << device::toString(device.type);
+  oss << "{ type:" << deviceTypeToString(device.type);
   oss << ", index:" << std::to_string(device.index);
   oss << " }";
   return oss.str();
@@ -61,7 +61,7 @@ static std::string printDevice(const Device& device) {
 static std::string printOptions(const Options& options) {
   std::ostringstream oss;
   oss << "{ device:" << printDevice(options.device_);
-  oss << ", dtype:" << dtype::toString(options.dtype_);
+  oss << ", dtype:" << dtypeToString(options.dtype_);
   oss << ", requiresGrad:" << std::to_string(options.requiresGrad_);
   oss << ", pinnedMemory:" << std::to_string(options.pinnedMemory_);
   oss << " }";

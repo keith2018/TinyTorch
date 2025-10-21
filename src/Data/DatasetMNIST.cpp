@@ -3,18 +3,13 @@
  * @author 	: keith@robot9.me
  *
  */
-#include "Data.h"
+
+#include "DatasetMNIST.h"
 
 #include <fstream>
 #include <memory>
 
 #include "Utils/Logger.h"
-
-namespace tinytorch::data::transforms {
-
-Tensor Normalize::process(Tensor& input) const { return (input - mean_) / std_; }
-
-}  // namespace tinytorch::data::transforms
 
 namespace tinytorch::data {
 

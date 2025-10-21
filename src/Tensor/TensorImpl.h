@@ -38,6 +38,7 @@ class TensorImpl {
 
   int64_t dim() const { return static_cast<int64_t>(shape_.size()); }
   int64_t numel() const { return numel_; }
+  int64_t nbytes() const { return numel_ * static_cast<int64_t>(dtypeSize(options_.dtype_)); }
   int64_t storageOffset() const { return storageOffset_; }
   bool isScalar() const { return shape_.empty(); }
 
@@ -85,7 +86,7 @@ class TensorImpl {
   static void computeNumel(int64_t& numel, IntArrayView shape);
 
   int64_t numel_ = 0;
-  int64_t storageOffset_ = 0;  // bytes
+  int64_t storageOffset_ = 0;  // element index, not bytes
   mutable void* dataPtr_ = nullptr;
 
   Options options_;

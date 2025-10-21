@@ -10,7 +10,7 @@
 
 namespace tinytorch {
 
-enum class LossReduction : int8_t {
+enum class LossReduction : uint8_t {
   NONE = 0,
   MEAN = 1,
   SUM = 2,

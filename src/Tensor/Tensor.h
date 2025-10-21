@@ -8,6 +8,7 @@
 
 #include <cmath>
 
+#include "AutogradHook.h"
 #include "Scalar.h"
 #include "TensorImpl.h"
 
@@ -92,6 +93,7 @@ class Tensor {
 
   int64_t dim() const { return impl_->dim(); }
   int64_t numel() const { return impl_->numel(); }
+  int64_t nbytes() const { return impl_->nbytes(); }
   int64_t storageOffset() const { return impl_->storageOffset(); }
   bool isScalar() const { return impl_->isScalar(); }
 
@@ -116,11 +118,12 @@ class Tensor {
 
   void copyOnWrite() const { impl_->copyOnWrite(); }
   Tensor clone() const;
+  void copy_(const Tensor& src);
 
   std::shared_ptr<FunctionBase>& gradFn() const;
   void setGradFn(const std::shared_ptr<FunctionBase>& fn) const;
 
-  const Tensor& grad() const;
+  Tensor& grad() const;
   void setGrad(const Tensor& grad) const;
   void setGrad(Tensor&& grad) const;
   void addGrad(const Tensor& grad) const;
@@ -130,6 +133,9 @@ class Tensor {
   void backward(const Tensor& grad) const;
   void backward() const;
   bool isLeaf() const;
+
+  int64_t registerHook(Hook::FnType fn, void* ctx) const;
+  void unregisterHook(int64_t hid) const;
 
   template <typename T>
   std::vector<T> toList() const;
@@ -261,6 +267,12 @@ class Tensor {
   Tensor unsqueeze(int64_t dim) const;
   Tensor transpose(int64_t dim0, int64_t dim1) const;
   Tensor t() const;
+
+  std::vector<Tensor> split(int64_t splitSize, int64_t dim = 0) const;
+  std::vector<Tensor> split(IntArrayView sections, int64_t dim = 0) const;
+  std::vector<Tensor> chunk(int64_t chunks, int64_t dim = 0) const;
+
+  Tensor narrow(int64_t dim, int64_t start, int64_t length) const;
 
  private:
   void initAutogradMeta(const std::shared_ptr<FunctionBase>& fn = nullptr);

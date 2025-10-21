@@ -17,7 +17,7 @@
 
 namespace tinytorch {
 
-enum class DType : int8_t {
+enum class DType : uint8_t {
   Float32 = 0,
   Float16 = 1,
   BFloat16 = 2,
@@ -42,6 +42,27 @@ inline size_t dtypeSize(DType t) {
       return 1;
     default:
       return 0;
+  }
+}
+
+inline const char* dtypeToString(DType dtype) {
+  switch (dtype) {
+    case DType::Float32:
+      return "Float32";
+    case DType::Float16:
+      return "Float16";
+    case DType::BFloat16:
+      return "BFloat16";
+    case DType::Int32:
+      return "Int32";
+    case DType::Int64:
+      return "Int64";
+    case DType::Bool:
+      return "Bool";
+    case DType::DTypeCount:
+      return "DTypeCount";
+    default:
+      return "Unknown";
   }
 }
 
@@ -117,17 +138,17 @@ constexpr DType TypeToDType_v = TypeToDType<T>::value;
 template <typename T>
 void CheckDTypeMatch(DType dtype) {
   if (dtype == DType::Float32) {
-    ASSERT((std::is_same_v<T, float>) && "Type mismatch: expected float");
+    ASSERT((std::is_same_v<T, float>)&&"Type mismatch: expected float");
   } else if (dtype == DType::Float16) {
-    ASSERT((std::is_same_v<T, Half>) && "Type mismatch: expected Half");
+    ASSERT((std::is_same_v<T, Half>)&&"Type mismatch: expected Half");
   } else if (dtype == DType::BFloat16) {
-    ASSERT((std::is_same_v<T, BFloat16>) && "Type mismatch: expected BFloat16");
+    ASSERT((std::is_same_v<T, BFloat16>)&&"Type mismatch: expected BFloat16");
   } else if (dtype == DType::Int32) {
-    ASSERT((std::is_same_v<T, int32_t>) && "Type mismatch: expected int32_t");
+    ASSERT((std::is_same_v<T, int32_t>)&&"Type mismatch: expected int32_t");
   } else if (dtype == DType::Int64) {
-    ASSERT((std::is_same_v<T, int64_t>) && "Type mismatch: expected int64_t");
+    ASSERT((std::is_same_v<T, int64_t>)&&"Type mismatch: expected int64_t");
   } else if (dtype == DType::Bool) {
-    ASSERT((std::is_same_v<T, uint8_t>) && "Type mismatch: expected uint8_t");
+    ASSERT((std::is_same_v<T, uint8_t>)&&"Type mismatch: expected uint8_t");
   } else {
     ASSERT(false && "Unknown DType");
   }
@@ -178,10 +199,4 @@ struct ALIGN(16) Dim2D {
   int64_t w = 0;
 };
 
-namespace dtype {
-
-static std::string dtypeNames[] = {"Float32", "Float16", "BFloat16", "Int32", "Int64", "Bool"};
-inline std::string toString(DType type) { return dtypeNames[static_cast<size_t>(type)]; }
-
-}  // namespace dtype
 }  // namespace tinytorch

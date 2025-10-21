@@ -19,7 +19,7 @@ class Flatten : public Module {
 
   Tensor forward(const Tensor &input) override;
 
- private:
+ protected:
   int64_t startDim_;
   int64_t endDim_;
 };
@@ -45,7 +45,7 @@ class Dropout : public Module {
 
   Tensor forward(const Tensor &input) override;
 
- private:
+ protected:
   float p_;
 };
 
@@ -55,7 +55,7 @@ class Softmax : public Module {
 
   Tensor forward(const Tensor &input) override;
 
- private:
+ protected:
   int64_t dim_;
 };
 
@@ -65,7 +65,7 @@ class LogSoftmax : public Module {
 
   Tensor forward(const Tensor &input) override;
 
- private:
+ protected:
   int64_t dim_;
 };
 
@@ -76,7 +76,7 @@ class MaxPool2D : public Module {
 
   Tensor forward(const Tensor &input) override;
 
- private:
+ protected:
   Dim2D kernel_;
   Dim2D stride_;
   Dim2D padding_;
@@ -96,7 +96,6 @@ class Conv2D : public Module {
  protected:
   std::vector<std::pair<std::string, TensorPtr>> namedParameters_() override;
 
- private:
   Dim2D kernel_;
   Dim2D stride_;
   Dim2D padding_;
@@ -119,7 +118,6 @@ class Linear : public Module {
  protected:
   std::vector<std::pair<std::string, TensorPtr>> namedParameters_() override;
 
- private:
   bool useBias_;
   Tensor weight_;
   Tensor bias_;
@@ -137,7 +135,6 @@ class Embedding : public Module {
  protected:
   std::vector<std::pair<std::string, TensorPtr>> namedParameters_() override;
 
- private:
   Tensor weight_;
 };
 
@@ -146,28 +143,25 @@ class RoPE : public Module {
   explicit RoPE(int64_t headDim, int64_t contextLength = 4096, float thetaBase = 10000.0f,
                 std::optional<RopeScalingConfig> scaling = std::nullopt, Options options = {});
 
-  Tensor forward(const Tensor &input) override;
-  Tensor forward(const Tensor &input, int64_t offset);
-  Tensor operator()(const Tensor &input, int64_t offset = 0) { return forward(input, offset); }
+  Tensor forward(const Tensor &input, int64_t position);
+  Tensor forward(const Tensor &input, const Tensor &positions);
+  Tensor operator()(const Tensor &input, int64_t position) { return forward(input, position); }
+  Tensor operator()(const Tensor &input, const Tensor &positions) { return forward(input, positions); }
 
   void resetParameters() override;
 
-  TensorPair &rope() { return rope_; }
-
-  Tensor &cos() { return rope_.first; }
-  Tensor &sin() { return rope_.second; }
+  Tensor &cache() { return rope_; }
 
  protected:
   std::vector<std::pair<std::string, TensorPtr>> namedStates_() override;
 
- private:
   int64_t headDim_;
   int64_t contextLength_;
   float thetaBase_;
   std::optional<RopeScalingConfig> scaling_;
   Options options_;
 
-  TensorPair rope_;
+  Tensor rope_;
 };
 
 }  // namespace tinytorch::nn

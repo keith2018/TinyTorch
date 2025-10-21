@@ -12,5 +12,10 @@ int main(int argc, char **argv) {
   demo_optim();
   demo_mnist();
 
+#ifdef USE_NCCL
+  demo_nccl(argc, argv);
+  demo_ddp(argc, argv);
+#endif
+
   return 0;
 }

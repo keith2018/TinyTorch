@@ -6,6 +6,7 @@
 
 #include "TinyTorch.h"
 #include "Utils/MathUtils.h"
+#include "Utils/RandomGenerator.h"
 #include "Utils/Timer.h"
 
 using namespace tinytorch;
