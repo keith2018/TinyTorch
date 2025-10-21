@@ -1,8 +1,6 @@
 # TinyTorch
 
-**TinyTorch** is a lightweight deep learning training framework implemented from scratch in C++. The project's goal is to closely mimic the API design of PyTorch, serving as an educational tool for developers to understand the core mechanics of a deep learning framework, including automatic differentiation, modular network structures, loss functions, and optimizers.
-
-This project provides a complete yet simple implementation that allows developers to directly see the inner workings of each component, making it an ideal resource for learning.
+**TinyTorch** is a lightweight deep learning training framework implemented from scratch in C++.
 
 For more details, please refer to my blog post: [Write a nn training framework from scratch](https://robot9.me/write-nn-framework-from-scratch-tinytorch/)
 
@@ -12,11 +10,12 @@ For more details, please refer to my blog post: [Write a nn training framework f
 
 ## Key Features
 
-* **PyTorch-Style API**: Adopts similar class and function naming conventions as PyTorch, such as `Tensor`, `Functions`, `nn.Module`, and `Optimizer`.
-* **Pure C++ Implementation**: The entire framework is written in C++ with no dependency on external deep learning libraries.
-* **CPU and CUDA Support**: The framework is built to run on both **CPU** and **CUDA** enabled GPUs.
-* **Mixed Precision Support**: The framework supports multiple precisions such as FP16, FP32, and BF16.
-* **LLM Inference**: Supports inference for gpt2/llama/qwen models: [https://github.com/keith2018/TinyGPT](https://github.com/keith2018/TinyGPT)
+* **PyTorch-Style API**: Similar naming conventions as PyTorch (`Tensor`, `Functions`, `nn.Module`, `Optimizer`).
+* **Pure C++ Implementation**: No dependency on external deep learning libraries.
+* **CPU & CUDA Support**: Runs on both CPU and CUDA-enabled GPUs.
+* **Mixed Precision**: Supports FP16, FP32, BF16.
+* **Distributed**: Multi-machine, multi-GPU training & inference.
+* **LLM Inference**: Supports inference for llama/qwen/mistral models: [https://github.com/keith2018/TinyGPT](https://github.com/keith2018/TinyGPT)
 
 ## Implemented Operators and Components
 
