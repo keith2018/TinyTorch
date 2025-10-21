@@ -129,6 +129,14 @@ Tensor Tensor::clone() const {
   return ret;
 }
 
+void Tensor::copy_(const Tensor &src) {
+  ASSERT(src.defined() && this->defined());
+  ASSERT(src.shape() == this->shape());
+  ASSERT(src.dtype() == this->dtype());
+  int64_t nbytes = numel() * static_cast<int64_t>(dtypeSize(dtype()));
+  Storage::copyOnDevice(this->dataPtr<>(), this->device(), src.dataPtr<>(), src.device(), nbytes);
+}
+
 std::shared_ptr<FunctionBase> &Tensor::gradFn() const {
   ASSERT(gradMeta_ != nullptr);
   return gradMeta_->gradFn();
@@ -140,7 +148,7 @@ void Tensor::setGradFn(const std::shared_ptr<FunctionBase> &fn) const {
   gradMeta_->setGradFn(fn);
 }
 
-const Tensor &Tensor::grad() const {
+Tensor &Tensor::grad() const {
   ASSERT(gradMeta_ != nullptr);
   return gradMeta_->grad();
 }
@@ -193,6 +201,22 @@ bool Tensor::isLeaf() const {
   }
   ASSERT(gradMeta_ != nullptr);
   return gradMeta_->isLeaf();
+}
+
+int64_t Tensor::registerHook(Hook::FnType fn, void *ctx) const {
+  if (!requiresGrad()) {
+    return -1;
+  }
+  ASSERT(gradMeta_ != nullptr);
+  return gradMeta_->registerHook(fn, ctx);
+}
+
+void Tensor::unregisterHook(int64_t hid) const {
+  if (!requiresGrad()) {
+    return;
+  }
+  ASSERT(gradMeta_ != nullptr);
+  gradMeta_->unregisterHook(hid);
 }
 
 void Tensor::check() const { op::check(*this); }
@@ -355,5 +379,17 @@ Tensor Tensor::squeeze(IntArrayView dims) const { return function::squeeze(*this
 Tensor Tensor::unsqueeze(int64_t dim) const { return function::unsqueeze(*this, dim); }
 Tensor Tensor::transpose(int64_t dim0, int64_t dim1) const { return function::transpose(*this, dim0, dim1); }
 Tensor Tensor::t() const { return function::transpose(*this, 0, 1); }
+
+std::vector<Tensor> Tensor::split(int64_t splitSize, int64_t dim) const {
+  return function::split(*this, splitSize, dim);
+}
+std::vector<Tensor> Tensor::split(IntArrayView sections, int64_t dim) const {
+  return function::split(*this, sections, dim);
+}
+std::vector<Tensor> Tensor::chunk(int64_t chunks, int64_t dim) const { return function::chunk(*this, chunks, dim); }
+
+Tensor Tensor::narrow(int64_t dim, int64_t start, int64_t length) const {
+  return function::narrow(*this, dim, start, length);
+}
 
 }  // namespace tinytorch

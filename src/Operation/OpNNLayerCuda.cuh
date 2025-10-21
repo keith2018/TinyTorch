@@ -388,54 +388,46 @@ __global__ void kRopeApplyScaling(T* invFreqPtr, int64_t halfDim, float original
 }
 
 template <typename T>
-__global__ void kRopePrecomputeCosSin(const T* invFreqPtr, T* cosPtr, T* sinPtr, int64_t contextLength,
-                                      int64_t headDim) {
+__global__ void kRopePrecomputeCosSin(T* retPtr, const T* invFreqPtr, int64_t contextLength, int64_t headDim) {
   const int64_t pos = blockIdx.x;
   if (pos < contextLength) {
     auto halfDim = headDim >> 1;
     for (auto i = threadIdx.x; i < halfDim; i += blockDim.x) {
       float angle = static_cast<float>(pos) * static_cast<float>(invFreqPtr[i]);
-      int64_t offset1 = pos * headDim + i;
-      int64_t offset2 = pos * headDim + halfDim + i;
-
-      T cosVal = static_cast<T>(::cosf(angle));
-      T sinVal = static_cast<T>(::sinf(angle));
-
-      cosPtr[offset1] = cosVal;
-      sinPtr[offset1] = sinVal;
-      cosPtr[offset2] = cosVal;
-      sinPtr[offset2] = sinVal;
+      int64_t offset = pos * headDim + i * 2;
+      retPtr[offset] = static_cast<T>(::cosf(angle));
+      retPtr[offset + 1] = static_cast<T>(::sinf(angle));
     }
   }
 }
 
 template <typename T>
-__global__ void kRopeApply(const T* input, const float* cos, const float* sin, T* output, int64_t batch,
-                           int64_t numHead, int64_t seqLen, int64_t headDim, int64_t offset) {
-  const int64_t b = blockIdx.x / numHead;
-  const int64_t h = blockIdx.x % numHead;
-  const int64_t t = blockIdx.y * blockDim.x + threadIdx.x;
+__global__ void kRopeApply(T* output, const T* input, const int64_t* positions, const float* rope, int64_t innerSize,
+                           int64_t headDim) {
+  int64_t b = blockIdx.x;         // batch index
+  int64_t innerIdx = blockIdx.y;  // inner index
+  int64_t d = threadIdx.x;        // halfDim index
 
-  if (b < batch && t < seqLen) {
-    const int64_t base = ((b * numHead + h) * seqLen + t) * headDim;
-    const T* xPtr = input + base;
-    T* yPtr = output + base;
-
-    const int64_t posIndex = offset + t;
-    const float* cosRow = cos + posIndex * headDim;
-    const float* sinRow = sin + posIndex * headDim;
-
-    auto halfDim = headDim >> 1;
-    for (int64_t i = 0; i < halfDim; i++) {
-      float x1 = static_cast<float>(xPtr[i]);
-      float x2 = static_cast<float>(xPtr[halfDim + i]);
-      float c = cosRow[i];
-      float s = sinRow[i];
-
-      yPtr[i] = static_cast<T>(x1 * c - x2 * s);
-      yPtr[halfDim + i] = static_cast<T>(x2 * c + x1 * s);
-    }
+  if (innerIdx >= innerSize) {
+    return;
   }
+
+  int64_t halfDim = headDim >> 1;
+  if (d >= halfDim) {
+    return;
+  }
+
+  int64_t pos = positions[b];
+  int64_t inputIdx = (b * innerSize + innerIdx) * headDim + d;
+  int64_t ropeIdx = pos * headDim + d * 2;
+
+  auto x0 = static_cast<float>(input[inputIdx]);
+  auto x1 = static_cast<float>(input[inputIdx + halfDim]);
+  float cosVal = rope[ropeIdx];
+  float sinVal = rope[ropeIdx + 1];
+
+  output[inputIdx] = static_cast<T>(x0 * cosVal - x1 * sinVal);
+  output[inputIdx + halfDim] = static_cast<T>(x0 * sinVal + x1 * cosVal);
 }
 
 template <typename T, SoftmaxType type>
@@ -450,12 +442,12 @@ void softmaxForwardCudaImpl(Tensor& out, const Tensor& self, int64_t dim) {
   if (info.dimSize <= 1024) {
     dim3 block(std::clamp(nextPow2(info.dimSize), 32u, 1024u));
     dim3 grid(info.outerSize, info.innerSize);
-    const auto stream = cuda::getCurrentCUDAStream(self.device().index).stream;
+    const auto& stream = cuda::getCurrentCUDAStream(self.device().index).stream();
     kSoftmaxForward<CudaT, type><<<grid, block, 0, stream>>>(outPtr, selfPtr, info.dimSize, info.innerSize);
   } else {
     auto blockSize = cuda::getKernelBlockSize(self.device().index);
     dim3 grid(1, info.outerSize, info.innerSize);
-    const auto stream = cuda::getCurrentCUDAStream(self.device().index).stream;
+    const auto& stream = cuda::getCurrentCUDAStream(self.device().index).stream();
     kSoftmaxForwardLargeDim<CudaT, type><<<grid, blockSize, 0, stream>>>(outPtr, selfPtr, info.dimSize, info.innerSize);
   }
   CUDA_KERNEL_CHECK();
@@ -483,7 +475,7 @@ Tensor softmaxBackwardCudaImplDetail(const Tensor& grad, const Tensor& output, i
   const CudaT* outputPtr = output.dataPtr<CudaT>();
   const CudaT* gradPtr = grad.dataPtr<CudaT>();
   CudaT* outPtr = out.dataPtr<CudaT>();
-  const auto stream = cuda::getCurrentCUDAStream(output.device().index).stream;
+  const auto& stream = cuda::getCurrentCUDAStream(output.device().index).stream();
 
   if (info.dimSize <= 1024) {
     dim3 block(std::clamp(nextPow2(info.dimSize), 32u, 1024u));
@@ -581,7 +573,7 @@ Tensor normOpCudaImplDetail(const Tensor& self, IntArrayView normalizedShape, co
   const CudaT* biasPtr = bias.defined() ? bias.dataPtr<CudaT>() : nullptr;
   CudaT* outPtr = out.dataPtr<CudaT>();
 
-  auto stream = cuda::getCurrentCUDAStream(self.device().index).stream;
+  auto stream = cuda::getCurrentCUDAStream(self.device().index).stream();
   dim3 blockSize(std::clamp(nextPow2(dim), 32u, 1024u));
   dim3 gridSize(numRows);
 
@@ -618,8 +610,8 @@ Tensor rmsNormOpCudaImpl(const Tensor& self, IntArrayView normalizedShape, const
 }
 
 template <typename T>
-TensorPair ropeInitOpCudaImpl(int64_t headDim, int64_t contextLength, float thetaBase,
-                              std::optional<RopeScalingConfig> scaling, Options options) {
+Tensor ropeInitOpCudaImpl(int64_t headDim, int64_t contextLength, float thetaBase,
+                          std::optional<RopeScalingConfig> scaling, Options options) {
   ASSERT(!options.requiresGrad_);
   ASSERT(options.device_.type == DeviceType::CUDA);
   options.dtype_ = DType::Float32;
@@ -642,47 +634,50 @@ TensorPair ropeInitOpCudaImpl(int64_t headDim, int64_t contextLength, float thet
   }
 
   // precompute cos/sin
-  Tensor cos({contextLength, headDim}, options);
-  Tensor sin({contextLength, headDim}, options);
-  auto* cosPtr = cos.dataPtr<float>();
-  auto* sinPtr = sin.dataPtr<float>();
+  Tensor ret({contextLength, headDim}, options);
+  auto* retPtr = ret.dataPtr<float>();
 
   auto blockSize = cuda::getKernelBlockSize(options.device_.index);
-  auto stream = cuda::getCurrentCUDAStream(options.device_.index).stream;
-  kRopePrecomputeCosSin<float>
-      <<<contextLength, blockSize, 0, stream>>>(invFreqPtr, cosPtr, sinPtr, contextLength, headDim);
+  auto stream = cuda::getCurrentCUDAStream(options.device_.index).stream();
+  kRopePrecomputeCosSin<float><<<contextLength, blockSize, 0, stream>>>(retPtr, invFreqPtr, contextLength, headDim);
   CUDA_KERNEL_CHECK();
-  return {cos, sin};
+  return ret;
 }
 
 template <typename T>
-Tensor ropeApplyOpCudaImpl(const Tensor& input, const TensorPair& rope, int64_t offset) {
-  const auto& shape = input.shape();  // [batch, numHead, seqLen, headDim]
-  ASSERT(shape.size() == 4);
+Tensor ropeApplyOpCudaImpl(const Tensor& input, const Tensor& positions, const Tensor& rope) {
+  // input [batch, ..., headDim]
+  // positions [batch]
+  ASSERT(input.dim() >= 3);
+  ASSERT(positions.dim() == 1);
+  ASSERT(positions.dtype() == DType::Int64);
+  ASSERT(input.shape(0) == positions.shape(0));  // batch
+  ASSERT(input.shape(-1) == rope.shape(-1));     // headDim
+  ASSERT(rope.dtype() == DType::Float32);
 
-  int64_t batch = shape[0];
-  int64_t numHead = shape[1];
-  int64_t seqLen = shape[2];
-  int64_t headDim = shape[3];
+  int64_t batch = input.shape(0);
+  int64_t headDim = input.shape(-1);
+
+  int64_t innerSize = 1;
+  for (int64_t i = 1; i < input.dim() - 1; i++) {
+    innerSize *= input.shape(i);
+  }
+
   ASSERT(headDim % 2 == 0);
+  int64_t halfDim = headDim >> 1;
 
   using CudaT = typename cuda::CudaTypeCast<T>::type;
   const auto* inputPtr = input.dataPtr<CudaT>();
-  const auto* cosPtr = rope.first.dataPtr<float>();
-  const auto* sinPtr = rope.second.dataPtr<float>();
+  const auto* posPtr = positions.dataPtr<int64_t>();
+  const auto* ropePtr = rope.dataPtr<float>();
 
-  Tensor out(shape, input.options().noGrad());
+  Tensor out(input.shape(), input.options().noGrad());
   auto* outPtr = out.dataPtr<CudaT>();
 
-  const auto blockSize = cuda::getKernelBlockSize(input.device().index);
-  const auto blocksPerSeq = cuda::getKernelGridSize(blockSize, seqLen);
-
-  dim3 gridDim(batch * numHead, blocksPerSeq);
-  dim3 blockDim(blockSize);
-
-  auto stream = cuda::getCurrentCUDAStream(input.device().index).stream;
-  kRopeApply<CudaT>
-      <<<gridDim, blockDim, 0, stream>>>(inputPtr, cosPtr, sinPtr, outPtr, batch, numHead, seqLen, headDim, offset);
+  dim3 gridSize(batch, innerSize);
+  dim3 blockSize(halfDim);
+  auto stream = cuda::getCurrentCUDAStream(input.device().index).stream();
+  kRopeApply<CudaT><<<gridSize, blockSize, 0, stream>>>(outPtr, inputPtr, posPtr, ropePtr, innerSize, headDim);
   CUDA_KERNEL_CHECK();
   return out;
 }

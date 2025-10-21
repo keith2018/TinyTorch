@@ -693,6 +693,9 @@ TEST(TEST_Operation, basic_triu) {
 
 TEST(TEST_Operation, basic_split) {
   Tensor x(Array3d<float>{{{4, 2, 3}, {1, 0, 3}}, {{4, 2, 3}, {1, 0, 3}}});
+
+  // split with split size
+
   auto y = op::split(x, 1, 0);
   EXPECT_TRUE(y.size() == 2);
   EXPECT_THAT(y[0].shape(), ElementsAre(1, 2, 3));
@@ -715,6 +718,76 @@ TEST(TEST_Operation, basic_split) {
   EXPECT_THAT(y[1].toList<float>(), ElementsAre(2, 0, 2, 0));
   EXPECT_THAT(y[2].shape(), ElementsAre(2, 2, 1));
   EXPECT_THAT(y[2].toList<float>(), ElementsAre(3, 3, 3, 3));
+
+  // split with section sizes
+
+  y = op::splitSections(x, IntArrayView{1, 1}, 0);
+  EXPECT_TRUE(y.size() == 2);
+  EXPECT_THAT(y[0].shape(), ElementsAre(1, 2, 3));
+  EXPECT_THAT(y[0].toList<float>(), ElementsAre(4, 2, 3, 1, 0, 3));
+  EXPECT_THAT(y[1].shape(), ElementsAre(1, 2, 3));
+  EXPECT_THAT(y[1].toList<float>(), ElementsAre(4, 2, 3, 1, 0, 3));
+
+  y = op::splitSections(x, IntArrayView{1, 1}, 1);
+  EXPECT_TRUE(y.size() == 2);
+  EXPECT_THAT(y[0].shape(), ElementsAre(2, 1, 3));
+  EXPECT_THAT(y[0].toList<float>(), ElementsAre(4, 2, 3, 4, 2, 3));
+  EXPECT_THAT(y[1].shape(), ElementsAre(2, 1, 3));
+  EXPECT_THAT(y[1].toList<float>(), ElementsAre(1, 0, 3, 1, 0, 3));
+
+  y = op::splitSections(x, IntArrayView{1, 2}, 2);
+  EXPECT_TRUE(y.size() == 2);
+  EXPECT_THAT(y[0].shape(), ElementsAre(2, 2, 1));
+  EXPECT_THAT(y[0].toList<float>(), ElementsAre(4, 1, 4, 1));
+  EXPECT_THAT(y[1].shape(), ElementsAre(2, 2, 2));
+  EXPECT_THAT(y[1].toList<float>(), ElementsAre(2, 3, 0, 3, 2, 3, 0, 3));
+
+  y = op::splitSections(x, IntArrayView{1, 1, 1}, 2);
+  EXPECT_TRUE(y.size() == 3);
+  EXPECT_THAT(y[0].shape(), ElementsAre(2, 2, 1));
+  EXPECT_THAT(y[0].toList<float>(), ElementsAre(4, 1, 4, 1));
+  EXPECT_THAT(y[1].shape(), ElementsAre(2, 2, 1));
+  EXPECT_THAT(y[1].toList<float>(), ElementsAre(2, 0, 2, 0));
+  EXPECT_THAT(y[2].shape(), ElementsAre(2, 2, 1));
+  EXPECT_THAT(y[2].toList<float>(), ElementsAre(3, 3, 3, 3));
+}
+
+TEST(TEST_Operation, basic_chunk) {
+  Tensor x(Array3d<float>{{{4, 2, 3}, {1, 0, 3}}, {{4, 2, 3}, {1, 0, 3}}});
+
+  auto y = op::chunk(x, 2, 0);
+  EXPECT_TRUE(y.size() == 2);
+  EXPECT_THAT(y[0].shape(), ElementsAre(1, 2, 3));
+  EXPECT_THAT(y[0].toList<float>(), ElementsAre(4, 2, 3, 1, 0, 3));
+  EXPECT_THAT(y[1].shape(), ElementsAre(1, 2, 3));
+  EXPECT_THAT(y[1].toList<float>(), ElementsAre(4, 2, 3, 1, 0, 3));
+
+  y = op::chunk(x, 2, 1);
+  EXPECT_TRUE(y.size() == 2);
+  EXPECT_THAT(y[0].shape(), ElementsAre(2, 1, 3));
+  EXPECT_THAT(y[0].toList<float>(), ElementsAre(4, 2, 3, 4, 2, 3));
+  EXPECT_THAT(y[1].shape(), ElementsAre(2, 1, 3));
+  EXPECT_THAT(y[1].toList<float>(), ElementsAre(1, 0, 3, 1, 0, 3));
+
+  y = op::chunk(x, 3, 2);
+  EXPECT_TRUE(y.size() == 3);
+  EXPECT_THAT(y[0].shape(), ElementsAre(2, 2, 1));
+  EXPECT_THAT(y[0].toList<float>(), ElementsAre(4, 1, 4, 1));
+  EXPECT_THAT(y[1].shape(), ElementsAre(2, 2, 1));
+  EXPECT_THAT(y[1].toList<float>(), ElementsAre(2, 0, 2, 0));
+  EXPECT_THAT(y[2].shape(), ElementsAre(2, 2, 1));
+  EXPECT_THAT(y[2].toList<float>(), ElementsAre(3, 3, 3, 3));
+
+  // Test with uneven chunks
+  Tensor z(Array1d<float>{1, 2, 3, 4, 5});
+  auto w = op::chunk(z, 3, 0);
+  EXPECT_TRUE(w.size() == 3);
+  EXPECT_THAT(w[0].shape(), ElementsAre(2));
+  EXPECT_THAT(w[0].toList<float>(), ElementsAre(1, 2));
+  EXPECT_THAT(w[1].shape(), ElementsAre(2));
+  EXPECT_THAT(w[1].toList<float>(), ElementsAre(3, 4));
+  EXPECT_THAT(w[2].shape(), ElementsAre(1));
+  EXPECT_THAT(w[2].toList<float>(), ElementsAre(5));
 }
 
 TEST(TEST_Operation, basic_concat) {

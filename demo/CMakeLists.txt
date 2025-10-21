@@ -8,12 +8,22 @@ endif ()
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_executable(${PROJECT_NAME}
+set(DEMO_SRCS
         demo_autograd.cpp
         demo_module.cpp
         demo_optim.cpp
         demo_mnist.cpp
-        main.cpp)
+        main.cpp
+)
+
+if (TINYTORCH_USE_NCCL)
+    list(APPEND DEMO_SRCS
+            demo_nccl.cpp
+            demo_ddp.cpp
+    )
+endif ()
+
+add_executable(${PROJECT_NAME} ${DEMO_SRCS})
 
 target_include_directories(${PROJECT_NAME} PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../src

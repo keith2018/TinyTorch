@@ -15,14 +15,14 @@ class RandomGeneratorCPU {
  public:
   static void setSeed(const unsigned long seed) {
     seed_ = seed;
-    randomEngine_ = std::default_random_engine(seed_.value());
+    randomEngine_.seed(seed);
   }
-  static std::default_random_engine getGenerator() {
-    if (seed_.has_value()) {
-      return randomEngine_;
+  static std::default_random_engine& getGenerator() {
+    if (!seed_.has_value()) {
+      std::random_device r;
+      randomEngine_.seed(r());
     }
-    std::random_device r;
-    return std::default_random_engine(r());
+    return randomEngine_;
   }
 
  private:

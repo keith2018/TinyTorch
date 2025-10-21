@@ -4,8 +4,11 @@
  *
  */
 
+#include "Data/DataLoader.h"
+#include "Data/DatasetMNIST.h"
 #include "TinyTorch.h"
 #include "Utils/CUDAUtils.h"
+#include "Utils/RandomGenerator.h"
 #include "Utils/Timer.h"
 
 using namespace tinytorch;
@@ -85,8 +88,8 @@ struct TrainArgs {
   bool saveModel = true;
 };
 
-void train(TrainArgs &args, nn::Module &model, Device device, data::DataLoader &dataLoader, optim::Optimizer &optimizer,
-           int32_t epoch) {
+static void train(TrainArgs &args, nn::Module &model, Device device, data::DataLoader &dataLoader,
+                  optim::Optimizer &optimizer, int32_t epoch) {
   model.train();
   Timer timer;
   timer.start();
@@ -114,7 +117,7 @@ void train(TrainArgs &args, nn::Module &model, Device device, data::DataLoader &
   }
 }
 
-void test(nn::Module &model, Device device, data::DataLoader &dataLoader) {
+static void test(nn::Module &model, Device device, data::DataLoader &dataLoader) {
   model.eval();
   Timer timer;
   timer.start();
@@ -142,11 +145,8 @@ void test(nn::Module &model, Device device, data::DataLoader &dataLoader) {
 
 void demo_mnist() {
   LOGD("demo_mnist ...");
-  Timer timer;
-  timer.start();
 
   TrainArgs args;
-
   manualSeed(args.seed);
 
   auto useCuda = (!args.noCuda) && cuda::deviceAvailable();
@@ -164,8 +164,8 @@ void demo_mnist() {
     return;
   }
 
-  auto trainDataloader = data::DataLoader(trainDataset, args.batchSize, true);
-  auto testDataloader = data::DataLoader(testDataset, args.testBatchSize, true);
+  auto trainDataloader = data::DataLoader(trainDataset, args.batchSize);
+  auto testDataloader = data::DataLoader(testDataset, args.testBatchSize);
 
   auto model = Net();
   model.to(device);
@@ -181,6 +181,9 @@ void demo_mnist() {
 
   auto optimizer = optim::AdaDelta(model.parameters(), args.lr);
   auto scheduler = optim::lr_scheduler::StepLR(optimizer, 1, args.gamma);
+
+  Timer timer;
+  timer.start();
 
   for (auto epoch = 1; epoch < args.epochs + 1; epoch++) {
     train(args, model, device, trainDataloader, optimizer, epoch);

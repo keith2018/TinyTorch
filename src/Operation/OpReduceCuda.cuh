@@ -434,7 +434,7 @@ template <typename T, typename OP, typename IndexFunc>
 void ReducerCuda::reduceMerge(T* values, const T* input, const Options& options, int64_t n, int64_t m) {
   using ComputeT = typename cuda::CudaComputeType<T>::type;
   const auto blockSize = cuda::getKernelBlockSize(options.device_.index);
-  const auto stream = cuda::getCurrentCUDAStream(options.device_.index).stream;
+  const auto& stream = cuda::getCurrentCUDAStream(options.device_.index).stream();
 
   auto blocks = cuda::getKernelGridSize(blockSize, n);
   Tensor tmp({m * blocks}, Options(options.device_, TypeToDType_v<ComputeT>));
@@ -461,7 +461,7 @@ void ReducerCuda::reduceIdxMerge(T* values, int64_t* indices, const T* input, co
                                  int64_t m) {
   using ComputeT = typename cuda::CudaComputeType<T>::type;
   const auto blockSize = cuda::getKernelBlockSize(options.device_.index);
-  const auto stream = cuda::getCurrentCUDAStream(options.device_.index).stream;
+  const auto& stream = cuda::getCurrentCUDAStream(options.device_.index).stream();
 
   auto blocks = cuda::getKernelGridSize(blockSize, n);
 
@@ -707,7 +707,7 @@ Tensor reduceOpSumDimsCudaImpl(const Tensor& t, const IntArrayView dims, bool ke
 
   dim3 grid(t.numel());
   dim3 block(blockSize);
-  const auto stream = cuda::getCurrentCUDAStream(t.device().index).stream;
+  const auto& stream = cuda::getCurrentCUDAStream(t.device().index).stream();
   kReduceMultiDimSum<CudaT, blockSize>
       <<<grid, block, 0, stream>>>(ret.dataPtr<CudaT>(), ctxT, inAxis, reduceCnt, t.numel());
   CUDA_KERNEL_CHECK();

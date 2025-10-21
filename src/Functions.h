@@ -8,6 +8,7 @@
 
 #include "Function/FuncActivation.h"
 #include "Function/FuncElemWise.h"
+#include "Function/FuncFused.h"
 #include "Function/FuncLinalg.h"
 #include "Function/FuncLoss.h"
 #include "Function/FuncNNLayer.h"

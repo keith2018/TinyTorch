@@ -141,7 +141,7 @@ TensorPair topkOpCudaImpl(const Tensor& self, int64_t k, int64_t dim, bool large
   CudaT* valPtr = values.dataPtr<CudaT>();
   auto* idxPtr = indices.dataPtr<int64_t>();
 
-  const auto stream = cuda::getCurrentCUDAStream(self.device().index).stream;
+  const auto& stream = cuda::getCurrentCUDAStream(self.device().index).stream();
   auto policy = thrust::cuda::par.on(stream);
 
   Storage tmpValues(static_cast<int64_t>(n * sizeof(CudaT)), self.device());
@@ -218,7 +218,7 @@ Tensor multinomialOpCudaImpl(const Tensor& self, int64_t nSamples, bool replacem
   auto seed = RandomGeneratorCUDA::getSeed();
   auto seq = RandomGeneratorCUDA::nextSequence();
 
-  const auto stream = cuda::getCurrentCUDAStream(self.device().index).stream;
+  const auto& stream = cuda::getCurrentCUDAStream(self.device().index).stream();
   auto blockSize = cuda::getKernelBlockSize(self.device().index);
 
   Storage tmpProb(static_cast<int64_t>(batch * n * sizeof(float)), self.device());
@@ -274,7 +274,7 @@ TensorPair sortOpCudaImpl(const Tensor& self, int64_t dim, bool descending) {
   CudaT* valPtr = values.dataPtr<CudaT>();
   auto* idxPtr = indices.dataPtr<int64_t>();
 
-  const auto stream = cuda::getCurrentCUDAStream(self.device().index).stream;
+  const auto& stream = cuda::getCurrentCUDAStream(self.device().index).stream();
 
   thrust::copy(thrust::cuda::par.on(stream), selfPtr, selfPtr + self.numel(), valPtr);
 
@@ -332,7 +332,7 @@ Tensor cumsumOpCudaImpl(const Tensor& self, int64_t dim) {
     inner *= self.shape(i);
   }
 
-  const auto stream = cuda::getCurrentCUDAStream(self.device().index).stream;
+  const auto& stream = cuda::getCurrentCUDAStream(self.device().index).stream();
 
   if (inner == 1) {
     for (int64_t o = 0; o < outer; ++o) {

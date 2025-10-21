@@ -24,26 +24,24 @@ TensorImpl::TensorImpl(const IntArrayView shape, Options options, const std::sha
   computeNumel(numel_, shape);
   computeStrides(strides_, shape);
 
-  int64_t nbytes = numel_ * static_cast<int64_t>(dtypeSize(options.dtype_));
-  ASSERT(offset + nbytes <= storage->size());
+  ASSERT(offset + nbytes() <= storage->size());
   storageOffset_ = offset;
   storage_ = storage;
-  dataPtr_ = storage_->dataPtr<uint8_t>() + storageOffset_;
+  dataPtr_ = storage_->dataPtr<uint8_t>() + storageOffset_ * dtypeSize(options.dtype_);
 }
 
 void TensorImpl::setStorage(const std::shared_ptr<Storage>& storage, int64_t offset) {
-  int64_t nbytes = numel_ * static_cast<int64_t>(dtypeSize(options_.dtype_));
-  ASSERT(offset + nbytes <= storage->size());
+  ASSERT(offset + nbytes() <= storage->size());
   storage_ = storage;
   storageOffset_ = offset;
-  dataPtr_ = storage_->dataPtr<uint8_t>() + storageOffset_;
+  dataPtr_ = storage_->dataPtr<uint8_t>() + storageOffset_ * dtypeSize(options_.dtype_);
 }
 
 void TensorImpl::copyOnWrite() const {
   ensureStorage();
   if (storage_ && storage_.use_count() > 1) {
     storage_ = storage_->clone();
-    dataPtr_ = storage_->dataPtr<uint8_t>() + storageOffset_;
+    dataPtr_ = storage_->dataPtr<uint8_t>() + storageOffset_ * dtypeSize(options_.dtype_);
   }
 }
 
@@ -227,9 +225,8 @@ void TensorImpl::unsqueeze_(int64_t d) {
 
 void TensorImpl::ensureStorage() const {
   if (!storage_) {
-    int64_t nbytes = numel_ * static_cast<int64_t>(dtypeSize(options_.dtype_));
     Allocator* allocator = getAllocator(options_);
-    storage_ = std::make_shared<Storage>(nbytes, options_.device_, allocator);
+    storage_ = std::make_shared<Storage>(nbytes(), options_.device_, allocator);
     dataPtr_ = storage_->dataPtr<uint8_t>() + storageOffset_;
   }
 }

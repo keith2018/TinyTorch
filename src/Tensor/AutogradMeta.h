@@ -20,7 +20,7 @@ class AutogradMeta : public std::enable_shared_from_this<AutogradMeta> {
   std::shared_ptr<FunctionBase>& gradFn() { return gradFn_; }
   void setGradFn(const std::shared_ptr<FunctionBase>& fn);
 
-  const Tensor& grad() const { return grad_; }
+  Tensor& grad() { return grad_; }
   void setGrad(const Tensor& grad);
   void setGrad(Tensor&& grad);
   void addGrad(const Tensor& grad);
@@ -29,12 +29,18 @@ class AutogradMeta : public std::enable_shared_from_this<AutogradMeta> {
 
   bool isLeaf() const;
   void backward(const Tensor& grad);
-  void buildBackwardGraph();
+
+  int64_t registerHook(Hook::FnType fn, void* ctx);
+  void unregisterHook(int64_t hid);
+  void applyHooks();
 
  private:
+  void buildBackwardGraph();
+
   Tensor grad_;
   std::shared_ptr<FunctionBase> gradFn_;
   std::vector<std::shared_ptr<FunctionBase>> backwardGraph_;
+  std::vector<Hook> hooks_;
 };
 
 }  // namespace tinytorch

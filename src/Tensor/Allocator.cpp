@@ -59,7 +59,7 @@ CUDAAllocator::~CUDAAllocator() {
 
 void* CUDAAllocator::allocate(int64_t nbytes) {
   void* ptr = nullptr;
-  CUDA_CHECK(cudaSetDevice(deviceIndex_));
+  cuda::CudaDeviceGuard guard(deviceIndex_);
   CUDA_CHECK(cudaMalloc(&ptr, nbytes));
 #ifndef NDEBUG
   if (ptr) {
@@ -71,7 +71,7 @@ void* CUDAAllocator::allocate(int64_t nbytes) {
 
 void CUDAAllocator::deallocate(void* ptr) {
   if (ptr) {
-    CUDA_CHECK(cudaSetDevice(deviceIndex_));
+    cuda::CudaDeviceGuard guard(deviceIndex_);
     CUDA_CHECK(cudaFree(ptr));
   }
 #ifndef NDEBUG

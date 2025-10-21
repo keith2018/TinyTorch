@@ -77,6 +77,22 @@ class FuncSplit : public Function<FuncSplit> {
   static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
 };
 
+class FuncSplitSections : public Function<FuncSplitSections> {
+ public:
+  static std::vector<Tensor> forward(AutogradContext* ctx, const Tensor& self, IntArrayView sections, int64_t dim) {
+    return op::splitSections(self, sections, dim);
+  }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
+};
+
+class FuncChunk : public Function<FuncChunk> {
+ public:
+  static std::vector<Tensor> forward(AutogradContext* ctx, const Tensor& self, int64_t chunks, int64_t dim) {
+    return op::chunk(self, chunks, dim);
+  }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
+};
+
 class FuncConcat : public Function<FuncConcat> {
  public:
   static Tensor forward(AutogradContext* ctx, ArrayView<Tensor> tensors, int64_t dim) {
@@ -181,6 +197,12 @@ inline Tensor tril(const Tensor& self, int64_t diagonal = 0) { return FuncTril::
 inline Tensor triu(const Tensor& self, int64_t diagonal = 0) { return FuncTriu::apply(self, diagonal); }
 inline std::vector<Tensor> split(const Tensor& self, int64_t splitSize, int64_t dim = 0) {
   return FuncSplit::apply(self, splitSize, dim);
+}
+inline std::vector<Tensor> split(const Tensor& self, IntArrayView sections, int64_t dim = 0) {
+  return FuncSplitSections::apply(self, sections, dim);
+}
+inline std::vector<Tensor> chunk(const Tensor& self, int64_t chunks, int64_t dim = 0) {
+  return FuncChunk::apply(self, chunks, dim);
 }
 inline Tensor concat(ArrayView<Tensor> tensors, int64_t dim = 0) { return FuncConcat::apply(tensors, dim); }
 inline Tensor stack(ArrayView<Tensor> tensors, int64_t dim = 0) { return FuncStack::apply(tensors, dim); }

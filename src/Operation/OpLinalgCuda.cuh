@@ -84,7 +84,7 @@ Tensor dotOpCudaImpl(const Tensor& self, const Tensor& other) {
   auto ret = Tensor::scalar(0, self.options().noGrad());
 
   int64_t n = self.numel();
-  const auto stream = cuda::getCurrentCUDAStream(self.device().index).stream;
+  const auto& stream = cuda::getCurrentCUDAStream(self.device().index).stream();
 
   thrust::device_ptr<const CudaT> selfPtr(self.dataPtr<CudaT>());
   thrust::device_ptr<const CudaT> otherPtr(other.dataPtr<CudaT>());

@@ -17,6 +17,11 @@ class NoGradGuard {
 
   ~NoGradGuard() { gradEnabled = prevGradEnabled; }
 
+  NoGradGuard(const NoGradGuard&) = delete;
+  NoGradGuard& operator=(const NoGradGuard&) = delete;
+  NoGradGuard(NoGradGuard&&) = delete;
+  NoGradGuard& operator=(NoGradGuard&&) = delete;
+
   static bool isGradEnabled() { return gradEnabled; }
 
   explicit operator bool() const { return true; }

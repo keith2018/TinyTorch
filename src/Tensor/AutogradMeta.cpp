@@ -75,6 +75,22 @@ void AutogradMeta::backward(const Tensor &grad) {
   }
 }
 
+int64_t AutogradMeta::registerHook(Hook::FnType fn, void *ctx) {
+  hooks_.push_back({fn, ctx});
+  return static_cast<int64_t>(hooks_.size() - 1);
+}
+
+void AutogradMeta::unregisterHook(int64_t hid) {
+  ASSERT(hid >= 0 && hid < static_cast<int64_t>(hooks_.size()));
+  hooks_.erase(hooks_.begin() + hid);
+}
+
+void AutogradMeta::applyHooks() {
+  for (auto &h : hooks_) {
+    h.fn(h.ctx, grad_);
+  }
+}
+
 void AutogradMeta::buildBackwardGraph() {
   ankerl::unordered_dense::map<std::shared_ptr<FunctionBase>, int> deps;
   std::deque<std::shared_ptr<FunctionBase>> q;

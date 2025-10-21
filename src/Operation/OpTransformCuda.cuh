@@ -347,7 +347,7 @@ void cudaTranspose2d(T* out, const T* in, int64_t width, int64_t height, const D
   dim3 gridSize((width + TRANSPOSE_TILE_DIM - 1) / TRANSPOSE_TILE_DIM,
                 (height + TRANSPOSE_TILE_DIM - 1) / TRANSPOSE_TILE_DIM);
 
-  const auto stream = cuda::getCurrentCUDAStream(device.index).stream;
+  const auto& stream = cuda::getCurrentCUDAStream(device.index).stream();
   kTranspose2D<<<gridSize, blockSize, 0, stream>>>(out, in, width, height);
   CUDA_KERNEL_CHECK();
 }
@@ -587,7 +587,7 @@ Tensor triangleOpCudaImpl(const Tensor& self, int64_t diagonal) {
   dim3 blockSize(16, 16);
   dim3 gridSize((cols + blockSize.x - 1) / blockSize.x, (rows + blockSize.y - 1) / blockSize.y, batch);
 
-  const auto stream = cuda::getCurrentCUDAStream(self.device().index).stream;
+  const auto& stream = cuda::getCurrentCUDAStream(self.device().index).stream();
   kTriangle<T, LOWER><<<gridSize, blockSize, 0, stream>>>(retPtr, selfPtr, batch, rows, cols, diagonal, matrixSize);
   CUDA_KERNEL_CHECK();
   return ret;

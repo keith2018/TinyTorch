@@ -110,8 +110,8 @@ Tensor indexOpImpl(const Tensor& self, const IntArrayView indices) {
   for (int64_t i = len; i < self.dim(); i++) {
     retShape.pushBack(self.shape(i));
   }
-  // create tensor with shared storage
-  auto ret = Tensor(retShape, self.options(), self.storage(), dataIdx * sizeof(T));
+  // share storage
+  auto ret = Tensor(retShape, self.options(), self.storage(), dataIdx);
   ASSERT(dimStride == ret.numel());
   return ret;
 }
@@ -139,7 +139,7 @@ inline int64_t calcBlockSize(const IntArrayView shape, int64_t begin, int64_t en
 }
 
 template <typename T>
-std::vector<Tensor> splitOpImpl(const Tensor& self, int64_t splitSize, int64_t dim) {
+std::vector<Tensor> splitOpImplDetail(const Tensor& self, IntArrayView sectionSizes, int64_t dim) {
   if (dim < 0) {
     dim += self.dim();
   }
@@ -149,36 +149,142 @@ std::vector<Tensor> splitOpImpl(const Tensor& self, int64_t splitSize, int64_t d
     return {};
   }
 
-  const auto dimSize = self.shape(dim);
-  if (splitSize <= 0 || dimSize % splitSize != 0) {
-    LOGE("Invalid sections: %lld", splitSize);
-    ASSERT(false);
-    return {};
+  const auto numSections = sectionSizes.size();
+  std::vector<Tensor> retTensors(numSections);
+
+  if (dim == 0) {  // share storage
+    int64_t startIdx = 0;
+    for (size_t i = 0; i < numSections; i++) {
+      SizeVector retShape(self.shape());
+      retShape[0] = sectionSizes[i];
+
+      int64_t storageOffset = self.storageOffset() + startIdx * self.stride(0);
+      retTensors[i] = Tensor(retShape, self.options().noGrad(), self.storage(), storageOffset);
+
+      startIdx += sectionSizes[i];
+    }
+    return retTensors;
   }
 
-  const auto sections = dimSize / splitSize;
-  std::vector<Tensor> retTensors(sections);
-
-  // shape of result tensors
-  SizeVector retShape(self.shape());
-  retShape[dim] = splitSize;
-  for (auto i = 0; i < sections; i++) {
+  for (size_t i = 0; i < numSections; i++) {
+    SizeVector retShape(self.shape());
+    retShape[dim] = sectionSizes[i];
     retTensors[i] = Tensor::empty(retShape, self.options().noGrad());
   }
 
   int64_t innerBlockSize = calcBlockSize(self.shape(), dim + 1, self.dim());
   int64_t outerBlockSize = calcBlockSize(self.shape(), 0, dim);
+  int64_t dimSize = self.shape(dim);
 
   const T* selfPtr = self.dataPtr<T>();
-  for (auto i = 0; i < sections; i++) {
+  int64_t sectionOffset = 0;
+
+  for (size_t i = 0; i < numSections; i++) {
     T* retPtr = retTensors[i].dataPtr<T>();
     for (auto outerIdx = 0; outerIdx < outerBlockSize; outerIdx++) {
-      int64_t srcOffset = outerIdx * dimSize * innerBlockSize + i * splitSize * innerBlockSize;
-      int64_t dstOffset = outerIdx * splitSize * innerBlockSize;
-      int64_t copySize = splitSize * innerBlockSize * sizeof(T);
+      int64_t srcOffset = outerIdx * dimSize * innerBlockSize + sectionOffset * innerBlockSize;
+      int64_t dstOffset = outerIdx * sectionSizes[i] * innerBlockSize;
+      int64_t copySize = sectionSizes[i] * innerBlockSize * sizeof(T);
       Storage::copyOnDevice(retPtr + dstOffset, selfPtr + srcOffset, copySize, self.device());
     }
+    sectionOffset += sectionSizes[i];
   }
+
+  return retTensors;
+}
+
+template <typename T>
+std::vector<Tensor> splitOpImpl(const Tensor& self, int64_t splitSize, int64_t dim) {
+  const auto dimSize = self.shape(dim < 0 ? dim + self.dim() : dim);
+
+  if (splitSize <= 0 || dimSize % splitSize != 0) {
+    LOGE("Invalid split size: %lld", splitSize);
+    ASSERT(false);
+    return {};
+  }
+
+  const auto sections = dimSize / splitSize;
+  SizeVector sectionSizes(sections, splitSize);
+  return splitOpImplDetail<T>(self, sectionSizes, dim);
+}
+
+template <typename T>
+std::vector<Tensor> splitSectionsOpImpl(const Tensor& self, IntArrayView sections, int64_t dim) {
+  const auto dimSize = self.shape(dim < 0 ? dim + self.dim() : dim);
+
+  int64_t sectionsSum = 0;
+  for (auto section : sections) {
+    sectionsSum += section;
+  }
+  if (sectionsSum != dimSize) {
+    LOGE("Invalid sections: sum of sections %lld does not match dimension size %lld", sectionsSum, dimSize);
+    ASSERT(false);
+    return {};
+  }
+
+  return splitOpImplDetail<T>(self, sections, dim);
+}
+
+template <typename T>
+std::vector<Tensor> chunkOpImpl(const Tensor& self, int64_t chunks, int64_t dim) {
+  if (dim < 0) {
+    dim += self.dim();
+  }
+  if (dim < 0 || dim >= self.dim()) {
+    LOGE("Invalid axis: %lld", dim);
+    ASSERT(false);
+    return {};
+  }
+
+  if (chunks <= 0) {
+    LOGE("Invalid chunks: %lld", chunks);
+    ASSERT(false);
+    return {};
+  }
+
+  const auto dimSize = self.shape(dim);
+  chunks = std::min(chunks, dimSize);
+  int64_t splitSize = (dimSize + chunks - 1) / chunks;
+
+  std::vector<Tensor> retTensors;
+
+  int64_t start = 0;
+  for (auto i = 0; i < chunks; i++) {
+    int64_t end = std::min(start + splitSize, dimSize);
+    int64_t currentSize = end - start;
+
+    if (currentSize <= 0) {
+      break;
+    }
+
+    SizeVector retShape(self.shape());
+    retShape[dim] = currentSize;
+
+    if (dim == 0) {  // share storage
+      int64_t innerBlockSize = calcBlockSize(self.shape(), dim + 1, self.dim());
+      int64_t offset = self.storageOffset() + start * innerBlockSize;
+      Tensor chunk(retShape, self.options().noGrad(), self.storage(), offset);
+      retTensors.push_back(chunk);
+    } else {
+      Tensor chunk = Tensor::empty(retShape, self.options().noGrad());
+
+      const T* selfPtr = self.dataPtr<T>();
+      T* retPtr = chunk.dataPtr<T>();
+
+      int64_t innerBlockSize = calcBlockSize(self.shape(), dim + 1, self.dim());
+      int64_t outerBlockSize = calcBlockSize(self.shape(), 0, dim);
+      for (auto outerIdx = 0; outerIdx < outerBlockSize; outerIdx++) {
+        int64_t srcOffset = outerIdx * dimSize * innerBlockSize + start * innerBlockSize;
+        int64_t dstOffset = outerIdx * currentSize * innerBlockSize;
+        int64_t copySize = currentSize * innerBlockSize * sizeof(T);
+        Storage::copyOnDevice(retPtr + dstOffset, selfPtr + srcOffset, copySize, self.device());
+      }
+
+      retTensors.push_back(chunk);
+    }
+    start = end;
+  }
+
   return retTensors;
 }
 
@@ -310,6 +416,11 @@ Tensor narrowOpImpl(const Tensor& self, int64_t dim, int64_t start, int64_t leng
   SizeVector retShape(self.shape());
   retShape[dim] = length;
 
+  if (dim == 0) {  // share storage
+    int64_t newOffset = self.storageOffset() + start * self.stride(0);
+    return {retShape, self.options().noGrad(), self.storage(), newOffset};
+  }
+
   auto ret = Tensor::empty(retShape, self.options().noGrad());
 
   const T* selfPtr = self.dataPtr<T>();
@@ -365,6 +476,10 @@ void registerTransformCommon() {
 
   // split
   REGISTER_OP_IMPL_ALL_DEVICES_DTYPE_TPL(split, splitOpImpl);
+  REGISTER_OP_IMPL_ALL_DEVICES_DTYPE_TPL(splitSections, splitSectionsOpImpl);
+
+  // chunk
+  REGISTER_OP_IMPL_ALL_DEVICES_DTYPE_TPL(chunk, chunkOpImpl);
 
   // concat
   REGISTER_OP_IMPL_ALL_DEVICES_DTYPE_TPL(concat, concatOpImpl);
