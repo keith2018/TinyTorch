@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 3.10)
 project(TinyTorch)
 
-set(TINYTORCH_BUILD_DEMO ON CACHE BOOL "Whether or not to build demo" FORCE)
-set(TINYTORCH_BUILD_TEST OFF CACHE BOOL "Whether or not to build the tests" FORCE)
+option(TINYTORCH_BUILD_DEMO "Whether or not to build demo" ON)
+option(TINYTORCH_BUILD_TEST "Whether or not to build the tests" OFF)
 
-set(TINYTORCH_USE_CUDA ON CACHE BOOL "Use CUDA" FORCE)
-set(TINYTORCH_USE_NCCL ON CACHE BOOL "Use NCCL" FORCE)
+option(TINYTORCH_USE_CUDA "Use CUDA" ON)
+option(TINYTORCH_USE_NCCL "Use NCCL" ON)
 
 if (APPLE)
     set(TINYTORCH_USE_CUDA OFF)
