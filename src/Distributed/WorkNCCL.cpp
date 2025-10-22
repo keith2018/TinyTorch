@@ -43,8 +43,8 @@ bool WorkNCCL::wait(std::chrono::milliseconds timeout) {
 }
 
 void WorkNCCL::synchronize() const {
-  auto &computeSteam = cuda::getCurrentCUDAStream(device_.index);
-  cudaEvent_.block(computeSteam);
+  auto &computeStream = cuda::getCurrentCUDAStream(device_.index);
+  cudaEvent_.block(computeStream);
 }
 
 bool WorkNCCL::checkTimeout(std::optional<std::chrono::milliseconds> timeout) const {

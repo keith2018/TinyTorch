@@ -34,7 +34,7 @@ inline const char* initMethodToString(const InitMethod& method) {
 class DistributedProcessGroup {
  public:
   DistributedProcessGroup() = default;
-  ~DistributedProcessGroup() = default;
+  ~DistributedProcessGroup() { destroyProcessGroup(); }
 
   static std::shared_ptr<DistributedProcessGroup>& getInstance() {
     static std::shared_ptr<DistributedProcessGroup> instance = std::make_shared<DistributedProcessGroup>();
