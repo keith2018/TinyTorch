@@ -46,8 +46,6 @@ static void demoAllReduce(int localRank, int rank, int worldSize) {
 
   std::cout << "Rank " << rank << " correct: " << (correct ? "✓" : "✗") << " (expected: " << expected
             << ", result: " << result[0] << ")" << std::endl;
-
-  dpg->destroyProcessGroup();
 }
 
 }  // namespace tinytorch::distributed

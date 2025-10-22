@@ -28,11 +28,6 @@ class Reducer {
 
   void prepareForBackward();
   void broadcastParameters(int rootRank = 0) const;
-  void synchronizeGradients();
-
-  bool hasUnfinishedOperations();
-  void waitForAllOperations();
-  bool allGradientsReady();
 
   void onGradReady(int64_t bucketIdx, int64_t paramIdx, const Tensor& grad);
 
@@ -46,14 +41,16 @@ class Reducer {
 
     int64_t totalSize = 0;
     int64_t readyCount = 0;
-    bool allReduceStarted = false;
+    bool reduceStarted = false;
+    std::shared_ptr<Work> work;
   };
 
   void buildBuckets();
   void registerHooks();
   void reduceBucket(int64_t bucketIdx);
+  void checkAllBucketsReady();
 
-  void initBucket(Bucket& bucket, Device device, DType dtype);
+  static Bucket createBucket(const std::vector<TensorPtr>& params, Device device, DType dtype);
 
   void copyParamsToFlattenedBuffer(int64_t bucketIdx) const;
   void copyFlattenedBufferToParams(int64_t bucketIdx) const;
@@ -63,7 +60,7 @@ class Reducer {
   std::vector<TensorPtr> parameters_;
   std::shared_ptr<DistributedProcessGroup> processGroup_;
   int64_t bucketBytesCap_;
-
+  int64_t bucketReadyCnt_;
   std::vector<Bucket> buckets_;
   std::vector<std::unique_ptr<ParameterHookCtx>> hookCtxs_;
 };

@@ -20,7 +20,10 @@ static void parameterHookFn(void* ctx, Tensor& grad) {
 
 Reducer::Reducer(std::vector<TensorPtr> parameters, std::shared_ptr<DistributedProcessGroup> processGroup,
                  int64_t bucketBytesCap)
-    : parameters_(std::move(parameters)), processGroup_(std::move(processGroup)), bucketBytesCap_(bucketBytesCap) {
+    : parameters_(std::move(parameters)),
+      processGroup_(std::move(processGroup)),
+      bucketBytesCap_(bucketBytesCap),
+      bucketReadyCnt_(0) {
   buildBuckets();
   registerHooks();
 }
@@ -34,7 +37,7 @@ void Reducer::buildBuckets() {
   auto dtype = parameters_[0]->dtype();
 
   int64_t currentBytes = 0;
-  Bucket bucket;
+  std::vector<TensorPtr> currentParams;
 
   for (auto& param : parameters_) {
     ASSERT(param != nullptr);
@@ -42,18 +45,39 @@ void Reducer::buildBuckets() {
     ASSERT(param->dtype() == dtype);
 
     int64_t paramBytes = param->nbytes();
-    if (currentBytes + paramBytes > bucketBytesCap_ && !bucket.params.empty()) {
-      initBucket(bucket, device, dtype);
-      bucket = Bucket();
+    if (currentBytes + paramBytes > bucketBytesCap_ && !currentParams.empty()) {
+      buckets_.push_back(createBucket(currentParams, device, dtype));
+      currentParams.clear();
       currentBytes = 0;
     }
 
-    bucket.params.push_back(param);
+    currentParams.push_back(param);
     currentBytes += paramBytes;
   }
 
-  // last bucket
-  initBucket(bucket, device, dtype);
+  if (!currentParams.empty()) {
+    buckets_.push_back(createBucket(currentParams, device, dtype));
+  }
+}
+
+Reducer::Bucket Reducer::createBucket(const std::vector<TensorPtr>& params, Device device, DType dtype) {
+  Bucket bucket;
+  bucket.params = params;
+
+  int64_t offset = 0;
+  for (auto& p : bucket.params) {
+    int64_t size = p->numel();
+    bucket.paramSizes.push_back(size);
+    bucket.paramOffsets.push_back(offset);
+    offset += size;
+    bucket.totalSize += size;
+  }
+
+  if (bucket.totalSize > 0) {
+    bucket.flatBuffer = Tensor::zeros({bucket.totalSize}, Options(device, dtype));
+  }
+
+  return bucket;
 }
 
 void Reducer::registerHooks() {
@@ -78,13 +102,16 @@ void Reducer::onGradReady(int64_t bucketIdx, int64_t paramIdx, const Tensor& gra
   auto& bucket = buckets_[bucketIdx];
 
   ASSERT(bucket.flatBuffer.defined());
+  ASSERT(paramIdx >= 0 && paramIdx < static_cast<int64_t>(bucket.params.size()));
+
   int64_t offset = bucket.paramOffsets[paramIdx];
   int64_t size = bucket.paramSizes[paramIdx];
   bucket.flatBuffer.narrow(0, offset, size).copy_(grad.flatten());
   bucket.readyCount++;
 
-  if (bucket.readyCount == static_cast<int64_t>(bucket.params.size()) && !bucket.allReduceStarted) {
-    bucket.allReduceStarted = true;
+  ASSERT(!bucket.reduceStarted);
+  if (bucket.readyCount == static_cast<int64_t>(bucket.params.size())) {
+    bucket.reduceStarted = true;
     reduceBucket(bucketIdx);
   }
 }
@@ -97,43 +124,19 @@ void Reducer::reduceBucket(int64_t bucketIdx) {
   ASSERT(!bucket.params.empty());
 
   std::vector<Tensor> tensors = {bucket.flatBuffer};
-  auto work = processGroup_->allReduce(tensors);
-  if (work) {
-    work->wait();
-  }
+  bucket.work = processGroup_->allReduce(tensors);
+  ASSERT(bucket.work);
 
-  cuda::CudaDeviceGuard guard(bucket.flatBuffer.device().index);
-  auto worldSize = processGroup_->getWorldSize();
-  bucket.flatBuffer /= static_cast<float>(worldSize);
-  copyFlattenedBufferToGrads(bucketIdx);
-}
-
-void Reducer::initBucket(Bucket& bucket, Device device, DType dtype) {
-  if (bucket.params.empty()) {
-    return;
-  }
-
-  bucket.totalSize = 0;
-  int64_t offset = 0;
-  for (auto& p : bucket.params) {
-    int64_t size = p->numel();
-    bucket.paramSizes.push_back(size);
-    bucket.paramOffsets.push_back(offset);
-    offset += size;
-    bucket.totalSize += size;
-  }
-
-  if (bucket.totalSize > 0) {
-    bucket.flatBuffer = Tensor::zeros({bucket.totalSize}, Options(device, dtype));
-  }
-
-  buckets_.push_back(std::move(bucket));
+  bucketReadyCnt_++;
+  checkAllBucketsReady();
 }
 
 void Reducer::prepareForBackward() {
+  bucketReadyCnt_ = 0;
   for (auto& bucket : buckets_) {
     bucket.readyCount = 0;
-    bucket.allReduceStarted = false;
+    bucket.reduceStarted = false;
+    bucket.work = nullptr;
   }
 }
 
@@ -154,35 +157,25 @@ void Reducer::broadcastParameters(int rootRank) const {
   }
 }
 
-void Reducer::synchronizeGradients() {
+void Reducer::checkAllBucketsReady() {
+  if (bucketReadyCnt_ < static_cast<int64_t>(buckets_.size())) {
+    return;
+  }
+
   for (int64_t bIdx = 0; bIdx < static_cast<int64_t>(buckets_.size()); bIdx++) {
     auto& bucket = buckets_[bIdx];
-    if (!bucket.allReduceStarted) {
-      copyGradsToFlattenedBuffer(bIdx);
-      bucket.allReduceStarted = true;
-      reduceBucket(bIdx);
+    if (bucket.work) {
+      bool success = bucket.work->wait();
+      ASSERT(success);
+
+      cuda::CudaDeviceGuard guard(bucket.flatBuffer.device().index);
+      auto worldSize = processGroup_->getWorldSize();
+      bucket.flatBuffer /= static_cast<float>(worldSize);
+      copyFlattenedBufferToGrads(bIdx);
+
+      bucket.work = nullptr;
     }
   }
-}
-
-bool Reducer::hasUnfinishedOperations() {
-  return std::any_of(buckets_.begin(), buckets_.end(), [](const Bucket& bucket) {
-    return bucket.allReduceStarted && bucket.readyCount < static_cast<int64_t>(bucket.params.size());
-  });
-}
-
-void Reducer::waitForAllOperations() {
-  if (processGroup_) {
-    while (hasUnfinishedOperations()) {
-      std::this_thread::sleep_for(std::chrono::microseconds(10));
-    }
-  }
-}
-
-bool Reducer::allGradientsReady() {
-  return std::all_of(buckets_.begin(), buckets_.end(), [](const Bucket& bucket) {
-    return bucket.readyCount >= static_cast<int64_t>(bucket.params.size());
-  });
 }
 
 void Reducer::copyParamsToFlattenedBuffer(int64_t bucketIdx) const {
