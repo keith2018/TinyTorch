@@ -199,4 +199,17 @@ struct ALIGN(16) Dim2D {
   int64_t w = 0;
 };
 
+#define FOR_ALL_TYPES(_) \
+  _(float)               \
+  _(Half)                \
+  _(BFloat16)            \
+  _(int32_t)             \
+  _(int64_t)             \
+  _(uint8_t)
+
+#define FOR_FLT_TYPES(_) \
+  _(float)               \
+  _(Half)                \
+  _(BFloat16)
+
 }  // namespace tinytorch
