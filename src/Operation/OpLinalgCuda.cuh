@@ -6,9 +6,6 @@
 
 #pragma once
 
-#include <thrust/device_ptr.h>
-#include <thrust/inner_product.h>
-
 #include "OpLinalg.h"
 #include "Utils/CUDAUtils.h"
 
@@ -79,20 +76,7 @@ __global__ void kCol2Im(T* ret, const T* self, const int64_t n, const int64_t ch
 }
 
 template <typename T>
-Tensor dotOpCudaImpl(const Tensor& self, const Tensor& other) {
-  using CudaT = typename cuda::CudaTypeCast<T>::type;
-  auto ret = Tensor::scalar(0, self.options().noGrad());
-
-  int64_t n = self.numel();
-  const auto& stream = cuda::getCurrentCUDAStream(self.device().index).stream();
-
-  thrust::device_ptr<const CudaT> selfPtr(self.dataPtr<CudaT>());
-  thrust::device_ptr<const CudaT> otherPtr(other.dataPtr<CudaT>());
-  thrust::device_ptr<CudaT> retPtr(ret.dataPtr<CudaT>());
-
-  *retPtr = thrust::inner_product(thrust::cuda::par.on(stream), selfPtr, selfPtr + n, otherPtr, CudaT(0));
-  return ret;
-}
+Tensor dotOpCudaImpl(const Tensor& self, const Tensor& other);
 
 template <typename T>
 Tensor im2colOpCudaImpl(const Tensor& self, Dim2D kernel, Dim2D stride, Dim2D padding = 0) {
