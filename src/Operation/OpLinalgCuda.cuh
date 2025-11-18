@@ -25,9 +25,9 @@ __global__ void kIm2Col(T* ret, const T* self, const int64_t n, const int64_t ch
     const int64_t colIdx = index / kernelSize;
 
     const int64_t b = colIdx / (channels * colH);
-    const int64_t c = (colIdx % (channels * colH)) / colH;
+    const int64_t c = (colIdx / colH) % channels;
     const int64_t h = (colIdx % colH) / outW;
-    const int64_t w = colIdx % outW;
+    const int64_t w = (colIdx % outW);
 
     const int64_t kh = kernelIdx / kernelW;
     const int64_t kw = kernelIdx % kernelW;
@@ -37,10 +37,10 @@ __global__ void kIm2Col(T* ret, const T* self, const int64_t n, const int64_t ch
 
     const int64_t ih = h * strideH - paddingH + kh;
     const int64_t iw = w * strideW - paddingW + kw;
-    T val = 0.f;
-    if (ih >= 0 && ih < height && iw >= 0 && iw < width) {
-      val = imPtr[ih * width + iw];
-    }
+
+    const bool inBounds = (ih >= 0) & (ih < height) & (iw >= 0) & (iw < width);
+    const T val = inBounds ? imPtr[ih * width + iw] : static_cast<T>(0);
+
     colPtr[kh * kernelW + kw] = val;
   }
 }
@@ -60,23 +60,24 @@ __global__ void kCol2Im(T* ret, const T* self, const int64_t n, const int64_t ch
     T val = static_cast<T>(0);
     const int64_t kernelSize = kernelH * kernelW;
 
-    for (int64_t oh = 0; oh < outH; oh++) {
-      for (int64_t ow = 0; ow < outW; ow++) {
+    auto ohStart = cuda::max<int64_t>(0, (h + paddingH - kernelH + strideH) / strideH);
+    auto ohEnd = cuda::min<int64_t>(outH - 1, (h + paddingH) / strideH);
+
+    auto owStart = cuda::max<int64_t>(0, (w + paddingW - kernelW + strideW) / strideW);
+    auto owEnd = cuda::min<int64_t>(outW - 1, (w + paddingW) / strideW);
+
+    for (int64_t oh = ohStart; oh <= ohEnd; oh++) {
+      for (int64_t ow = owStart; ow <= owEnd; ow++) {
         const int64_t kh = h - (oh * strideH - paddingH);
         const int64_t kw = w - (ow * strideW - paddingW);
 
-        if (kh >= 0 && kh < kernelH && kw >= 0 && kw < kernelW) {
-          const int64_t colIdx = ((b * outH * outW + oh * outW + ow) * channels + c) * kernelSize + (kh * kernelW + kw);
-          val += self[colIdx];
-        }
+        const int64_t colIdx = ((b * outH * outW + oh * outW + ow) * channels + c) * kernelSize + (kh * kernelW + kw);
+        val += self[colIdx];
       }
     }
     ret[index] = val;
   }
 }
-
-template <typename T>
-Tensor dotOpCudaImpl(const Tensor& self, const Tensor& other);
 
 template <typename T>
 Tensor im2colOpCudaImpl(const Tensor& self, Dim2D kernel, Dim2D stride, Dim2D padding = 0) {
@@ -132,6 +133,9 @@ Tensor col2imOpCudaImpl(const Tensor& self, const IntArrayView shape, Dim2D kern
                      kernel.w, stride.h, stride.w, padding.h, padding.w);
   return ret;
 }
+
+template <typename T>
+Tensor dotOpCudaImpl(const Tensor& self, const Tensor& other);
 
 inline void gemmCudaF32Impl(float* c, const float* a, const float* b, int64_t m, int64_t k, int64_t n, bool transA,
                             bool transB, DeviceIndex device) {
