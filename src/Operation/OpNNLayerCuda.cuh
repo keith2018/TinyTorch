@@ -388,46 +388,55 @@ __global__ void kRopeApplyScaling(T* invFreqPtr, int64_t halfDim, float original
 }
 
 template <typename T>
-__global__ void kRopePrecomputeCosSin(T* retPtr, const T* invFreqPtr, int64_t contextLength, int64_t headDim) {
+__global__ void kRopePrecomputeCosSin(const T* invFreqPtr, T* ropePtr, int64_t contextLength, int64_t headDim) {
   const int64_t pos = blockIdx.x;
   if (pos < contextLength) {
     auto halfDim = headDim >> 1;
     for (auto i = threadIdx.x; i < halfDim; i += blockDim.x) {
       float angle = static_cast<float>(pos) * static_cast<float>(invFreqPtr[i]);
-      int64_t offset = pos * headDim + i * 2;
-      retPtr[offset] = static_cast<T>(::cosf(angle));
-      retPtr[offset + 1] = static_cast<T>(::sinf(angle));
+
+      T cosVal = static_cast<T>(::cosf(angle));
+      T sinVal = static_cast<T>(::sinf(angle));
+
+      int64_t offset1 = (pos * headDim + i) * 2;
+      int64_t offset2 = (pos * headDim + halfDim + i) * 2;
+
+      ropePtr[offset1] = cosVal;
+      ropePtr[offset1 + 1] = sinVal;
+      ropePtr[offset2] = cosVal;
+      ropePtr[offset2 + 1] = sinVal;
     }
   }
 }
 
 template <typename T>
-__global__ void kRopeApply(T* output, const T* input, const int64_t* positions, const float* rope, int64_t innerSize,
-                           int64_t headDim) {
-  int64_t b = blockIdx.x;         // batch index
-  int64_t innerIdx = blockIdx.y;  // inner index
-  int64_t d = threadIdx.x;        // halfDim index
+__global__ void kRopeApply(const T* input, const float* rope, T* output, int64_t batch, int64_t numHead, int64_t seqLen,
+                           int64_t headDim, int64_t offset) {
+  const int64_t b = blockIdx.x / numHead;
+  const int64_t h = blockIdx.x % numHead;
+  const int64_t t = blockIdx.y * blockDim.x + threadIdx.x;
 
-  if (innerIdx >= innerSize) {
-    return;
+  if (b < batch && t < seqLen) {
+    const int64_t base = ((b * numHead + h) * seqLen + t) * headDim;
+    const T* xPtr = input + base;
+    T* yPtr = output + base;
+
+    const int64_t posIndex = offset + t;
+    const float* ropeRow = rope + posIndex * headDim * 2;
+
+    auto halfDim = headDim >> 1;
+    for (int64_t i = 0; i < halfDim; i++) {
+      auto x1 = static_cast<float>(xPtr[i]);
+      auto x2 = static_cast<float>(xPtr[halfDim + i]);
+
+      int64_t idx = i * 2;
+      float c = ropeRow[idx];      // cos
+      float s = ropeRow[idx + 1];  // sin
+
+      yPtr[i] = static_cast<T>(x1 * c - x2 * s);
+      yPtr[halfDim + i] = static_cast<T>(x2 * c + x1 * s);
+    }
   }
-
-  int64_t halfDim = headDim >> 1;
-  if (d >= halfDim) {
-    return;
-  }
-
-  int64_t pos = positions[b];
-  int64_t inputIdx = (b * innerSize + innerIdx) * headDim + d;
-  int64_t ropeIdx = pos * headDim + d * 2;
-
-  auto x0 = static_cast<float>(input[inputIdx]);
-  auto x1 = static_cast<float>(input[inputIdx + halfDim]);
-  float cosVal = rope[ropeIdx];
-  float sinVal = rope[ropeIdx + 1];
-
-  output[inputIdx] = static_cast<T>(x0 * cosVal - x1 * sinVal);
-  output[inputIdx + halfDim] = static_cast<T>(x0 * sinVal + x1 * cosVal);
 }
 
 template <typename T, SoftmaxType type>
@@ -633,51 +642,46 @@ Tensor ropeInitOpCudaImpl(int64_t headDim, int64_t contextLength, float thetaBas
                        scaling->highFreqFactor, scaling->factor);
   }
 
-  // precompute cos/sin
-  Tensor ret({contextLength, headDim}, options);
-  auto* retPtr = ret.dataPtr<float>();
+  // Shape: [contextLength, headDim, 2] where last dim is [cos, sin]
+  // Memory layout: [cos0, sin0, cos1, sin1, cos2, sin2, ...]
+  Tensor rope({contextLength, headDim, 2}, options);
+  auto* ropePtr = rope.dataPtr<float>();
 
   auto blockSize = cuda::getKernelBlockSize(options.device_.index);
   auto stream = cuda::getCurrentCUDAStream(options.device_.index).stream();
-  kRopePrecomputeCosSin<float><<<contextLength, blockSize, 0, stream>>>(retPtr, invFreqPtr, contextLength, headDim);
+  kRopePrecomputeCosSin<float><<<contextLength, blockSize, 0, stream>>>(invFreqPtr, ropePtr, contextLength, headDim);
   CUDA_KERNEL_CHECK();
-  return ret;
+
+  return rope;
 }
 
 template <typename T>
-Tensor ropeApplyOpCudaImpl(const Tensor& input, const Tensor& positions, const Tensor& rope) {
-  // input [batch, ..., headDim]
-  // positions [batch]
-  ASSERT(input.dim() >= 3);
-  ASSERT(positions.dim() == 1);
-  ASSERT(positions.dtype() == DType::Int64);
-  ASSERT(input.shape(0) == positions.shape(0));  // batch
-  ASSERT(input.shape(-1) == rope.shape(-1));     // headDim
-  ASSERT(rope.dtype() == DType::Float32);
+Tensor ropeApplyOpCudaImpl(const Tensor& input, const Tensor& rope, int64_t offset) {
+  const auto& shape = input.shape();  // [batch, numHead, seqLen, headDim]
+  ASSERT(shape.size() == 4);
 
-  int64_t batch = input.shape(0);
-  int64_t headDim = input.shape(-1);
-
-  int64_t innerSize = 1;
-  for (int64_t i = 1; i < input.dim() - 1; i++) {
-    innerSize *= input.shape(i);
-  }
-
+  int64_t batch = shape[0];
+  int64_t numHead = shape[1];
+  int64_t seqLen = shape[2];
+  int64_t headDim = shape[3];
   ASSERT(headDim % 2 == 0);
-  int64_t halfDim = headDim >> 1;
 
   using CudaT = typename cuda::CudaTypeCast<T>::type;
   const auto* inputPtr = input.dataPtr<CudaT>();
-  const auto* posPtr = positions.dataPtr<int64_t>();
   const auto* ropePtr = rope.dataPtr<float>();
 
-  Tensor out(input.shape(), input.options().noGrad());
+  Tensor out(shape, input.options().noGrad());
   auto* outPtr = out.dataPtr<CudaT>();
 
-  dim3 gridSize(batch, innerSize);
-  dim3 blockSize(halfDim);
+  const auto blockSize = cuda::getKernelBlockSize(input.device().index);
+  const auto blocksPerSeq = cuda::getKernelGridSize(blockSize, seqLen);
+
+  dim3 gridDim(batch * numHead, blocksPerSeq);
+  dim3 blockDim(blockSize);
+
   auto stream = cuda::getCurrentCUDAStream(input.device().index).stream();
-  kRopeApply<CudaT><<<gridSize, blockSize, 0, stream>>>(outPtr, inputPtr, posPtr, ropePtr, innerSize, headDim);
+  kRopeApply<CudaT>
+      <<<gridDim, blockDim, 0, stream>>>(inputPtr, ropePtr, outPtr, batch, numHead, seqLen, headDim, offset);
   CUDA_KERNEL_CHECK();
   return out;
 }

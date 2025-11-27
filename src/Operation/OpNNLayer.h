@@ -56,7 +56,7 @@ using RMSNormOpFn = Tensor (*)(const Tensor& self, IntArrayView normalizedShape,
 
 using RopeInitOpFn = Tensor (*)(int64_t headDim, int64_t contextLength, float thetaBase,
                                 std::optional<RopeScalingConfig> scaling, Options options);
-using RopeApplyOpFn = Tensor (*)(const Tensor& input, const Tensor& positions, const Tensor& rope);
+using RopeApplyOpFn = Tensor (*)(const Tensor& input, const Tensor& rope, int64_t offset);
 
 // softmax
 DEFINE_OP(softmax, SoftmaxOpFn);

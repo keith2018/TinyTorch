@@ -100,17 +100,12 @@ RoPE::RoPE(int64_t headDim, int64_t contextLength, float thetaBase, std::optiona
   RoPE::resetParameters();
 }
 
-Tensor RoPE::forward(const Tensor &input, int64_t position) {
-  auto pos = Tensor::full({input.shape(0)}, position, Options(input.device(), DType::Int64));
-  return function::ropeApply(input, pos, rope_);
-}
+Tensor RoPE::forward(const Tensor &input) { return function::ropeApply(input, rope_); }
 
-Tensor RoPE::forward(const Tensor &input, const Tensor &positions) {
-  return function::ropeApply(input, positions, rope_);
-}
+Tensor RoPE::forward(const Tensor &input, int64_t offset) { return function::ropeApply(input, rope_, offset); }
 
 void RoPE::resetParameters() { rope_ = op::ropeInit(headDim_, contextLength_, thetaBase_, scaling_, options_); }
 
-std::vector<std::pair<std::string, TensorPtr>> RoPE::namedStates_() { return {{"cos_sin", &rope_}}; }
+std::vector<std::pair<std::string, TensorPtr>> RoPE::namedStates_() { return {{"rope", &rope_}}; }
 
 }  // namespace tinytorch::nn
