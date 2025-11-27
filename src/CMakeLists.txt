@@ -65,16 +65,30 @@ endif ()
 
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
+# BLAS
+find_package(BLAS)
+if (BLAS_FOUND)
+    find_path(CBLAS_INCLUDE_DIR cblas.h
+            PATHS /usr/include /usr/include/openblas
+    )
+    target_include_directories(${PROJECT_NAME} PRIVATE ${CBLAS_INCLUDE_DIR})
+    target_compile_definitions(${PROJECT_NAME} PRIVATE __BLAS__)
+    target_link_libraries(${PROJECT_NAME} PRIVATE ${BLAS_LIBRARIES})
+endif ()
+
+# CUDA
 if (TINYTORCH_USE_CUDA)
     target_include_directories(${PROJECT_NAME} PUBLIC ${CUDA_INCLUDE_DIRS})
     target_link_libraries(${PROJECT_NAME} PUBLIC CUDA::cudart CUDA::curand CUDA::cublas)
 endif ()
 
+# NCCL
 if (TINYTORCH_USE_NCCL)
     target_include_directories(${PROJECT_NAME} PUBLIC ${NCCL_INCLUDE_DIRS})
     target_link_libraries(${PROJECT_NAME} PUBLIC ${NCCL_LIBRARY})
 endif ()
 
+# Apple Accelerate
 if (APPLE)
     target_compile_definitions(${PROJECT_NAME} PRIVATE ACCELERATE_NEW_LAPACK)
     target_link_libraries(${PROJECT_NAME} "-framework Accelerate")
