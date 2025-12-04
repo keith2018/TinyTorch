@@ -46,6 +46,7 @@ CudaDeviceGuard::~CudaDeviceGuard() {
 
 thread_local std::vector<CUDAStream> currentStreams(kMaxDevices);
 thread_local std::vector<cublasHandle_t> cublasHandles(kMaxDevices);
+static std::vector<int> gpuComputeCapabilities(kMaxDevices, -1);
 
 struct CublasHandleInitializer {
   CublasHandleInitializer() {
@@ -119,7 +120,16 @@ cublasHandle_t& getCublasHandle(int device) {
   }
   cublasHandle_t& handle = cublasHandles[device];
   if (!handle) {
+    CudaDeviceGuard guard(device);
     CUBLAS_CHECK(cublasCreate(&handle));
+    int cc = getGpuComputeCapability(device);
+    if (cc >= 80) {
+      // TF32 Tensor Core
+      CUBLAS_CHECK(cublasSetMathMode(handle, CUBLAS_TF32_TENSOR_OP_MATH));
+    } else if (cc >= 70) {
+      // Tensor Core
+      CUBLAS_CHECK(cublasSetMathMode(handle, CUBLAS_TENSOR_OP_MATH));
+    }
   }
   // bind to stream
   CUDAStream& s = getCurrentCUDAStream(device);
@@ -142,6 +152,17 @@ const cudaDeviceProp& getDeviceProperties(int device) {
     isCached[device] = true;
   }
   return cache[device];
+}
+
+int getGpuComputeCapability(int device) {
+  if (device < 0 || device >= kMaxDevices) {
+    return 0;
+  }
+  if (gpuComputeCapabilities[device] < 0) {
+    const auto& props = getDeviceProperties(device);
+    gpuComputeCapabilities[device] = props.major * 10 + props.minor;
+  }
+  return gpuComputeCapabilities[device];
 }
 
 int getMaxThreadsPerBlock(int device) { return getDeviceProperties(device).maxThreadsPerBlock; }

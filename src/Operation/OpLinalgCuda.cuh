@@ -166,7 +166,6 @@ inline void gemmCudaF16Impl(__half* c, const __half* a, const __half* b, int64_t
   constexpr float beta = 0.f;
 
   auto handle = cuda::getCublasHandle(device);
-  CUBLAS_CHECK(cublasSetMathMode(handle, CUBLAS_TENSOR_OP_MATH));
   CUBLAS_CHECK(cublasGemmEx(handle, opB, opA, n, m, k, &alpha, b, CUDA_R_16F, ldb, a, CUDA_R_16F, lda, &beta, c,
                             CUDA_R_16F, ldc, CUDA_R_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
 }
@@ -184,7 +183,6 @@ inline void gemmCudaBF16Impl(__nv_bfloat16* c, const __nv_bfloat16* a, const __n
   constexpr float beta = 0.f;
 
   auto handle = cuda::getCublasHandle(device);
-  CUBLAS_CHECK(cublasSetMathMode(handle, CUBLAS_TENSOR_OP_MATH));
   CUBLAS_CHECK(cublasGemmEx(handle, opB, opA, n, m, k, &alpha, b, CUDA_R_16BF, ldb, a, CUDA_R_16BF, lda, &beta, c,
                             CUDA_R_16BF, ldc, CUDA_R_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
 }
@@ -207,6 +205,167 @@ void gemmImpl<BFloat16, DeviceType::CUDA>(BFloat16* c, const BFloat16* a, const 
                                           int64_t n, bool transA, bool transB, DeviceIndex device) {
   gemmCudaBF16Impl(reinterpret_cast<__nv_bfloat16*>(c), reinterpret_cast<const __nv_bfloat16*>(a),
                    reinterpret_cast<const __nv_bfloat16*>(b), m, k, n, transA, transB, device);
+}
+
+inline void gemmStridedBatchedCudaF32Impl(float* c, const float* a, const float* b, int64_t m, int64_t k, int64_t n,
+                                          int64_t strideA, int64_t strideB, int64_t strideC, int64_t batchCount,
+                                          bool transA, bool transB, DeviceIndex device) {
+  cublasOperation_t opA = transA ? CUBLAS_OP_T : CUBLAS_OP_N;
+  cublasOperation_t opB = transB ? CUBLAS_OP_T : CUBLAS_OP_N;
+
+  int lda = static_cast<int>(transA ? m : k);
+  int ldb = static_cast<int>(transB ? k : n);
+  int ldc = static_cast<int>(n);
+
+  constexpr float alpha = 1.f;
+  constexpr float beta = 0.f;
+
+  auto handle = cuda::getCublasHandle(device);
+  CUBLAS_CHECK(cublasSgemmStridedBatched(handle, opB, opA, n, m, k, &alpha, b, ldb, strideB, a, lda, strideA, &beta, c,
+                                         ldc, strideC, static_cast<int>(batchCount)));
+}
+
+inline void gemmStridedBatchedCudaF16Impl(__half* c, const __half* a, const __half* b, int64_t m, int64_t k, int64_t n,
+                                          int64_t strideA, int64_t strideB, int64_t strideC, int64_t batchCount,
+                                          bool transA, bool transB, DeviceIndex device) {
+  cublasOperation_t opA = transA ? CUBLAS_OP_T : CUBLAS_OP_N;
+  cublasOperation_t opB = transB ? CUBLAS_OP_T : CUBLAS_OP_N;
+
+  int lda = static_cast<int>(transA ? m : k);
+  int ldb = static_cast<int>(transB ? k : n);
+  int ldc = static_cast<int>(n);
+
+  constexpr float alpha = 1.f;
+  constexpr float beta = 0.f;
+
+  auto handle = cuda::getCublasHandle(device);
+  CUBLAS_CHECK(cublasGemmStridedBatchedEx(handle, opB, opA, n, m, k, &alpha, b, CUDA_R_16F, ldb, strideB, a, CUDA_R_16F,
+                                          lda, strideA, &beta, c, CUDA_R_16F, ldc, strideC,
+                                          static_cast<int>(batchCount), CUDA_R_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+}
+
+inline void gemmStridedBatchedCudaBF16Impl(__nv_bfloat16* c, const __nv_bfloat16* a, const __nv_bfloat16* b, int64_t m,
+                                           int64_t k, int64_t n, int64_t strideA, int64_t strideB, int64_t strideC,
+                                           int64_t batchCount, bool transA, bool transB, DeviceIndex device) {
+  cublasOperation_t opA = transA ? CUBLAS_OP_T : CUBLAS_OP_N;
+  cublasOperation_t opB = transB ? CUBLAS_OP_T : CUBLAS_OP_N;
+
+  int lda = static_cast<int>(transA ? m : k);
+  int ldb = static_cast<int>(transB ? k : n);
+  int ldc = static_cast<int>(n);
+
+  constexpr float alpha = 1.f;
+  constexpr float beta = 0.f;
+
+  auto handle = cuda::getCublasHandle(device);
+  CUBLAS_CHECK(cublasGemmStridedBatchedEx(handle, opB, opA, n, m, k, &alpha, b, CUDA_R_16BF, ldb, strideB, a,
+                                          CUDA_R_16BF, lda, strideA, &beta, c, CUDA_R_16BF, ldc, strideC,
+                                          static_cast<int>(batchCount), CUDA_R_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+}
+
+template <>
+void gemmStridedBatchedImpl<float, DeviceType::CUDA>(float* c, const float* a, const float* b, int64_t m, int64_t k,
+                                                     int64_t n, int64_t strideA, int64_t strideB, int64_t strideC,
+                                                     int64_t batchCount, bool transA, bool transB, DeviceIndex device) {
+  gemmStridedBatchedCudaF32Impl(c, a, b, m, k, n, strideA, strideB, strideC, batchCount, transA, transB, device);
+}
+
+template <>
+void gemmStridedBatchedImpl<Half, DeviceType::CUDA>(Half* c, const Half* a, const Half* b, int64_t m, int64_t k,
+                                                    int64_t n, int64_t strideA, int64_t strideB, int64_t strideC,
+                                                    int64_t batchCount, bool transA, bool transB, DeviceIndex device) {
+  gemmStridedBatchedCudaF16Impl(reinterpret_cast<__half*>(c), reinterpret_cast<const __half*>(a),
+                                reinterpret_cast<const __half*>(b), m, k, n, strideA, strideB, strideC, batchCount,
+                                transA, transB, device);
+}
+
+template <>
+void gemmStridedBatchedImpl<BFloat16, DeviceType::CUDA>(BFloat16* c, const BFloat16* a, const BFloat16* b, int64_t m,
+                                                        int64_t k, int64_t n, int64_t strideA, int64_t strideB,
+                                                        int64_t strideC, int64_t batchCount, bool transA, bool transB,
+                                                        DeviceIndex device) {
+  gemmStridedBatchedCudaBF16Impl(reinterpret_cast<__nv_bfloat16*>(c), reinterpret_cast<const __nv_bfloat16*>(a),
+                                 reinterpret_cast<const __nv_bfloat16*>(b), m, k, n, strideA, strideB, strideC,
+                                 batchCount, transA, transB, device);
+}
+
+inline void gemmBatchedCudaF32Impl(float** c, const float** a, const float** b, int64_t m, int64_t k, int64_t n,
+                                   int64_t batchCount, bool transA, bool transB, DeviceIndex device) {
+  cublasOperation_t opA = transA ? CUBLAS_OP_T : CUBLAS_OP_N;
+  cublasOperation_t opB = transB ? CUBLAS_OP_T : CUBLAS_OP_N;
+
+  int lda = static_cast<int>(transA ? m : k);
+  int ldb = static_cast<int>(transB ? k : n);
+  int ldc = static_cast<int>(n);
+
+  constexpr float alpha = 1.f;
+  constexpr float beta = 0.f;
+
+  auto handle = cuda::getCublasHandle(device);
+  CUBLAS_CHECK(cublasSgemmBatched(handle, opB, opA, n, m, k, &alpha, b, ldb, a, lda, &beta, c, ldc,
+                                  static_cast<int>(batchCount)));
+}
+
+inline void gemmBatchedCudaF16Impl(__half** c, const __half** a, const __half** b, int64_t m, int64_t k, int64_t n,
+                                   int64_t batchCount, bool transA, bool transB, DeviceIndex device) {
+  cublasOperation_t opA = transA ? CUBLAS_OP_T : CUBLAS_OP_N;
+  cublasOperation_t opB = transB ? CUBLAS_OP_T : CUBLAS_OP_N;
+
+  int lda = static_cast<int>(transA ? m : k);
+  int ldb = static_cast<int>(transB ? k : n);
+  int ldc = static_cast<int>(n);
+
+  constexpr float alpha = 1.f;
+  constexpr float beta = 0.f;
+
+  auto handle = cuda::getCublasHandle(device);
+  CUBLAS_CHECK(cublasGemmBatchedEx(handle, opB, opA, n, m, k, &alpha, (const void**)b, CUDA_R_16F, ldb, (const void**)a,
+                                   CUDA_R_16F, lda, &beta, (void**)c, CUDA_R_16F, ldc, static_cast<int>(batchCount),
+                                   CUDA_R_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+}
+
+inline void gemmBatchedCudaBF16Impl(__nv_bfloat16** c, const __nv_bfloat16** a, const __nv_bfloat16** b, int64_t m,
+                                    int64_t k, int64_t n, int64_t batchCount, bool transA, bool transB,
+                                    DeviceIndex device) {
+  cublasOperation_t opA = transA ? CUBLAS_OP_T : CUBLAS_OP_N;
+  cublasOperation_t opB = transB ? CUBLAS_OP_T : CUBLAS_OP_N;
+
+  int lda = static_cast<int>(transA ? m : k);
+  int ldb = static_cast<int>(transB ? k : n);
+  int ldc = static_cast<int>(n);
+
+  constexpr float alpha = 1.f;
+  constexpr float beta = 0.f;
+
+  auto handle = cuda::getCublasHandle(device);
+  CUBLAS_CHECK(cublasGemmBatchedEx(handle, opB, opA, n, m, k, &alpha, (const void**)b, CUDA_R_16BF, ldb,
+                                   (const void**)a, CUDA_R_16BF, lda, &beta, (void**)c, CUDA_R_16BF, ldc,
+                                   static_cast<int>(batchCount), CUDA_R_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+}
+
+template <typename T, DeviceType type>
+void gemmBatchedImpl(T**, const T**, const T**, int64_t, int64_t, int64_t, int64_t, bool, bool, DeviceIndex);
+
+template <>
+void gemmBatchedImpl<float, DeviceType::CUDA>(float** c, const float** a, const float** b, int64_t m, int64_t k,
+                                              int64_t n, int64_t batchCount, bool transA, bool transB,
+                                              DeviceIndex device) {
+  gemmBatchedCudaF32Impl(c, a, b, m, k, n, batchCount, transA, transB, device);
+}
+
+template <>
+void gemmBatchedImpl<Half, DeviceType::CUDA>(Half** c, const Half** a, const Half** b, int64_t m, int64_t k, int64_t n,
+                                             int64_t batchCount, bool transA, bool transB, DeviceIndex device) {
+  gemmBatchedCudaF16Impl(reinterpret_cast<__half**>(c), reinterpret_cast<const __half**>(a),
+                         reinterpret_cast<const __half**>(b), m, k, n, batchCount, transA, transB, device);
+}
+
+template <>
+void gemmBatchedImpl<BFloat16, DeviceType::CUDA>(BFloat16** c, const BFloat16** a, const BFloat16** b, int64_t m,
+                                                 int64_t k, int64_t n, int64_t batchCount, bool transA, bool transB,
+                                                 DeviceIndex device) {
+  gemmBatchedCudaBF16Impl(reinterpret_cast<__nv_bfloat16**>(c), reinterpret_cast<const __nv_bfloat16**>(a),
+                          reinterpret_cast<const __nv_bfloat16**>(b), m, k, n, batchCount, transA, transB, device);
 }
 
 }  // namespace tinytorch::op
