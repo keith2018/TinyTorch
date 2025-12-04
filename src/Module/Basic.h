@@ -143,8 +143,11 @@ class RoPE : public Module {
   explicit RoPE(int64_t headDim, int64_t contextLength = 4096, float thetaBase = 10000.0f,
                 std::optional<RopeScalingConfig> scaling = std::nullopt, Options options = {});
 
+  using Module::forward;
   Tensor forward(const Tensor &input) override;
   Tensor forward(const Tensor &input, int64_t offset);
+
+  using Module::operator();
   Tensor operator()(const Tensor &input, int64_t offset = 0) { return forward(input, offset); }
 
   void resetParameters() override;
