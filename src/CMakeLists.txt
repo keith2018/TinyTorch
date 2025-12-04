@@ -1,11 +1,10 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.24)
 project(TinyTorch_lib)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if (TINYTORCH_USE_CUDA)
-    set(CMAKE_CUDA_ARCHITECTURES "60;70;75;80")
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --extended-lambda --expt-relaxed-constexpr")
     find_package(CUDAToolkit REQUIRED)
     enable_language(CUDA)
@@ -83,6 +82,7 @@ endif ()
 
 # CUDA
 if (TINYTORCH_USE_CUDA)
+    set_property(TARGET ${PROJECT_NAME} PROPERTY CUDA_ARCHITECTURES native)
     target_include_directories(${PROJECT_NAME} PUBLIC ${CUDA_INCLUDE_DIRS})
     target_link_libraries(${PROJECT_NAME} PUBLIC CUDA::cudart CUDA::curand CUDA::cublas)
 endif ()
