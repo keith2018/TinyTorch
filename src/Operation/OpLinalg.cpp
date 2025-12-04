@@ -8,6 +8,19 @@
 
 namespace tinytorch::op {
 
+inline SizeVector makePaddedStrides(const IntArrayView &strides, int64_t targetDim) {
+  auto srcSize = static_cast<int64_t>(strides.size());
+  if (srcSize >= targetDim) {
+    return {strides};
+  }
+  SizeVector result(targetDim, 0);
+  auto offset = targetDim - srcSize;
+  for (int64_t i = 0; i < srcSize; i++) {
+    result[offset + i] = strides[i];
+  }
+  return result;
+}
+
 SizeVector broadcastShape(const IntArrayView t0, const IntArrayView t1, int64_t skipLast) {
   SizeVector retShape = SizeVector(t0.size() > t1.size() ? t0 : t1);
 
@@ -87,20 +100,107 @@ Tensor matmulOpImplDetail(const Tensor &a, const Tensor &b, bool transA = false,
   T *retPtr = retTensor.dataPtr<T>();
 
   auto gemm = getGemmFunc<T>(a.device().type);
+  ASSERT(gemm != nullptr);
 
   if (retDimCnt > 2) {
     // batched matrix multiply with broadcasting
     int64_t batchSize = retTensor.numel() / (m * n);
 
-    SizeVector aStrides(a.strides());
-    SizeVector bStrides(b.strides());
-    while (static_cast<int64_t>(aStrides.size()) < retTensor.dim()) {
-      aStrides.insert(aStrides.begin(), 0);
-    }
-    while (static_cast<int64_t>(bStrides.size()) < retTensor.dim()) {
-      bStrides.insert(bStrides.begin(), 0);
+    // strided batched gemm
+    auto gemmStridedBatched = getGemmStridedBatchedFunc<T>(a.device().type);
+    if (gemmStridedBatched != nullptr) {
+      // check if no broadcasting is needed in batch dimensions
+      bool needsBroadcast = false;
+      auto aBatchDims = static_cast<int64_t>(shapeA.size()) - 2;
+      auto bBatchDims = static_cast<int64_t>(shapeB.size()) - 2;
+      auto retBatchDims = static_cast<int64_t>(retShape.size()) - 2;
+
+      for (int64_t i = 0; i < retBatchDims; i++) {
+        int64_t aIdx = i - (retBatchDims - aBatchDims);
+        int64_t bIdx = i - (retBatchDims - bBatchDims);
+
+        int64_t aDim = (aIdx >= 0 && aIdx < aBatchDims) ? shapeA[aIdx] : 1;
+        int64_t bDim = (bIdx >= 0 && bIdx < bBatchDims) ? shapeB[bIdx] : 1;
+
+        if ((aDim == 1 && bDim > 1) || (bDim == 1 && aDim > 1)) {
+          needsBroadcast = true;
+          break;
+        }
+      }
+
+      if (!needsBroadcast) {
+        int64_t strideA = m * k;
+        int64_t strideB = k * n;
+        int64_t strideC = m * n;
+        gemmStridedBatched(retPtr, selfPtr, otherPtr, m, k, n, strideA, strideB, strideC, batchSize, transA, transB,
+                           a.device().index);
+
+        // reduce dimension if necessary
+        if (appendB) {
+          if (prependA) {
+            retTensor.reshape_({});
+          } else {
+            retTensor.reshape_({m});
+          }
+        }
+        return retTensor;
+      }
     }
 
+    SizeVector aStrides = makePaddedStrides(a.strides(), retTensor.dim());
+    SizeVector bStrides = makePaddedStrides(b.strides(), retTensor.dim());
+
+    // pointer arrays based batched gemm
+    auto gemmBatched = getGemmBatchedFunc<T>(a.device().type);
+    if (gemmBatched != nullptr) {
+      SmallVector<const T *, 32> ptrsHost(batchSize * 3);
+      const T **aPtrsHost = ptrsHost.data();
+      const T **bPtrsHost = ptrsHost.data() + batchSize;
+      const T **cPtrsHost = reinterpret_cast<const T **>(ptrsHost.data() + batchSize * 2);
+
+      for (int64_t batch = 0; batch < batchSize; batch++) {
+        int64_t aOffset = 0;
+        int64_t bOffset = 0;
+        int64_t tmp = batch;
+        for (auto i = retDimCnt - 3; i >= 0; i--) {
+          int64_t index = tmp % retShape[i];
+          tmp /= retShape[i];
+          if (static_cast<int64_t>(a.shape().size()) > i && a.shape()[i] != 1) {
+            aOffset += index * aStrides[i];
+          }
+          if (static_cast<int64_t>(b.shape().size()) > i && b.shape()[i] != 1) {
+            bOffset += index * bStrides[i];
+          }
+        }
+        aPtrsHost[batch] = selfPtr + aOffset;
+        bPtrsHost[batch] = otherPtr + bOffset;
+        cPtrsHost[batch] = retPtr + batch * m * n;
+      }
+
+      // copy pointer array to device
+      Storage ptrStorage(batchSize * sizeof(T *) * 3, a.device());
+      Storage::copyOnDevice(ptrStorage.dataPtr(), a.device(), ptrsHost.data(), Device(DeviceType::CPU),
+                            ptrStorage.size());
+
+      T **devPtrs = ptrStorage.dataPtr<T *>();
+      const T **aPtrsDevice = const_cast<const T **>(devPtrs);
+      const T **bPtrsDevice = const_cast<const T **>(devPtrs + batchSize);
+      T **cPtrsDevice = devPtrs + batchSize * 2;
+
+      gemmBatched(cPtrsDevice, aPtrsDevice, bPtrsDevice, m, k, n, batchSize, transA, transB, a.device().index);
+
+      // reduce dimension if necessary
+      if (appendB) {
+        if (prependA) {
+          retTensor.reshape_({});
+        } else {
+          retTensor.reshape_({m});
+        }
+      }
+      return retTensor;
+    }
+
+    // fallback: loop-based batched gemm
     for (int64_t batch = 0; batch < batchSize; batch++) {
       int64_t aOffset = 0;
       int64_t bOffset = 0;
@@ -156,6 +256,7 @@ Tensor matmulOpImpl(const Tensor &a, const Tensor &b, bool transA, bool transB) 
     T *retPtr = retTensor.dataPtr<T>();
 
     auto gemm = getGemmFunc<T>(a.device().type);
+    ASSERT(gemm != nullptr);
     gemm(retPtr, selfPtr, otherPtr, m, k, n, transA, transB, a.device().index);
     return retTensor;
   }

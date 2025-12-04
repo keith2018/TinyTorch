@@ -259,6 +259,7 @@ struct KernelLaunchParams {
   cudaStream_t stream = nullptr;
 };
 
+int getGpuComputeCapability(int device);
 int getMaxThreadsPerBlock(int device);
 size_t getMaxSharedMemoryPerBlock(int device);
 unsigned int getKernelBlockSize(int device);

@@ -15,8 +15,23 @@ SizeVector broadcastShape(IntArrayView t0, IntArrayView t1, int64_t skipLast);
 template <typename T, DeviceType type>
 void gemmImpl(T*, const T*, const T*, int64_t, int64_t, int64_t, bool, bool, DeviceIndex);
 
+template <typename T, DeviceType type>
+void gemmStridedBatchedImpl(T*, const T*, const T*, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, bool,
+                            bool, DeviceIndex);
+
+template <typename T, DeviceType type>
+void gemmBatchedImpl(T**, const T**, const T**, int64_t, int64_t, int64_t, int64_t, bool, bool, DeviceIndex);
+
 template <typename T>
 using GemmFunc = void (*)(T*, const T*, const T*, int64_t, int64_t, int64_t, bool, bool, DeviceIndex);
+
+template <typename T>
+using GemmStridedBatchedFunc = void (*)(T*, const T*, const T*, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t,
+                                        int64_t, bool, bool, DeviceIndex);
+
+template <typename T>
+using GemmBatchedFunc = void (*)(T**, const T**, const T**, int64_t, int64_t, int64_t, int64_t, bool, bool,
+                                 DeviceIndex);
 
 template <typename T>
 GemmFunc<T> getGemmFunc(DeviceType deviceType) {
@@ -26,6 +41,30 @@ GemmFunc<T> getGemmFunc(DeviceType deviceType) {
 #ifdef USE_CUDA
     case DeviceType::CUDA:
       return &gemmImpl<T, DeviceType::CUDA>;
+#endif
+    default:
+      return nullptr;
+  }
+}
+
+template <typename T>
+GemmStridedBatchedFunc<T> getGemmStridedBatchedFunc(DeviceType deviceType) {
+  switch (deviceType) {
+#ifdef USE_CUDA
+    case DeviceType::CUDA:
+      return &gemmStridedBatchedImpl<T, DeviceType::CUDA>;
+#endif
+    default:
+      return nullptr;
+  }
+}
+
+template <typename T>
+GemmBatchedFunc<T> getGemmBatchedFunc(DeviceType deviceType) {
+  switch (deviceType) {
+#ifdef USE_CUDA
+    case DeviceType::CUDA:
+      return &gemmBatchedImpl<T, DeviceType::CUDA>;
 #endif
     default:
       return nullptr;
