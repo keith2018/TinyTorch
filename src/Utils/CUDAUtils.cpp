@@ -25,10 +25,13 @@ int getDeviceCount() {
   return cnt;
 }
 
-static int kMaxDevices = getDeviceCount();
+static int getMaxDevices() {
+  static int maxDevices = getDeviceCount();
+  return maxDevices;
+}
 
 CudaDeviceGuard::CudaDeviceGuard(int newIndex) {
-  ASSERT(newIndex >= 0 && newIndex < kMaxDevices);
+  ASSERT(newIndex >= 0 && newIndex < getMaxDevices());
   CUDA_CHECK(cudaGetDevice(&oldIndex_));
   if (newIndex != oldIndex_) {
     CUDA_CHECK(cudaSetDevice(newIndex));
@@ -44,21 +47,39 @@ CudaDeviceGuard::~CudaDeviceGuard() {
   }
 }
 
-thread_local std::vector<CUDAStream> currentStreams(kMaxDevices);
-thread_local std::vector<cublasHandle_t> cublasHandles(kMaxDevices);
-static std::vector<int> gpuComputeCapabilities(kMaxDevices, -1);
+thread_local std::vector<CUDAStream>* currentStreams = nullptr;
+thread_local std::vector<cublasHandle_t>* cublasHandles = nullptr;
+static std::vector<int>* gpuComputeCapabilities = nullptr;
+
+static std::vector<CUDAStream>& getCurrentStreamsVec() {
+  if (!currentStreams) {
+    currentStreams = new std::vector<CUDAStream>(getMaxDevices());
+  }
+  return *currentStreams;
+}
+
+static std::vector<cublasHandle_t>& getCublasHandlesVec() {
+  if (!cublasHandles) {
+    cublasHandles = new std::vector<cublasHandle_t>(getMaxDevices(), nullptr);
+  }
+  return *cublasHandles;
+}
+
+static std::vector<int>& getGpuComputeCapabilitiesVec() {
+  if (!gpuComputeCapabilities) {
+    gpuComputeCapabilities = new std::vector<int>(getMaxDevices(), -1);
+  }
+  return *gpuComputeCapabilities;
+}
 
 struct CublasHandleInitializer {
-  CublasHandleInitializer() {
-    for (auto i = 0; i < kMaxDevices; i++) {
-      cublasHandles[i] = nullptr;
-    }
-  }
+  CublasHandleInitializer() = default;
   ~CublasHandleInitializer() {
-    for (auto i = 0; i < kMaxDevices; i++) {
-      if (cublasHandles[i]) {
-        CUBLAS_CHECK(cublasDestroy(cublasHandles[i]));
-        cublasHandles[i] = nullptr;
+    auto& handles = getCublasHandlesVec();
+    for (auto i = 0; i < getMaxDevices(); i++) {
+      if (handles[i]) {
+        CUBLAS_CHECK(cublasDestroy(handles[i]));
+        handles[i] = nullptr;
       }
     }
   }
@@ -66,7 +87,7 @@ struct CublasHandleInitializer {
 thread_local CublasHandleInitializer _cublasHandleInit;
 
 void setDevice(int device) {
-  if (device < 0 || device >= kMaxDevices) {
+  if (device < 0 || device >= getMaxDevices()) {
     LOGE("setCurrentDevice: invalid device: %d", device);
     return;
   }
@@ -100,12 +121,13 @@ CUDAStream createCUDAStream(int device) { return CUDAStream(device); }
 CUDAEvent createCUDAEvent(int device, unsigned int flags) { return CUDAEvent(device, flags); }
 
 CUDAStream& getCurrentCUDAStream(int device) {
-  if (device < 0 || device >= kMaxDevices) {
-    LOGE("getCublasHandle: invalid device: %d", device);
+  if (device < 0 || device >= getMaxDevices()) {
+    LOGE("getCurrentCUDAStream: invalid device: %d", device);
     static CUDAStream empty{};
     return empty;
   }
-  auto& stream = currentStreams[device];
+  auto& streams = getCurrentStreamsVec();
+  auto& stream = streams[device];
   if (!stream.valid()) {
     stream = createCUDAStream(device);
   }
@@ -113,12 +135,13 @@ CUDAStream& getCurrentCUDAStream(int device) {
 }
 
 cublasHandle_t& getCublasHandle(int device) {
-  if (device < 0 || device >= kMaxDevices) {
+  if (device < 0 || device >= getMaxDevices()) {
     LOGE("getCublasHandle: invalid device: %d", device);
     static cublasHandle_t empty = nullptr;
     return empty;
   }
-  cublasHandle_t& handle = cublasHandles[device];
+  auto& handles = getCublasHandlesVec();
+  cublasHandle_t& handle = handles[device];
   if (!handle) {
     CudaDeviceGuard guard(device);
     CUBLAS_CHECK(cublasCreate(&handle));
@@ -138,10 +161,10 @@ cublasHandle_t& getCublasHandle(int device) {
 }
 
 const cudaDeviceProp& getDeviceProperties(int device) {
-  static std::vector<cudaDeviceProp> cache(kMaxDevices);
-  static std::vector<bool> isCached(kMaxDevices, false);
+  static std::vector<cudaDeviceProp> cache(getMaxDevices());
+  static std::vector<bool> isCached(getMaxDevices(), false);
 
-  if (device < 0 || device >= kMaxDevices) {
+  if (device < 0 || device >= getMaxDevices()) {
     LOGE("getDeviceProperties: invalid device: %d", device);
     static cudaDeviceProp empty;
     return empty;
@@ -155,14 +178,15 @@ const cudaDeviceProp& getDeviceProperties(int device) {
 }
 
 int getGpuComputeCapability(int device) {
-  if (device < 0 || device >= kMaxDevices) {
+  if (device < 0 || device >= getMaxDevices()) {
     return 0;
   }
-  if (gpuComputeCapabilities[device] < 0) {
+  auto& capabilities = getGpuComputeCapabilitiesVec();
+  if (capabilities[device] < 0) {
     const auto& props = getDeviceProperties(device);
-    gpuComputeCapabilities[device] = props.major * 10 + props.minor;
+    capabilities[device] = props.major * 10 + props.minor;
   }
-  return gpuComputeCapabilities[device];
+  return capabilities[device];
 }
 
 int getMaxThreadsPerBlock(int device) { return getDeviceProperties(device).maxThreadsPerBlock; }
