@@ -84,7 +84,7 @@ DispatchKey getDispatchKeyFromArgs(First&& first, Rest&&... rest) {
     if (!fn) {                                                                                                     \
       std::cerr << "Error call op: " << #opname << ", no impl for dispatch key = " << key.toString() << std::endl; \
     }                                                                                                              \
-    ASSERT(fn&& #opname);                                                                                          \
+    ASSERT(fn && #opname);                                                                                         \
     return fn(std::forward<Args>(args)...);                                                                        \
   }                                                                                                                \
   struct opname##Register {                                                                                        \

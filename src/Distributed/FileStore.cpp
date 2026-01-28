@@ -30,7 +30,7 @@ class FileLock {
       return;
     }
 
-    struct flock fl {};
+    struct flock fl{};
     fl.l_type = F_WRLCK;
     fl.l_whence = SEEK_SET;
     fl.l_start = 0;
@@ -44,7 +44,7 @@ class FileLock {
 
   ~FileLock() {
     if (fd_ != -1) {
-      struct flock fl {};
+      struct flock fl{};
       fl.l_type = F_UNLCK;
       fl.l_whence = SEEK_SET;
       fl.l_start = 0;

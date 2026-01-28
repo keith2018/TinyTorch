@@ -14,13 +14,9 @@ void Initializer::zeros(Tensor &tensor) { tensor.fillZero_(); }
 
 void Initializer::ones(Tensor &tensor) { tensor.fillOne_(); }
 
-void Initializer::normal(Tensor &tensor, float mean, float stddev) {
-  tensor.fillNormal_(mean, stddev);
-}
+void Initializer::normal(Tensor &tensor, float mean, float stddev) { tensor.fillNormal_(mean, stddev); }
 
-void Initializer::uniform(Tensor &tensor, float min, float max) {
-  tensor.fillUniform_(min, max);
-}
+void Initializer::uniform(Tensor &tensor, float min, float max) { tensor.fillUniform_(min, max); }
 
 void Initializer::kaimingUniform(Tensor &tensor, float a, FanMode mode) {
   auto fan = calculateFan(tensor, mode);

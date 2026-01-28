@@ -138,17 +138,17 @@ constexpr DType TypeToDType_v = TypeToDType<T>::value;
 template <typename T>
 void CheckDTypeMatch(DType dtype) {
   if (dtype == DType::Float32) {
-    ASSERT((std::is_same_v<T, float>)&&"Type mismatch: expected float");
+    ASSERT((std::is_same_v<T, float>) && "Type mismatch: expected float");
   } else if (dtype == DType::Float16) {
-    ASSERT((std::is_same_v<T, Half>)&&"Type mismatch: expected Half");
+    ASSERT((std::is_same_v<T, Half>) && "Type mismatch: expected Half");
   } else if (dtype == DType::BFloat16) {
-    ASSERT((std::is_same_v<T, BFloat16>)&&"Type mismatch: expected BFloat16");
+    ASSERT((std::is_same_v<T, BFloat16>) && "Type mismatch: expected BFloat16");
   } else if (dtype == DType::Int32) {
-    ASSERT((std::is_same_v<T, int32_t>)&&"Type mismatch: expected int32_t");
+    ASSERT((std::is_same_v<T, int32_t>) && "Type mismatch: expected int32_t");
   } else if (dtype == DType::Int64) {
-    ASSERT((std::is_same_v<T, int64_t>)&&"Type mismatch: expected int64_t");
+    ASSERT((std::is_same_v<T, int64_t>) && "Type mismatch: expected int64_t");
   } else if (dtype == DType::Bool) {
-    ASSERT((std::is_same_v<T, uint8_t>)&&"Type mismatch: expected uint8_t");
+    ASSERT((std::is_same_v<T, uint8_t>) && "Type mismatch: expected uint8_t");
   } else {
     ASSERT(false && "Unknown DType");
   }
