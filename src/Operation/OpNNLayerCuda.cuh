@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include "FlashAtten/launcher.cuh"
 #include "OpNNLayer.h"
 #include "OpReduceCuda.cuh"
 #include "Tensor/TensorIterator.cuh"
@@ -709,37 +708,6 @@ Tensor ropeApplyOpCudaImpl(const Tensor& input, const Tensor& rope, int64_t offs
 }
 
 template <typename T>
-Tensor flashAttentionOpCudaImpl(const Tensor& query, const Tensor& key, const Tensor& value, bool isCausal) {
-  const auto& qShape = query.shape();  // [batch, seqLenQ, numHeadsQ, headDim]
-  const auto& kShape = key.shape();    // [batch, seqLenKV, numHeadsKV, headDim]
-  ASSERT(qShape.size() == 4);
-  ASSERT(kShape.size() == 4);
-
-  auto batch = qShape[0];
-  auto numHeadsQ = qShape[2];
-  auto numHeadsKV = kShape[2];
-  auto headDim = qShape[3];
-
-  ASSERT(numHeadsQ % numHeadsKV == 0);  // GQA
-
-  auto seqLenQ = query.size(1);
-  auto seqLenKV = key.size(1);
-
-  using CudaT = typename cuda::CudaTypeCast<T>::type;
-
-  Tensor out(qShape, query.options().noGrad());
-  auto* outPtr = out.dataPtr<CudaT>();
-
-  const auto* qPtr = query.dataPtr<CudaT>();
-  const auto* kPtr = key.dataPtr<CudaT>();
-  const auto* vPtr = value.dataPtr<CudaT>();
-  auto* oPtr = out.dataPtr<CudaT>();
-
-  auto stream = cuda::getCurrentCUDAStream(query.device().index).stream();
-  tfa::flashAttn<CudaT>(qPtr, kPtr, vPtr, oPtr, batch, seqLenQ, seqLenKV, numHeadsQ, numHeadsKV, headDim, isCausal,
-                        stream);
-  CUDA_KERNEL_CHECK();
-  return out;
-}
+Tensor flashAttentionOpCudaImpl(const Tensor& query, const Tensor& key, const Tensor& value, bool isCausal);
 
 }  // namespace tinytorch::op
