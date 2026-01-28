@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "FlashAtten/launcher.cuh"
 #include "OpNNLayer.h"
 #include "OpReduceCuda.cuh"
 #include "Tensor/TensorIterator.cuh"
@@ -411,20 +412,20 @@ __global__ void kRopePrecomputeCosSin(const T* invFreqPtr, T* ropePtr, int64_t c
 
 template <typename T>
 __global__ void kRopeApply(const T* input, const float* rope, T* output, int64_t batch, int64_t numHead, int64_t seqLen,
-                           int64_t headDim, int64_t offset) {
+                           int64_t headDim, int64_t strideB, int64_t strideH, int64_t strideT, int64_t offset) {
   const int64_t b = blockIdx.x / numHead;
   const int64_t h = blockIdx.x % numHead;
   const int64_t t = blockIdx.y * blockDim.x + threadIdx.x;
 
   if (b < batch && t < seqLen) {
-    const int64_t base = ((b * numHead + h) * seqLen + t) * headDim;
+    const int64_t base = b * strideB + h * strideH + t * strideT;
     const T* xPtr = input + base;
     T* yPtr = output + base;
 
     const int64_t posIndex = offset + t;
     const float* ropeRow = rope + posIndex * headDim * 2;
 
-    auto halfDim = headDim >> 1;
+    const int64_t halfDim = headDim >> 1;
     for (int64_t i = 0; i < halfDim; i++) {
       auto x1 = static_cast<float>(xPtr[i]);
       auto x2 = static_cast<float>(xPtr[halfDim + i]);
@@ -656,14 +657,35 @@ Tensor ropeInitOpCudaImpl(int64_t headDim, int64_t contextLength, float thetaBas
 }
 
 template <typename T>
-Tensor ropeApplyOpCudaImpl(const Tensor& input, const Tensor& rope, int64_t offset) {
-  const auto& shape = input.shape();  // [batch, numHead, seqLen, headDim]
+Tensor ropeApplyOpCudaImpl(const Tensor& input, const Tensor& rope, int64_t offset, QKVLayout layout) {
+  const auto& shape = input.shape();
   ASSERT(shape.size() == 4);
 
-  int64_t batch = shape[0];
-  int64_t numHead = shape[1];
-  int64_t seqLen = shape[2];
-  int64_t headDim = shape[3];
+  int64_t batch, numHead, seqLen, headDim;
+  int64_t strideB, strideH, strideT;
+
+  if (layout == QKVLayout::BHSD) {
+    // [B, N, S, D]
+    batch = shape[0];
+    numHead = shape[1];
+    seqLen = shape[2];
+    headDim = shape[3];
+
+    strideT = headDim;
+    strideH = seqLen * headDim;
+    strideB = numHead * seqLen * headDim;
+  } else {
+    // [B, S, N, D]
+    batch = shape[0];
+    seqLen = shape[1];
+    numHead = shape[2];
+    headDim = shape[3];
+
+    strideH = headDim;
+    strideT = numHead * headDim;
+    strideB = seqLen * numHead * headDim;
+  }
+
   ASSERT(headDim % 2 == 0);
 
   using CudaT = typename cuda::CudaTypeCast<T>::type;
@@ -680,8 +702,42 @@ Tensor ropeApplyOpCudaImpl(const Tensor& input, const Tensor& rope, int64_t offs
   dim3 blockDim(blockSize);
 
   auto stream = cuda::getCurrentCUDAStream(input.device().index).stream();
-  kRopeApply<CudaT>
-      <<<gridDim, blockDim, 0, stream>>>(inputPtr, ropePtr, outPtr, batch, numHead, seqLen, headDim, offset);
+  kRopeApply<CudaT><<<gridDim, blockDim, 0, stream>>>(inputPtr, ropePtr, outPtr, batch, numHead, seqLen, headDim,
+                                                      strideB, strideH, strideT, offset);
+  CUDA_KERNEL_CHECK();
+  return out;
+}
+
+template <typename T>
+Tensor flashAttentionOpCudaImpl(const Tensor& query, const Tensor& key, const Tensor& value, bool isCausal) {
+  const auto& qShape = query.shape();  // [batch, seqLenQ, numHeadsQ, headDim]
+  const auto& kShape = key.shape();    // [batch, seqLenKV, numHeadsKV, headDim]
+  ASSERT(qShape.size() == 4);
+  ASSERT(kShape.size() == 4);
+
+  auto batch = qShape[0];
+  auto numHeadsQ = qShape[2];
+  auto numHeadsKV = kShape[2];
+  auto headDim = qShape[3];
+
+  ASSERT(numHeadsQ % numHeadsKV == 0);  // GQA
+
+  auto seqLenQ = query.size(1);
+  auto seqLenKV = key.size(1);
+
+  using CudaT = typename cuda::CudaTypeCast<T>::type;
+
+  Tensor out(qShape, query.options().noGrad());
+  auto* outPtr = out.dataPtr<CudaT>();
+
+  const auto* qPtr = query.dataPtr<CudaT>();
+  const auto* kPtr = key.dataPtr<CudaT>();
+  const auto* vPtr = value.dataPtr<CudaT>();
+  auto* oPtr = out.dataPtr<CudaT>();
+
+  auto stream = cuda::getCurrentCUDAStream(query.device().index).stream();
+  tfa::flashAttn<CudaT>(qPtr, kPtr, vPtr, oPtr, batch, seqLenQ, seqLenKV, numHeadsQ, numHeadsKV, headDim, isCausal,
+                        stream);
   CUDA_KERNEL_CHECK();
   return out;
 }
