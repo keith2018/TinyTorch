@@ -22,7 +22,7 @@ Storage::Storage(int64_t nbytes, Device device, Allocator* allocator)
       allocator_(allocator ? allocator : getAllocator(Options(device))),
       data_(nullptr, [](void*) {}) {
   void* ptr = allocator_->allocate(nbytes_);
-  data_ = std::unique_ptr<void, std::function<void(void*)>>(ptr, [&](void* p) { allocator_->deallocate(p); });
+  data_ = std::unique_ptr<void, std::function<void(void*)>>(ptr, [a = allocator_](void* p) { a->deallocate(p); });
 }
 
 std::shared_ptr<Storage> Storage::clone() const {
