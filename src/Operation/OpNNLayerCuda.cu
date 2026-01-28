@@ -37,6 +37,9 @@ void registerNNLayerCuda() {
   // rope
   REG_NN_LAYER_CUDA_FLT(ropeInit, ropeInitOpCudaImpl);
   REG_NN_LAYER_CUDA_FLT(ropeApply, ropeApplyOpCudaImpl);
+
+  // flashAttention
+  REG_NN_LAYER_CUDA_FLT(flashAttention, flashAttentionOpCudaImpl);
 }
 
 }  // namespace tinytorch::op

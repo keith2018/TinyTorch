@@ -145,10 +145,12 @@ class RoPE : public Module {
 
   using Module::forward;
   Tensor forward(const Tensor &input) override;
-  Tensor forward(const Tensor &input, int64_t offset);
+  Tensor forward(const Tensor &input, int64_t offset, QKVLayout layout = QKVLayout::BHSD);
 
   using Module::operator();
-  Tensor operator()(const Tensor &input, int64_t offset = 0) { return forward(input, offset); }
+  Tensor operator()(const Tensor &input, int64_t offset = 0, QKVLayout layout = QKVLayout::BHSD) {
+    return forward(input, offset, layout);
+  }
 
   void resetParameters() override;
 

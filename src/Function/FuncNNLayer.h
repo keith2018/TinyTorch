@@ -273,15 +273,24 @@ class FuncSDPAttention : public Function<FuncSDPAttention> {
       attnWeight = op::dropout(attnWeight, dropoutP);
     }
     return op::matmul(attnWeight, value, false, false);
-    // TODO fuse
+  }
+  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
+};
+
+class FuncFlashAttention : public Function<FuncFlashAttention> {
+ public:
+  static Tensor forward(AutogradContext* ctx, const Tensor& query, const Tensor& key, const Tensor& value,
+                        bool isCausal) {
+    return op::flashAttention(query, key, value, isCausal);
   }
   static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
 };
 
 class FuncRoPE : public Function<FuncRoPE> {
  public:
-  static Tensor forward(AutogradContext* ctx, const Tensor& input, const Tensor& rope, int64_t offset) {
-    return op::ropeApply(input, rope, offset);
+  static Tensor forward(AutogradContext* ctx, const Tensor& input, const Tensor& rope, int64_t offset,
+                        QKVLayout layout) {
+    return op::ropeApply(input, rope, offset, layout);
   }
   static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
 };
@@ -319,8 +328,12 @@ inline Tensor sdpAttention(const Tensor& query, const Tensor& key, const Tensor&
                            std::optional<float> scale = std::nullopt) {
   return FuncSDPAttention::apply(query, key, value, isCausal, attnMask, dropoutP, scale);
 }
-inline Tensor ropeApply(const Tensor& input, const Tensor& rope, int64_t offset = 0) {
-  return FuncRoPE::apply(input, rope, offset);
+inline Tensor flashAttention(const Tensor& query, const Tensor& key, const Tensor& value, bool isCausal = false) {
+  return FuncFlashAttention::apply(query, key, value, isCausal);
+}
+inline Tensor ropeApply(const Tensor& input, const Tensor& rope, int64_t offset = 0,
+                        QKVLayout layout = QKVLayout::BHSD) {
+  return FuncRoPE::apply(input, rope, offset, layout);
 }
 
 }  // namespace tinytorch::function

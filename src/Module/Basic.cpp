@@ -102,7 +102,9 @@ RoPE::RoPE(int64_t headDim, int64_t contextLength, float thetaBase, std::optiona
 
 Tensor RoPE::forward(const Tensor &input) { return function::ropeApply(input, rope_); }
 
-Tensor RoPE::forward(const Tensor &input, int64_t offset) { return function::ropeApply(input, rope_, offset); }
+Tensor RoPE::forward(const Tensor &input, int64_t offset, QKVLayout layout) {
+  return function::ropeApply(input, rope_, offset, layout);
+}
 
 void RoPE::resetParameters() { rope_ = op::ropeInit(headDim_, contextLength_, thetaBase_, scaling_, options_); }
 

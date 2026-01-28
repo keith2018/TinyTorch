@@ -135,8 +135,8 @@ TensorPair topkOpCudaImpl(const Tensor& self, int64_t k, int64_t dim, bool large
   }
 
   using CudaT = typename cuda::CudaTypeCast<T>::type;
-  const CudaT* selfPtr = self.dataPtr<CudaT>();
-  CudaT* valPtr = values.dataPtr<CudaT>();
+  const auto* selfPtr = self.dataPtr<CudaT>();
+  auto* valPtr = values.dataPtr<CudaT>();
   auto* idxPtr = indices.dataPtr<int64_t>();
 
   const auto& stream = cuda::getCurrentCUDAStream(self.device().index).stream();
@@ -145,7 +145,7 @@ TensorPair topkOpCudaImpl(const Tensor& self, int64_t k, int64_t dim, bool large
   Storage tmpValues(static_cast<int64_t>(n * sizeof(CudaT)), self.device());
   Storage tmpIndices(static_cast<int64_t>(n * sizeof(int64_t)), self.device());
 
-  CudaT* tmpValuesPtr = tmpValues.dataPtr<CudaT>();
+  auto* tmpValuesPtr = tmpValues.dataPtr<CudaT>();
   auto* tmpIndicesPtr = tmpIndices.dataPtr<int64_t>();
 
   for (int64_t o = 0; o < outerSize; o++) {
@@ -215,7 +215,7 @@ Tensor multinomialOpCudaImpl(const Tensor& self, int64_t nSamples, bool replacem
   }
 
   using CudaT = typename cuda::CudaTypeCast<T>::type;
-  const CudaT* selfPtr = self.dataPtr<CudaT>();
+  const auto* selfPtr = self.dataPtr<CudaT>();
   auto* retPtr = ret.dataPtr<int64_t>();
 
   auto seed = RandomGeneratorCUDA::getSeed();
@@ -278,8 +278,8 @@ TensorPair sortOpCudaImpl(const Tensor& self, int64_t dim, bool descending) {
   }
 
   using CudaT = typename cuda::CudaTypeCast<T>::type;
-  const CudaT* selfPtr = self.dataPtr<CudaT>();
-  CudaT* valPtr = values.dataPtr<CudaT>();
+  const auto* selfPtr = self.dataPtr<CudaT>();
+  auto* valPtr = values.dataPtr<CudaT>();
   auto* idxPtr = indices.dataPtr<int64_t>();
 
   const auto& stream = cuda::getCurrentCUDAStream(self.device().index).stream();
@@ -332,9 +332,11 @@ Tensor cumsumOpCudaImpl(const Tensor& self, int64_t dim) {
   ASSERT(dim >= 0 && dim < self.dim());
 
   using CudaT = typename cuda::CudaTypeCast<T>::type;
+  using ComputeT = typename cuda::CudaComputeType<T>::type;
+
   Tensor ret = Tensor::empty(self.shape(), self.options().noGrad());
-  const CudaT* selfPtr = self.dataPtr<CudaT>();
-  CudaT* retPtr = ret.dataPtr<CudaT>();
+  const auto* selfPtr = self.dataPtr<CudaT>();
+  auto* retPtr = ret.dataPtr<CudaT>();
 
   int64_t outer = 1, inner = 1, n = self.shape(dim);
   for (int64_t i = 0; i < dim; i++) {
@@ -347,9 +349,17 @@ Tensor cumsumOpCudaImpl(const Tensor& self, int64_t dim) {
   const auto& stream = cuda::getCurrentCUDAStream(self.device().index).stream();
 
   if (inner == 1) {
+    Storage tmpBuffer(static_cast<int64_t>(n * sizeof(ComputeT)), self.device());
+    auto* tmpPtr = tmpBuffer.dataPtr<ComputeT>();
+
     for (int64_t o = 0; o < outer; ++o) {
       int64_t offset = o * n;
-      thrust::inclusive_scan(thrust::cuda::par.on(stream), selfPtr + offset, selfPtr + offset + n, retPtr + offset);
+      thrust::transform(thrust::cuda::par.on(stream), selfPtr + offset, selfPtr + offset + n,
+                        thrust::device_pointer_cast(tmpPtr),
+                        [] __host__ __device__(CudaT x) { return static_cast<ComputeT>(x); });
+      thrust::inclusive_scan(thrust::cuda::par.on(stream), tmpPtr, tmpPtr + n, tmpPtr);
+      thrust::transform(thrust::cuda::par.on(stream), tmpPtr, tmpPtr + n, retPtr + offset,
+                        [] __host__ __device__(ComputeT x) { return static_cast<CudaT>(x); });
     }
   } else {
     thrust::for_each_n(thrust::cuda::par.on(stream), thrust::counting_iterator<int64_t>(0), outer * inner,
@@ -358,10 +368,10 @@ Tensor cumsumOpCudaImpl(const Tensor& self, int64_t dim) {
                          int64_t inIdx = row % inner;
                          int64_t base = o * n * inner + inIdx;
 
-                         CudaT sum = 0;
+                         ComputeT sum = 0;
                          for (int64_t i = 0; i < n; i++) {
-                           sum += selfPtr[base + i * inner];
-                           retPtr[base + i * inner] = sum;
+                           sum += static_cast<ComputeT>(selfPtr[base + i * inner]);
+                           retPtr[base + i * inner] = static_cast<CudaT>(sum);
                          }
                        });
   }

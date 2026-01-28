@@ -308,17 +308,37 @@ Tensor ropeInitOpCpuImpl(int64_t headDim, int64_t contextLength, float thetaBase
 }
 
 template <typename T>
-Tensor ropeApplyOpCpuImpl(const Tensor& input, const Tensor& rope, int64_t offset) {
-  const auto& shape = input.shape();  // [batch, numHead, seqLen, headDim]
+Tensor ropeApplyOpCpuImpl(const Tensor& input, const Tensor& rope, int64_t offset, QKVLayout layout) {
+  const auto& shape = input.shape();
   ASSERT(shape.size() == 4);
 
-  int64_t batch = shape[0];
-  int64_t numHead = shape[1];
-  int64_t seqLen = shape[2];
-  int64_t headDim = shape[3];
+  int64_t batch, numHead, seqLen, headDim;
+  int64_t strideB, strideH, strideT;
+
+  if (layout == QKVLayout::BHSD) {
+    // [B, N, S, D]
+    batch = shape[0];
+    numHead = shape[1];
+    seqLen = shape[2];
+    headDim = shape[3];
+
+    strideT = headDim;
+    strideH = seqLen * headDim;
+    strideB = numHead * seqLen * headDim;
+  } else {
+    // [B, S, N, D]
+    batch = shape[0];
+    seqLen = shape[1];
+    numHead = shape[2];
+    headDim = shape[3];
+
+    strideH = headDim;
+    strideT = numHead * headDim;
+    strideB = seqLen * numHead * headDim;
+  }
 
   ASSERT(headDim % 2 == 0);
-  int64_t halfDim = headDim >> 1;
+  const int64_t halfDim = headDim >> 1;
 
   const auto* inputPtr = input.dataPtr<T>();
   const auto* ropePtr = rope.dataPtr<T>();
@@ -329,7 +349,7 @@ Tensor ropeApplyOpCpuImpl(const Tensor& input, const Tensor& rope, int64_t offse
   for (int64_t b = 0; b < batch; b++) {
     for (int64_t h = 0; h < numHead; h++) {
       for (int64_t t = 0; t < seqLen; t++) {
-        int64_t base = ((b * numHead + h) * seqLen + t) * headDim;
+        const int64_t base = b * strideB + h * strideH + t * strideT;
         const T* xPtr = inputPtr + base;
         T* yPtr = outPtr + base;
 
