@@ -26,15 +26,9 @@ struct Default {
 
 }  // namespace options
 
-[[maybe_unused]]
-static void setDefaultDevice(Device device) {
-  options::Default::device() = device;
-}
+[[maybe_unused]] static void setDefaultDevice(Device device) { options::Default::device() = device; }
 
-[[maybe_unused]]
-static void setDefaultDType(DType dtype) {
-  options::Default::dType() = dtype;
-}
+[[maybe_unused]] static void setDefaultDType(DType dtype) { options::Default::dType() = dtype; }
 
 struct Options {
   Device device_;
