@@ -148,7 +148,7 @@ class RoPE : public Module {
   Tensor forward(const Tensor &input, int64_t offset, QKVLayout layout = QKVLayout::BHSD);
 
   using Module::operator();
-  Tensor operator()(const Tensor &input, int64_t offset = 0, QKVLayout layout = QKVLayout::BHSD) {
+  Tensor operator()(const Tensor &input, int64_t offset, QKVLayout layout = QKVLayout::BHSD) {
     return forward(input, offset, layout);
   }
 
