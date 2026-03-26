@@ -4,7 +4,7 @@
  *
  */
 
-#include "FlashAtten/launcher.cuh"
+#include "flash_attn/flash_api.cuh"
 #include "OpNNLayerCuda.cuh"
 
 namespace tinytorch::op {

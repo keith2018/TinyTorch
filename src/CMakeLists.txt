@@ -4,6 +4,8 @@ project(TinyTorch_lib)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(THIRD_PARTY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../third_party)
+
 if (TINYTORCH_USE_CUDA)
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --extended-lambda --expt-relaxed-constexpr")
     find_package(CUDAToolkit REQUIRED)
@@ -40,7 +42,7 @@ else ()
     add_library(${PROJECT_NAME} ${TinyTorch_SRC_CPP})
 endif ()
 
-target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../third_party)
+target_include_directories(${PROJECT_NAME} PRIVATE ${THIRD_PARTY_DIR})
 
 # disable exceptions
 target_compile_options(${PROJECT_NAME} PRIVATE
@@ -91,4 +93,12 @@ endif ()
 if (TINYTORCH_USE_NCCL)
     target_include_directories(${PROJECT_NAME} PUBLIC ${NCCL_INCLUDE_DIRS})
     target_link_libraries(${PROJECT_NAME} PUBLIC ${NCCL_LIBRARY})
+endif ()
+
+# TinyFA
+if (TINYTORCH_USE_CUDA)
+    set(TFA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(TFA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    add_subdirectory(${THIRD_PARTY_DIR}/TinyFA TinyFA)
+    target_link_libraries(${PROJECT_NAME} PRIVATE TinyFA::tinyfa)
 endif ()
