@@ -31,12 +31,8 @@ std::shared_ptr<Storage> Storage::clone() const {
   return newStorage;
 }
 
-void Storage::copyOnDevice(void* dst, const Device& dstDevice, const void* src, const Device& srcDevice, int64_t nbytes
-#ifdef USE_CUDA
-                           ,
-                           const cuda::CUDAStream* stream
-#endif
-) {
+void Storage::copyOnDevice(void* dst, const Device& dstDevice, const void* src, const Device& srcDevice, int64_t nbytes,
+                           const void* stream) {
   if (nbytes == 0) {
     return;
   }
@@ -51,7 +47,8 @@ void Storage::copyOnDevice(void* dst, const Device& dstDevice, const void* src, 
   // CUDA -> CUDA
   if (dstDevice.isCuda() && srcDevice.isCuda()) {
     cuda::CudaDeviceGuard guard(dstDevice.index);
-    const auto& s = stream ? *stream : cuda::getCurrentCUDAStream(dstDevice.index);
+    const auto& s =
+        stream ? *static_cast<const cuda::CUDAStream*>(stream) : cuda::getCurrentCUDAStream(dstDevice.index);
     CUDA_CHECK(cudaMemcpyAsync(dst, src, nbytes, cudaMemcpyDeviceToDevice, s.stream()));
     return;
   }
@@ -59,7 +56,8 @@ void Storage::copyOnDevice(void* dst, const Device& dstDevice, const void* src, 
   // CPU -> CUDA
   if (dstDevice.isCuda() && srcDevice.isCpu()) {
     cuda::CudaDeviceGuard guard(dstDevice.index);
-    const auto& s = stream ? *stream : cuda::getCurrentCUDAStream(dstDevice.index);
+    const auto& s =
+        stream ? *static_cast<const cuda::CUDAStream*>(stream) : cuda::getCurrentCUDAStream(dstDevice.index);
     CUDA_CHECK(cudaMemcpyAsync(dst, src, nbytes, cudaMemcpyHostToDevice, s.stream()));
     return;
   }
@@ -67,7 +65,8 @@ void Storage::copyOnDevice(void* dst, const Device& dstDevice, const void* src, 
   // CUDA -> CPU
   if (dstDevice.isCpu() && srcDevice.isCuda()) {
     cuda::CudaDeviceGuard guard(srcDevice.index);
-    const auto& s = stream ? *stream : cuda::getCurrentCUDAStream(srcDevice.index);
+    const auto& s =
+        stream ? *static_cast<const cuda::CUDAStream*>(stream) : cuda::getCurrentCUDAStream(srcDevice.index);
     CUDA_CHECK(cudaMemcpyAsync(dst, src, nbytes, cudaMemcpyDeviceToHost, s.stream()));
     // synchronization when use default stream
     if (!stream) {
