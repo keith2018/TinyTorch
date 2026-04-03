@@ -14,6 +14,12 @@
 
 namespace tinytorch {
 
+#ifdef USE_CUDA
+namespace cuda {
+struct CUDAStream;
+}
+#endif
+
 class Storage {
  public:
   Storage(int64_t nbytes, Device device, Allocator* allocator = nullptr);
@@ -35,8 +41,12 @@ class Storage {
   int64_t size() const { return nbytes_; }
   Device device() const { return device_; }
 
-  static void copyOnDevice(void* dst, const Device& dstDevice, const void* src, const Device& srcDevice,
-                           int64_t nbytes);
+  static void copyOnDevice(void* dst, const Device& dstDevice, const void* src, const Device& srcDevice, int64_t nbytes
+#ifdef USE_CUDA
+                           ,
+                           const cuda::CUDAStream* stream = nullptr
+#endif
+  );
   static void copyOnDevice(void* dst, const void* src, int64_t nbytes, const Device& device);
 
  private:
