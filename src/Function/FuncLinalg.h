@@ -14,7 +14,7 @@ namespace tinytorch::function {
 class FuncMatmul : public Function<FuncMatmul> {
  public:
   static Tensor forward(AutogradContext* ctx, const Tensor& a, const Tensor& b, bool transA, bool transB) {
-    return op::matmul(a, b, transA, transB);
+    return op::matmul(a, b, transA, transB, Tensor{});
   }
 
   static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }

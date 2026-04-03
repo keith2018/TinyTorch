@@ -14,12 +14,7 @@ namespace tinytorch::function {
 class FuncLinear : public Function<FuncLinear> {
  public:
   static Tensor forward(AutogradContext* ctx, const Tensor& input, const Tensor& weight, const Tensor& bias) {
-    auto output = op::matmul(input, weight, false, true);
-    if (bias.defined()) {
-      op::addInplace(output, bias, 1);
-    }
-    // TODO fuse
-    return output;
+    return op::matmul(input, weight, false, true, bias);
   }
 
   static void backward(AutogradContext* ctx, const Tensor& grad) {
@@ -28,10 +23,10 @@ class FuncLinear : public Function<FuncLinear> {
     auto& bias = ctx->savedInputs[2];
 
     if (input.requiresGrad()) {
-      input.addGrad(op::matmul(grad, weight, false, false));
+      input.addGrad(op::matmul(grad, weight, false, false, Tensor{}));
     }
     if (weight.requiresGrad()) {
-      weight.addGrad(op::matmul(grad, input, true, false));
+      weight.addGrad(op::matmul(grad, input, true, false, Tensor{}));
     }
     if (bias.defined() && bias.requiresGrad()) {
       bias.addGrad(op::sumOnDim(grad, 0, false));
@@ -161,12 +156,7 @@ class FuncConv2D : public Function<FuncConv2D> {
     auto col = op::im2col(input, kernel, stride, padding);
 
     auto colW = op::reshape(weight, IntArrayView{outChannels, -1});
-    auto ret = op::matmul(col, colW, false, true);
-    if (bias.defined()) {
-      ASSERT(bias.dim() == 1);
-      ASSERT(bias.shape()[0] == outChannels);
-      op::addInplace(ret, bias, 1);
-    }
+    auto ret = op::matmul(col, colW, false, true, bias);
     ret.reshape_({batch, outChannels, outH, outW});
 
     if (ctx) {
@@ -192,13 +182,13 @@ class FuncConv2D : public Function<FuncConv2D> {
     auto colW = op::reshape(weight, IntArrayView{outChannels, -1});
 
     if (input.requiresGrad()) {
-      auto gradCol = op::matmul(gradW, colW, false, false);
+      auto gradCol = op::matmul(gradW, colW, false, false, Tensor{});
       auto inputGrad = op::col2im(gradCol, input.shape(), kernel, stride, padding);
       input.addGrad(std::move(inputGrad));
     }
     if (weight.requiresGrad()) {
       auto col = ctx->popData().toTensor();
-      auto gradColW = op::matmul(col, gradW, true, false);
+      auto gradColW = op::matmul(col, gradW, true, false, Tensor{});
       auto weightGrad = op::reshape(gradColW.permute(), weight.shape());
       weight.addGrad(std::move(weightGrad));
     }
@@ -244,7 +234,7 @@ class FuncSDPAttention : public Function<FuncSDPAttention> {
     auto S = key.size(-2);
     float scaleFactor = scale.has_value() ? scale.value() : (1.f / std::sqrt(static_cast<float>(query.size(-1))));
 
-    auto attnWeight = op::matmul(query, op::transpose(key, -2, -1), false, false);
+    auto attnWeight = op::matmul(query, op::transpose(key, -2, -1), false, false, Tensor{});
     op::mulInplace(attnWeight, Tensor::scalar(scaleFactor, attnWeight.options()));
 
     Tensor attnBias;
@@ -272,7 +262,7 @@ class FuncSDPAttention : public Function<FuncSDPAttention> {
     if (dropoutP > 0.f) {
       attnWeight = op::dropout(attnWeight, dropoutP);
     }
-    return op::matmul(attnWeight, value, false, false);
+    return op::matmul(attnWeight, value, false, false, Tensor{});
   }
   static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
 };

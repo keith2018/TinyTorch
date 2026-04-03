@@ -6,6 +6,8 @@
 
 #include "OpLinalg.h"
 
+#include "OpElemWise.h"
+
 namespace tinytorch::op {
 
 inline SizeVector makePaddedStrides(const IntArrayView &strides, int64_t targetDim) {
@@ -216,10 +218,11 @@ Tensor matmulOpImplDetail(const Tensor &a, const Tensor &b, bool transA = false,
         }
       }
 
-      gemm(retPtr + batch * m * n, selfPtr + aOffset, otherPtr + bOffset, m, k, n, transA, transB, a.device().index);
+      gemm(retPtr + batch * m * n, selfPtr + aOffset, otherPtr + bOffset, m, k, n, transA, transB, a.device().index,
+           nullptr);
     }
   } else {
-    gemm(retPtr, selfPtr, otherPtr, m, k, n, transA, transB, a.device().index);
+    gemm(retPtr, selfPtr, otherPtr, m, k, n, transA, transB, a.device().index, nullptr);
     if (prependA) {
       retTensor.reshape_({n});
     }
@@ -238,8 +241,8 @@ Tensor matmulOpImplDetail(const Tensor &a, const Tensor &b, bool transA = false,
 }
 
 template <typename T>
-Tensor matmulOpImpl(const Tensor &a, const Tensor &b, bool transA, bool transB) {
-  // fast path
+Tensor matmulOpImpl(const Tensor &a, const Tensor &b, bool transA, bool transB, const Tensor &bias) {
+  // 2D fast path
   if (a.dim() == 2 && b.dim() == 2) {
     // a[m, k], b[k, n] -> [m, n]
     int64_t m = a.shape(transA ? 1 : 0);
@@ -255,14 +258,22 @@ Tensor matmulOpImpl(const Tensor &a, const Tensor &b, bool transA, bool transB) 
     const T *otherPtr = b.dataPtr<T>();
     T *retPtr = retTensor.dataPtr<T>();
 
+    if (bias.defined()) {
+      ASSERT(bias.dim() == 1 && bias.shape(0) == n);
+    }
     auto gemm = getGemmFunc<T>(a.device().type);
     ASSERT(gemm != nullptr);
-    gemm(retPtr, selfPtr, otherPtr, m, k, n, transA, transB, a.device().index);
+    gemm(retPtr, selfPtr, otherPtr, m, k, n, transA, transB, a.device().index,
+         bias.defined() ? bias.dataPtr<T>() : nullptr);
     return retTensor;
   }
 
-  // slow path
-  return matmulOpImplDetail<T>(a, b, transA, transB);
+  // batched / broadcast path
+  auto result = matmulOpImplDetail<T>(a, b, transA, transB);
+  if (bias.defined()) {
+    addInplace(result, bias, 1);
+  }
+  return result;
 }
 
 void registerLinalgCommon() {

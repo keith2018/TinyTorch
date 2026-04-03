@@ -13,7 +13,7 @@ namespace tinytorch::op {
 SizeVector broadcastShape(IntArrayView t0, IntArrayView t1, int64_t skipLast);
 
 template <typename T, DeviceType type>
-void gemmImpl(T*, const T*, const T*, int64_t, int64_t, int64_t, bool, bool, DeviceIndex);
+void gemmImpl(T*, const T*, const T*, int64_t, int64_t, int64_t, bool, bool, DeviceIndex, const T* = nullptr);
 
 template <typename T, DeviceType type>
 void gemmStridedBatchedImpl(T*, const T*, const T*, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, bool,
@@ -23,7 +23,7 @@ template <typename T, DeviceType type>
 void gemmBatchedImpl(T**, const T**, const T**, int64_t, int64_t, int64_t, int64_t, bool, bool, DeviceIndex);
 
 template <typename T>
-using GemmFunc = void (*)(T*, const T*, const T*, int64_t, int64_t, int64_t, bool, bool, DeviceIndex);
+using GemmFunc = void (*)(T*, const T*, const T*, int64_t, int64_t, int64_t, bool, bool, DeviceIndex, const T*);
 
 template <typename T>
 using GemmStridedBatchedFunc = void (*)(T*, const T*, const T*, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t,
@@ -74,7 +74,7 @@ GemmBatchedFunc<T> getGemmBatchedFunc(DeviceType deviceType) {
 using DotOpFn = Tensor (*)(const Tensor& self, const Tensor& other);
 using Im2ColOpFn = Tensor (*)(const Tensor& self, Dim2D kernel, Dim2D stride, Dim2D padding);
 using Col2ImOpFn = Tensor (*)(const Tensor& self, IntArrayView shape, Dim2D kernel, Dim2D stride, Dim2D padding);
-using MatmulOpFn = Tensor (*)(const Tensor& a, const Tensor& b, bool transA, bool transB);
+using MatmulOpFn = Tensor (*)(const Tensor& a, const Tensor& b, bool transA, bool transB, const Tensor& bias);
 
 // dot
 DEFINE_OP(dot, DotOpFn)

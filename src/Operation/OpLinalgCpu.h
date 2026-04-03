@@ -116,19 +116,29 @@ Tensor col2imOpCpuImpl(const Tensor& self, const IntArrayView shape, Dim2D kerne
 }
 
 template <typename T>
-void gemmCpuImpl(T* c, const T* a, const T* b, int64_t m, int64_t k, int64_t n, bool transA, bool transB) {
+void gemmCpuImpl(T* c, const T* a, const T* b, int64_t m, int64_t k, int64_t n, bool transA, bool transB,
+                 const T* bias = nullptr) {
+  if (bias) {
+    // broadcast bias into C: c[i][j] = bias[j]
+    for (int64_t i = 0; i < m; i++) {
+      std::memcpy(c + i * n, bias, n * sizeof(T));
+    }
+  }
   // blas
 #if defined(__APPLE__) || defined(__BLAS__)
   if constexpr (std::is_same_v<T, float>) {
     CBLAS_TRANSPOSE ta = transA ? CblasTrans : CblasNoTrans;
     CBLAS_TRANSPOSE tb = transB ? CblasTrans : CblasNoTrans;
+    float betaVal = bias ? 1.0f : 0.0f;
     cblas_sgemm(CblasRowMajor, ta, tb, (int)m, (int)n, (int)k, 1.0f, a, transA ? (int)m : (int)k, b,
-                transB ? (int)k : (int)n, 0.0f, c, (int)n);
+                transB ? (int)k : (int)n, betaVal, c, (int)n);
     return;
   }
 #endif
   // basic
-  std::memset(c, 0, m * n * sizeof(T));
+  if (!bias) {
+    std::memset(c, 0, m * n * sizeof(T));
+  }
   for (int64_t i = 0; i < m; i++) {
     for (int64_t p = 0; p < k; p++) {
       T aVal = transA ? a[p * m + i] : a[i * k + p];
@@ -142,20 +152,21 @@ void gemmCpuImpl(T* c, const T* a, const T* b, int64_t m, int64_t k, int64_t n, 
 
 template <>
 void gemmImpl<float, DeviceType::CPU>(float* c, const float* a, const float* b, int64_t m, int64_t k, int64_t n,
-                                      bool transA, bool transB, DeviceIndex device) {
-  gemmCpuImpl<float>(c, a, b, m, k, n, transA, transB);
+                                      bool transA, bool transB, DeviceIndex device, const float* bias) {
+  gemmCpuImpl<float>(c, a, b, m, k, n, transA, transB, bias);
 }
 
 template <>
 void gemmImpl<Half, DeviceType::CPU>(Half* c, const Half* a, const Half* b, int64_t m, int64_t k, int64_t n,
-                                     bool transA, bool transB, DeviceIndex device) {
-  gemmCpuImpl<Half>(c, a, b, m, k, n, transA, transB);
+                                     bool transA, bool transB, DeviceIndex device, const Half* bias) {
+  gemmCpuImpl<Half>(c, a, b, m, k, n, transA, transB, bias);
 }
 
 template <>
 void gemmImpl<BFloat16, DeviceType::CPU>(BFloat16* c, const BFloat16* a, const BFloat16* b, int64_t m, int64_t k,
-                                         int64_t n, bool transA, bool transB, DeviceIndex device) {
-  gemmCpuImpl<BFloat16>(c, a, b, m, k, n, transA, transB);
+                                         int64_t n, bool transA, bool transB, DeviceIndex device,
+                                         const BFloat16* bias) {
+  gemmCpuImpl<BFloat16>(c, a, b, m, k, n, transA, transB, bias);
 }
 
 }  // namespace tinytorch::op
