@@ -31,8 +31,12 @@ std::shared_ptr<Storage> Storage::clone() const {
   return newStorage;
 }
 
-void Storage::copyOnDevice(void* dst, const Device& dstDevice, const void* src, const Device& srcDevice,
-                           int64_t nbytes) {
+void Storage::copyOnDevice(void* dst, const Device& dstDevice, const void* src, const Device& srcDevice, int64_t nbytes
+#ifdef USE_CUDA
+                           ,
+                           const cuda::CUDAStream* stream
+#endif
+) {
   if (nbytes == 0) {
     return;
   }
@@ -47,25 +51,28 @@ void Storage::copyOnDevice(void* dst, const Device& dstDevice, const void* src, 
   // CUDA -> CUDA
   if (dstDevice.isCuda() && srcDevice.isCuda()) {
     cuda::CudaDeviceGuard guard(dstDevice.index);
-    auto& stream = cuda::getCurrentCUDAStream(dstDevice.index);
-    CUDA_CHECK(cudaMemcpyAsync(dst, src, nbytes, cudaMemcpyDeviceToDevice, stream.stream()));
+    const auto& s = stream ? *stream : cuda::getCurrentCUDAStream(dstDevice.index);
+    CUDA_CHECK(cudaMemcpyAsync(dst, src, nbytes, cudaMemcpyDeviceToDevice, s.stream()));
     return;
   }
 
   // CPU -> CUDA
   if (dstDevice.isCuda() && srcDevice.isCpu()) {
     cuda::CudaDeviceGuard guard(dstDevice.index);
-    auto& stream = cuda::getCurrentCUDAStream(dstDevice.index);
-    CUDA_CHECK(cudaMemcpyAsync(dst, src, nbytes, cudaMemcpyHostToDevice, stream.stream()));
+    const auto& s = stream ? *stream : cuda::getCurrentCUDAStream(dstDevice.index);
+    CUDA_CHECK(cudaMemcpyAsync(dst, src, nbytes, cudaMemcpyHostToDevice, s.stream()));
     return;
   }
 
   // CUDA -> CPU
   if (dstDevice.isCpu() && srcDevice.isCuda()) {
     cuda::CudaDeviceGuard guard(srcDevice.index);
-    auto& stream = cuda::getCurrentCUDAStream(srcDevice.index);
-    CUDA_CHECK(cudaMemcpyAsync(dst, src, nbytes, cudaMemcpyDeviceToHost, stream.stream()));
-    stream.synchronize();
+    const auto& s = stream ? *stream : cuda::getCurrentCUDAStream(srcDevice.index);
+    CUDA_CHECK(cudaMemcpyAsync(dst, src, nbytes, cudaMemcpyDeviceToHost, s.stream()));
+    // synchronization when use default stream
+    if (!stream) {
+      s.synchronize();
+    }
     return;
   }
 #endif
