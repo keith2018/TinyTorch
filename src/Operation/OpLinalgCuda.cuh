@@ -137,8 +137,23 @@ Tensor col2imOpCudaImpl(const Tensor& self, const IntArrayView shape, Dim2D kern
 template <typename T>
 Tensor dotOpCudaImpl(const Tensor& self, const Tensor& other);
 
+template <typename T>
+__global__ void kBroadcastBias(T* c, const T* bias, int64_t m, int64_t n) {
+  const auto idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < m * n) {
+    c[idx] = bias[idx % n];
+  }
+}
+
 inline void gemmCudaF32Impl(float* c, const float* a, const float* b, int64_t m, int64_t k, int64_t n, bool transA,
-                            bool transB, DeviceIndex device) {
+                            bool transB, DeviceIndex device, const float* bias = nullptr) {
+  float beta = 0.f;
+  if (bias) {
+    auto params = cuda::getKernelLaunchParams(device, m * n);
+    CUDA_LAUNCH_KERNEL(kBroadcastBias<float>, params, c, bias, m, n);
+    beta = 1.f;
+  }
+
   cublasOperation_t opA = transA ? CUBLAS_OP_T : CUBLAS_OP_N;
   cublasOperation_t opB = transB ? CUBLAS_OP_T : CUBLAS_OP_N;
 
@@ -147,14 +162,20 @@ inline void gemmCudaF32Impl(float* c, const float* a, const float* b, int64_t m,
   int ldc = static_cast<int>(n);
 
   constexpr float alpha = 1.f;
-  constexpr float beta = 0.f;
 
   auto handle = cuda::getCublasHandle(device);
   CUBLAS_CHECK(cublasSgemm(handle, opB, opA, n, m, k, &alpha, b, ldb, a, lda, &beta, c, ldc));
 }
 
 inline void gemmCudaF16Impl(__half* c, const __half* a, const __half* b, int64_t m, int64_t k, int64_t n, bool transA,
-                            bool transB, DeviceIndex device) {
+                            bool transB, DeviceIndex device, const __half* bias = nullptr) {
+  float beta = 0.f;
+  if (bias) {
+    auto params = cuda::getKernelLaunchParams(device, m * n);
+    CUDA_LAUNCH_KERNEL(kBroadcastBias<__half>, params, c, bias, m, n);
+    beta = 1.f;
+  }
+
   cublasOperation_t opA = transA ? CUBLAS_OP_T : CUBLAS_OP_N;
   cublasOperation_t opB = transB ? CUBLAS_OP_T : CUBLAS_OP_N;
 
@@ -163,7 +184,6 @@ inline void gemmCudaF16Impl(__half* c, const __half* a, const __half* b, int64_t
   int ldc = static_cast<int>(n);
 
   constexpr float alpha = 1.f;
-  constexpr float beta = 0.f;
 
   auto handle = cuda::getCublasHandle(device);
   CUBLAS_CHECK(cublasGemmEx(handle, opB, opA, n, m, k, &alpha, b, CUDA_R_16F, ldb, a, CUDA_R_16F, lda, &beta, c,
@@ -171,7 +191,15 @@ inline void gemmCudaF16Impl(__half* c, const __half* a, const __half* b, int64_t
 }
 
 inline void gemmCudaBF16Impl(__nv_bfloat16* c, const __nv_bfloat16* a, const __nv_bfloat16* b, int64_t m, int64_t k,
-                             int64_t n, bool transA, bool transB, DeviceIndex device) {
+                             int64_t n, bool transA, bool transB, DeviceIndex device,
+                             const __nv_bfloat16* bias = nullptr) {
+  float beta = 0.f;
+  if (bias) {
+    auto params = cuda::getKernelLaunchParams(device, m * n);
+    CUDA_LAUNCH_KERNEL(kBroadcastBias<__nv_bfloat16>, params, c, bias, m, n);
+    beta = 1.f;
+  }
+
   cublasOperation_t opA = transA ? CUBLAS_OP_T : CUBLAS_OP_N;
   cublasOperation_t opB = transB ? CUBLAS_OP_T : CUBLAS_OP_N;
 
@@ -180,7 +208,6 @@ inline void gemmCudaBF16Impl(__nv_bfloat16* c, const __nv_bfloat16* a, const __n
   int ldc = static_cast<int>(n);
 
   constexpr float alpha = 1.f;
-  constexpr float beta = 0.f;
 
   auto handle = cuda::getCublasHandle(device);
   CUBLAS_CHECK(cublasGemmEx(handle, opB, opA, n, m, k, &alpha, b, CUDA_R_16BF, ldb, a, CUDA_R_16BF, lda, &beta, c,
@@ -189,22 +216,24 @@ inline void gemmCudaBF16Impl(__nv_bfloat16* c, const __nv_bfloat16* a, const __n
 
 template <>
 void gemmImpl<float, DeviceType::CUDA>(float* c, const float* a, const float* b, int64_t m, int64_t k, int64_t n,
-                                       bool transA, bool transB, DeviceIndex device) {
-  gemmCudaF32Impl(c, a, b, m, k, n, transA, transB, device);
+                                       bool transA, bool transB, DeviceIndex device, const float* bias) {
+  gemmCudaF32Impl(c, a, b, m, k, n, transA, transB, device, bias);
 }
 
 template <>
 void gemmImpl<Half, DeviceType::CUDA>(Half* c, const Half* a, const Half* b, int64_t m, int64_t k, int64_t n,
-                                      bool transA, bool transB, DeviceIndex device) {
+                                      bool transA, bool transB, DeviceIndex device, const Half* bias) {
   gemmCudaF16Impl(reinterpret_cast<__half*>(c), reinterpret_cast<const __half*>(a), reinterpret_cast<const __half*>(b),
-                  m, k, n, transA, transB, device);
+                  m, k, n, transA, transB, device, reinterpret_cast<const __half*>(bias));
 }
 
 template <>
 void gemmImpl<BFloat16, DeviceType::CUDA>(BFloat16* c, const BFloat16* a, const BFloat16* b, int64_t m, int64_t k,
-                                          int64_t n, bool transA, bool transB, DeviceIndex device) {
+                                          int64_t n, bool transA, bool transB, DeviceIndex device,
+                                          const BFloat16* bias) {
   gemmCudaBF16Impl(reinterpret_cast<__nv_bfloat16*>(c), reinterpret_cast<const __nv_bfloat16*>(a),
-                   reinterpret_cast<const __nv_bfloat16*>(b), m, k, n, transA, transB, device);
+                   reinterpret_cast<const __nv_bfloat16*>(b), m, k, n, transA, transB, device,
+                   reinterpret_cast<const __nv_bfloat16*>(bias));
 }
 
 inline void gemmStridedBatchedCudaF32Impl(float* c, const float* a, const float* b, int64_t m, int64_t k, int64_t n,

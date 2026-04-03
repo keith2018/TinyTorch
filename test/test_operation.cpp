@@ -1223,28 +1223,28 @@ TEST(TEST_Operation, basic_im2col_col2im) {
 TEST(TEST_Operation, math_matmul_01) {
   Array2d<float> d1 = {{1, 2}, {3, 4}};
   Array2d<float> d2 = {{2, 3}, {4, 5}};
-  auto y = op::matmul(Tensor(d1), Tensor(d2), false, false);
+  auto y = op::matmul(Tensor(d1), Tensor(d2), false, false, Tensor{});
   EXPECT_THAT(y.shape(), ElementsAre(2, 2));
   EXPECT_THAT(y.toList<float>(), ElementsAre(10, 13, 22, 29));
 
   Array2d<float> d3 = {{1, 2, 3}, {4, 5, 6}};
   Array2d<float> d4 = {{2, 3}, {4, 5}, {6, 7}};
-  y = op::matmul(Tensor(d3), Tensor(d4), false, false);
+  y = op::matmul(Tensor(d3), Tensor(d4), false, false, Tensor{});
   EXPECT_THAT(y.shape(), ElementsAre(2, 2));
   EXPECT_THAT(y.toList<float>(), ElementsAre(28, 34, 64, 79));
 
   Array2d<float> d5 = {{1, 0}, {0, 1}};
   Array1d<float> d6 = {1, 2};
-  y = op::matmul(Tensor(d5), Tensor(d6), false, false);
+  y = op::matmul(Tensor(d5), Tensor(d6), false, false, Tensor{});
   EXPECT_THAT(y.shape(), ElementsAre(2));
   EXPECT_THAT(y.toList<float>(), ElementsAre(1, 2));
 
-  y = op::matmul(Tensor(d6), Tensor(d5), false, false);
+  y = op::matmul(Tensor(d6), Tensor(d5), false, false, Tensor{});
   EXPECT_THAT(y.shape(), ElementsAre(2));
   EXPECT_THAT(y.toList<float>(), ElementsAre(1, 2));
 
   Array1d<float> d7 = {2};
-  y = op::matmul(Tensor(d7), Tensor(d7), false, false);
+  y = op::matmul(Tensor(d7), Tensor(d7), false, false, Tensor{});
   EXPECT_TRUE(y.dim() == 0);
   EXPECT_THAT(y.toList<float>(), ElementsAre(4));
 
@@ -1255,8 +1255,8 @@ TEST(TEST_Operation, math_matmul_01) {
   b.reshape_({1, 2, 4, 2});
   auto c = Tensor::arange<float>(0, 1 * 2 * 4);
   c.reshape_({1, 4, 2});
-  auto d = op::matmul(a, b, false, false);
-  auto e = op::matmul(a, c, false, false);
+  auto d = op::matmul(a, b, false, false, Tensor{});
+  auto e = op::matmul(a, c, false, false, Tensor{});
 
   EXPECT_THAT(d.shape(), ElementsAre(1, 2, 2, 2));
   EXPECT_THAT(d.toList<float>(), ElementsAre(28, 34, 76, 98, 428, 466, 604, 658));
@@ -1268,13 +1268,13 @@ TEST(TEST_Operation, math_matmul_01) {
 TEST(TEST_Operation, math_matmul_02) {
   Array2d<float> d1 = {{1, 2}, {3, 4}};
   Array2d<float> d2 = {{2, 3}, {4, 5}};
-  auto y = op::matmul(Tensor(d1), Tensor(d2), false, true);
+  auto y = op::matmul(Tensor(d1), Tensor(d2), false, true, Tensor{});
   EXPECT_THAT(y.shape(), ElementsAre(2, 2));
   EXPECT_THAT(y.toList<float>(), ElementsAre(8, 14, 18, 32));
 
   Array2d<float> d3 = {{1, 2, 3}, {4, 5, 6}};
   Array2d<float> d4 = {{2, 4, 6}, {3, 5, 7}};
-  y = op::matmul(Tensor(d3), Tensor(d4), false, true);
+  y = op::matmul(Tensor(d3), Tensor(d4), false, true, Tensor{});
   EXPECT_THAT(y.shape(), ElementsAre(2, 2));
   EXPECT_THAT(y.toList<float>(), ElementsAre(28, 34, 64, 79));
 }
@@ -1285,7 +1285,7 @@ TEST(TEST_Operation, math_matmul_03) {
   a1.reshape_({2, 3, 4});
   auto b1 = Tensor::arange<float>(0, 2 * 4 * 2);
   b1.reshape_({2, 4, 2});
-  auto c1 = op::matmul(a1, b1, false, false);
+  auto c1 = op::matmul(a1, b1, false, false, Tensor{});
   EXPECT_THAT(c1.shape(), ElementsAre(2, 3, 2));
   EXPECT_THAT(c1.toList<float>(), ElementsAre(28, 34, 76, 98, 124, 162, 604, 658, 780, 850, 956, 1042));
 
@@ -1294,7 +1294,7 @@ TEST(TEST_Operation, math_matmul_03) {
   a3.reshape_({2, 3, 4});
   auto b3 = Tensor::arange<float>(0, 4 * 2);
   b3.reshape_({4, 2});
-  auto c3 = op::matmul(a3, b3, false, false);
+  auto c3 = op::matmul(a3, b3, false, false, Tensor{});
   EXPECT_THAT(c3.shape(), ElementsAre(2, 3, 2));
   EXPECT_THAT(c3.toList<float>(), ElementsAre(28, 34, 76, 98, 124, 162, 172, 226, 220, 290, 268, 354));
 
@@ -1303,7 +1303,7 @@ TEST(TEST_Operation, math_matmul_03) {
   a4.reshape_({3, 4});
   auto b4 = Tensor::arange<float>(0, 2 * 4 * 2);
   b4.reshape_({2, 4, 2});
-  auto c4 = op::matmul(a4, b4, false, false);
+  auto c4 = op::matmul(a4, b4, false, false, Tensor{});
   EXPECT_THAT(c4.shape(), ElementsAre(2, 3, 2));
   EXPECT_THAT(c4.toList<float>(), ElementsAre(28, 34, 76, 98, 124, 162, 76, 82, 252, 274, 428, 466));
 
@@ -1312,7 +1312,7 @@ TEST(TEST_Operation, math_matmul_03) {
   a5.reshape_({1, 3, 4});
   auto b5 = Tensor::arange<float>(0, 2 * 4 * 2);
   b5.reshape_({2, 4, 2});
-  auto c5 = op::matmul(a5, b5, false, false);
+  auto c5 = op::matmul(a5, b5, false, false, Tensor{});
   EXPECT_THAT(c5.shape(), ElementsAre(2, 3, 2));
   EXPECT_THAT(c5.toList<float>(), ElementsAre(28, 34, 76, 98, 124, 162, 76, 82, 252, 274, 428, 466));
 
@@ -1321,7 +1321,7 @@ TEST(TEST_Operation, math_matmul_03) {
   a6.reshape_({2, 3, 4});
   auto b6 = Tensor::arange<float>(0, 1 * 4 * 2);
   b6.reshape_({1, 4, 2});
-  auto c6 = op::matmul(a6, b6, false, false);
+  auto c6 = op::matmul(a6, b6, false, false, Tensor{});
   EXPECT_THAT(c6.shape(), ElementsAre(2, 3, 2));
   EXPECT_THAT(c6.toList<float>(), ElementsAre(28, 34, 76, 98, 124, 162, 172, 226, 220, 290, 268, 354));
 
@@ -1330,7 +1330,7 @@ TEST(TEST_Operation, math_matmul_03) {
   a8.reshape_({2, 3, 4});
   auto b8 = Tensor::arange<float>(0, 2 * 2 * 4);
   b8.reshape_({2, 2, 4});
-  auto c8 = op::matmul(a8, b8, false, true);
+  auto c8 = op::matmul(a8, b8, false, true, Tensor{});
   EXPECT_THAT(c8.shape(), ElementsAre(2, 3, 2));
   EXPECT_THAT(c8.toList<float>(), ElementsAre(14, 38, 38, 126, 62, 214, 518, 734, 670, 950, 822, 1166));
 
@@ -1339,7 +1339,7 @@ TEST(TEST_Operation, math_matmul_03) {
   a9.reshape_({2, 4, 3});
   auto b9 = Tensor::arange<float>(0, 2 * 4 * 2);
   b9.reshape_({2, 4, 2});
-  auto c9 = op::matmul(a9, b9, true, false);
+  auto c9 = op::matmul(a9, b9, true, false, Tensor{});
   EXPECT_THAT(c9.shape(), ElementsAre(2, 3, 2));
   EXPECT_THAT(c9.toList<float>(), ElementsAre(84, 102, 96, 118, 108, 134, 756, 822, 800, 870, 844, 918));
 
@@ -1348,7 +1348,7 @@ TEST(TEST_Operation, math_matmul_03) {
   a10.reshape_({1, 3, 4});
   auto b10 = Tensor::arange<float>(0, 1 * 4 * 2);
   b10.reshape_({1, 4, 2});
-  auto c10 = op::matmul(a10, b10, false, false);
+  auto c10 = op::matmul(a10, b10, false, false, Tensor{});
   EXPECT_THAT(c10.shape(), ElementsAre(1, 3, 2));
   EXPECT_THAT(c10.toList<float>(), ElementsAre(28, 34, 76, 98, 124, 162));
 
@@ -1357,7 +1357,7 @@ TEST(TEST_Operation, math_matmul_03) {
   a12.reshape_({2, 1, 3, 4});
   auto b12 = Tensor::arange<float>(0, 2 * 1 * 4 * 2);
   b12.reshape_({2, 1, 4, 2});
-  auto c12 = op::matmul(a12, b12, false, false);
+  auto c12 = op::matmul(a12, b12, false, false, Tensor{});
   EXPECT_THAT(c12.shape(), ElementsAre(2, 1, 3, 2));
   EXPECT_THAT(c12.toList<float>(), ElementsAre(28, 34, 76, 98, 124, 162, 604, 658, 780, 850, 956, 1042));
 }
@@ -1368,7 +1368,7 @@ TEST(TEST_Operation, math_matmul_04) {
   a1.reshape_({1, 2, 3});
   auto b1 = Tensor::arange<float>(0, 6 * 3 * 2);
   b1.reshape_({6, 3, 2});
-  auto c1 = op::matmul(a1, b1, false, false);
+  auto c1 = op::matmul(a1, b1, false, false, Tensor{});
   EXPECT_THAT(c1.shape(), ElementsAre(6, 2, 2));
   EXPECT_THAT(c1.toList<float>(), ElementsAre(10, 13, 28, 40, 28, 31, 100, 112, 46, 49, 172, 184, 64, 67, 244, 256, 82,
                                               85, 316, 328, 100, 103, 388, 400));
@@ -1378,7 +1378,7 @@ TEST(TEST_Operation, math_matmul_04) {
   a2.reshape_({8, 2, 3});
   auto b2 = Tensor::arange<float>(0, 1 * 3 * 2);
   b2.reshape_({1, 3, 2});
-  auto c2 = op::matmul(a2, b2, false, false);
+  auto c2 = op::matmul(a2, b2, false, false, Tensor{});
   EXPECT_THAT(c2.shape(), ElementsAre(8, 2, 2));
   EXPECT_THAT(c2.toList<float>(),
               ElementsAre(10, 13, 28, 40, 46, 67, 64, 94, 82, 121, 100, 148, 118, 175, 136, 202, 154, 229, 172, 256,
@@ -1389,7 +1389,7 @@ TEST(TEST_Operation, math_matmul_04) {
   a3.reshape_({2, 1, 2, 3});
   auto b3 = Tensor::arange<float>(0, 2 * 3 * 3 * 2);
   b3.reshape_({2, 3, 3, 2});
-  auto c3 = op::matmul(a3, b3, false, false);
+  auto c3 = op::matmul(a3, b3, false, false, Tensor{});
   EXPECT_THAT(c3.shape(), ElementsAre(2, 3, 2, 2));
   EXPECT_THAT(c3.toList<float>(), ElementsAre(10, 13, 28, 40, 28, 31, 100, 112, 46, 49, 172, 184, 424, 445, 604, 634,
                                               550, 571, 784, 814, 676, 697, 964, 994));
