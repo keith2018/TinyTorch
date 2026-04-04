@@ -11,9 +11,9 @@
 
 using namespace tinytorch;
 
-// https://pytorch.org/tutorials/beginner/pytorch_with_examples.html#pytorch-optim
-void demo_optim() {
-  LOGD("demo_optim ...");
+// https://pytorch.org/tutorials/beginner/pytorch_with_examples.html#pytorch-nn
+int main() {
+  LOGD("module example ...");
   Timer timer;
   timer.start();
 
@@ -33,8 +33,7 @@ void demo_optim() {
 
   auto lossFn = nn::MSELoss(LossReduction::SUM);
 
-  constexpr float learningRate = 1e-3f;
-  auto optimizer = optim::RMSprop(model.parameters(), learningRate);
+  constexpr float learningRate = 1e-6f;
   for (int t = 0; t < 2000; t++) {
     auto yPred = model(xx);
     auto loss = lossFn(yPred, y);
@@ -42,9 +41,14 @@ void demo_optim() {
       LOGD("t: %d, loss: %f", t, loss.item<float>());
     }
 
-    optimizer.zeroGrad();
+    model.zeroGrad();
     loss.backward();
-    optimizer.step();
+
+    WithNoGrad {
+      for (auto& param : model.parameters()) {
+        *param -= learningRate * param->grad();
+      }
+    }
   }
 
   auto* linearLayer = dynamic_cast<nn::Linear*>(&model[0]);
@@ -54,4 +58,6 @@ void demo_optim() {
 
   timer.mark();
   LOGD("Time cost: %lld ms", timer.elapseMillis());
+
+  return 0;
 }
