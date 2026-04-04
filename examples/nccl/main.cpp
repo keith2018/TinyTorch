@@ -13,8 +13,8 @@ using namespace tinytorch;
 
 namespace tinytorch::distributed {
 
-static void demoAllReduce(int localRank, int rank, int worldSize) {
-  LOGD("demoAllReduce: %d, %d, %d", localRank, rank, worldSize);
+static void allReduceExample(int localRank, int rank, int worldSize) {
+  LOGD("allReduceExample: %d, %d, %d", localRank, rank, worldSize);
 
   auto dpg = DistributedProcessGroup::getInstance();
 
@@ -44,14 +44,14 @@ static void demoAllReduce(int localRank, int rank, int worldSize) {
   auto expected = worldSize * (worldSize + 1) / 2;
   bool correct = std::abs(result[0] - static_cast<float>(expected)) < 1e-5;
 
-  std::cout << "Rank " << rank << " correct: " << (correct ? "✓" : "✗") << " (expected: " << expected
+  std::cout << "Rank " << rank << " correct: " << (correct ? "Y" : "N") << " (expected: " << expected
             << ", result: " << result[0] << ")" << std::endl;
 }
 
 }  // namespace tinytorch::distributed
 
-void demo_nccl(int argc, char** argv) {
-  LOGD("demo_nccl ...");
+int main(int argc, char** argv) {
+  LOGD("NCCL example ...");
   Timer timer;
   timer.start();
 
@@ -64,11 +64,13 @@ void demo_nccl(int argc, char** argv) {
   LOGD("deviceCount: %d", deviceCount);
   if (localRank >= deviceCount) {
     LOGE("Not enough GPUs available. Required: %d, Available: %d", (localRank + 1), deviceCount);
-    return;
+    return 1;
   }
 
-  distributed::demoAllReduce(localRank, rank, worldSize);
+  distributed::allReduceExample(localRank, rank, worldSize);
 
   timer.mark();
   LOGD("Time cost: %lld ms", timer.elapseMillis());
+
+  return 0;
 }

@@ -11,8 +11,8 @@
 using namespace tinytorch;
 
 // https://pytorch.org/tutorials/beginner/pytorch_with_examples.html#pytorch-tensors-and-autograd
-void demo_autograd() {
-  LOGD("demo_autograd ...");
+int main() {
+  LOGD("autograd example ...");
   Timer timer;
   timer.start();
 
@@ -53,4 +53,6 @@ void demo_autograd() {
 
   timer.mark();
   LOGD("Time cost: %lld ms", timer.elapseMillis());
+
+  return 0;
 }

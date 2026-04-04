@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 project(TinyTorch)
 
-option(TINYTORCH_BUILD_DEMO "Whether or not to build demo" ON)
+option(TINYTORCH_BUILD_EXAMPLES "Whether or not to build examples" ON)
 option(TINYTORCH_BUILD_TEST "Whether or not to build the tests" OFF)
 
 option(TINYTORCH_USE_CUDA "Use CUDA" ON)
@@ -15,7 +15,7 @@ if (NOT TINYTORCH_USE_CUDA OR APPLE OR MSVC)
     set(TINYTORCH_USE_NCCL OFF)
 endif ()
 
-message(STATUS "TINYTORCH_BUILD_DEMO ${TINYTORCH_BUILD_DEMO}")
+message(STATUS "TINYTORCH_BUILD_EXAMPLES ${TINYTORCH_BUILD_EXAMPLES}")
 message(STATUS "TINYTORCH_BUILD_TEST ${TINYTORCH_BUILD_TEST}")
 message(STATUS "TINYTORCH_USE_CUDA ${TINYTORCH_USE_CUDA}")
 message(STATUS "TINYTORCH_USE_NCCL ${TINYTORCH_USE_NCCL}")
@@ -30,8 +30,8 @@ endif ()
 
 add_subdirectory(src)
 
-if (TINYTORCH_BUILD_DEMO)
-    add_subdirectory(demo)
+if (TINYTORCH_BUILD_EXAMPLES)
+    add_subdirectory(examples)
 endif ()
 
 if (TINYTORCH_BUILD_TEST)

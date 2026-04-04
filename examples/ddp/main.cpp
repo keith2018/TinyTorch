@@ -142,8 +142,8 @@ static void test(nn::Module &model, Device device, data::DataLoader &dataLoader)
       testLoss, correct, total, 100. * correct / (float)total, elapsed);
 }
 
-void demo_ddp(int argc, char **argv) {
-  LOGD("demo_ddp ...");
+int main(int argc, char **argv) {
+  LOGD("DDP training example ...");
 
   ASSERT(argc == 4);
   int localRank = std::stoi(argv[1]);
@@ -154,7 +154,7 @@ void demo_ddp(int argc, char **argv) {
   LOGD("deviceCount: %d", deviceCount);
   if (localRank >= deviceCount) {
     LOGE("Not enough GPUs available. Required: %d, Available: %d", (localRank + 1), deviceCount);
-    return;
+    return 1;
   }
 
   auto dpg = distributed::DistributedProcessGroup::getInstance();
@@ -163,7 +163,7 @@ void demo_ddp(int argc, char **argv) {
   bool success = dpg->initProcessGroup(distributed::NCCL, initMethod, rank, worldSize);
   if (!success) {
     LOGE("InitProcessGroup failed");
-    return;
+    return 1;
   }
   cuda::setDevice(localRank);
 
@@ -181,7 +181,7 @@ void demo_ddp(int argc, char **argv) {
 
   if (trainDataset->size() == 0 || testDataset->size() == 0) {
     LOGE("Dataset invalid.");
-    return;
+    return 1;
   }
 
   auto sampler =
@@ -224,4 +224,6 @@ void demo_ddp(int argc, char **argv) {
 
   timer.mark();
   LOGD("Time cost: %lld ms", timer.elapseMillis());
+
+  return 0;
 }

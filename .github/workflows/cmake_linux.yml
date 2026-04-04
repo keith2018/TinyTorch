@@ -28,8 +28,8 @@ jobs:
       - name: Test
         run: cd ${{github.workspace}}/build && ctest
 
-      # - name: Demo
-      #   run: cd ${{github.workspace}}/demo/bin && ./TinyTorch_demo
+      # - name: Run MNIST Example
+      #   run: cd ${{github.workspace}}/examples/mnist/bin && ./tinytorch_example_mnist
 
   # build_linux_gpu:
   #   name: build_linux_gpu
@@ -58,5 +58,5 @@ jobs:
   #     - name: Test
   #       run: cd ${{github.workspace}}/build && ctest
 
-  #     - name: Demo
-  #       run: cd ${{github.workspace}}/demo/bin && ./TinyTorch_demo
+  #     - name: Run MNIST Example
+  #       run: cd ${{github.workspace}}/examples/mnist/bin && ./tinytorch_example_mnist

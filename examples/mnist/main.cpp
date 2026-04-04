@@ -143,8 +143,8 @@ static void test(nn::Module &model, Device device, data::DataLoader &dataLoader)
       testLoss, correct, total, 100. * correct / (float)total, elapsed);
 }
 
-void demo_mnist() {
-  LOGD("demo_mnist ...");
+int main() {
+  LOGD("MNIST training example ...");
 
   TrainArgs args;
   manualSeed(args.seed);
@@ -161,7 +161,7 @@ void demo_mnist() {
 
   if (trainDataset->size() == 0 || testDataset->size() == 0) {
     LOGE("Dataset invalid.");
-    return;
+    return 1;
   }
 
   auto trainDataloader = data::DataLoader(trainDataset, args.batchSize);
@@ -197,4 +197,6 @@ void demo_mnist() {
 
   timer.mark();
   LOGD("Total Time cost: %lld ms", timer.elapseMillis());
+
+  return 0;
 }
