@@ -39,6 +39,7 @@ struct Device {
   Device(DeviceType t, DeviceIndex i = 0) : type(t), index(i) {}
 
   bool operator==(const Device& other) const { return type == other.type && index == other.index; }
+  bool operator!=(const Device& other) const { return type != other.type || index != other.index; }
 
   bool isCpu() const { return type == DeviceType::CPU; }
   bool isCuda() const { return type == DeviceType::CUDA; }

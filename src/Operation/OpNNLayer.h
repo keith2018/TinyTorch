@@ -63,8 +63,6 @@ using RopeInitOpFn = Tensor (*)(int64_t headDim, int64_t contextLength, float th
                                 std::optional<RopeScalingConfig> scaling, Options options);
 using RopeApplyOpFn = Tensor (*)(const Tensor& input, const Tensor& rope, int64_t offset, QKVLayout layout);
 
-using FlashAttentionOpFn = Tensor (*)(const Tensor& query, const Tensor& key, const Tensor& value, bool isCausal);
-
 // softmax
 DEFINE_OP(softmax, SoftmaxOpFn);
 DEFINE_OP(softmaxOut, SoftmaxOpOutFn);
@@ -88,9 +86,6 @@ DEFINE_OP(rmsNorm, RMSNormOpFn);
 // rope
 DEFINE_OP(ropeInit, RopeInitOpFn);
 DEFINE_OP(ropeApply, RopeApplyOpFn);
-
-// flashAttention
-DEFINE_OP(flashAttention, FlashAttentionOpFn);
 
 void registerNNLayerCpu();
 STATIC_CALL(registerNNLayerCpu);

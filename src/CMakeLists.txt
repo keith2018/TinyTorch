@@ -94,11 +94,3 @@ if (TINYTORCH_USE_NCCL)
     target_include_directories(${PROJECT_NAME} PUBLIC ${NCCL_INCLUDE_DIRS})
     target_link_libraries(${PROJECT_NAME} PUBLIC ${NCCL_LIBRARY})
 endif ()
-
-# TinyFA
-if (TINYTORCH_USE_CUDA)
-    set(TFA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-    set(TFA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    add_subdirectory(${THIRD_PARTY_DIR}/TinyFA TinyFA)
-    target_link_libraries(${PROJECT_NAME} PRIVATE TinyFA::tinyfa)
-endif ()

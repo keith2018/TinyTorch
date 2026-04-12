@@ -707,7 +707,4 @@ Tensor ropeApplyOpCudaImpl(const Tensor& input, const Tensor& rope, int64_t offs
   return out;
 }
 
-template <typename T>
-Tensor flashAttentionOpCudaImpl(const Tensor& query, const Tensor& key, const Tensor& value, bool isCausal);
-
 }  // namespace tinytorch::op
