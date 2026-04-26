@@ -8,25 +8,6 @@
 
 #include "Tensor/Dispatch.h"
 
-namespace tinytorch {
-
-struct RopeScalingConfig {
-  float factor;
-  float highFreqFactor;
-  float lowFreqFactor;
-  int64_t originalContextLength;
-
-  RopeScalingConfig(float f, float hf, float lf, int64_t len)
-      : factor(f), highFreqFactor(hf), lowFreqFactor(lf), originalContextLength(len) {}
-};
-
-enum class QKVLayout {
-  BHSD,  // [batch, numHead, seqLen, headDim]
-  BSHD   // [batch, seqLen, numHead, headDim]
-};
-
-}  // namespace tinytorch
-
 namespace tinytorch::op {
 
 enum class SoftmaxType : uint8_t {
@@ -59,10 +40,6 @@ using LayerNormOpFn = Tensor (*)(const Tensor& self, IntArrayView normalizedShap
 
 using RMSNormOpFn = Tensor (*)(const Tensor& self, IntArrayView normalizedShape, const Tensor& weight, float eps);
 
-using RopeInitOpFn = Tensor (*)(int64_t headDim, int64_t contextLength, float thetaBase,
-                                std::optional<RopeScalingConfig> scaling, Options options);
-using RopeApplyOpFn = Tensor (*)(const Tensor& input, const Tensor& rope, int64_t offset, QKVLayout layout);
-
 // softmax
 DEFINE_OP(softmax, SoftmaxOpFn);
 DEFINE_OP(softmaxOut, SoftmaxOpOutFn);
@@ -82,10 +59,6 @@ DEFINE_OP(layerNorm, LayerNormOpFn);
 
 // rmsNorm
 DEFINE_OP(rmsNorm, RMSNormOpFn);
-
-// rope
-DEFINE_OP(ropeInit, RopeInitOpFn);
-DEFINE_OP(ropeApply, RopeApplyOpFn);
 
 void registerNNLayerCpu();
 STATIC_CALL(registerNNLayerCpu);

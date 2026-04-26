@@ -94,20 +94,4 @@ std::vector<std::pair<std::string, TensorPtr>> Embedding::namedParameters_() { r
 
 void Embedding::resetParameters() { Initializer::normal(weight_); }
 
-RoPE::RoPE(int64_t headDim, int64_t contextLength, float thetaBase, std::optional<RopeScalingConfig> scaling,
-           Options options)
-    : headDim_(headDim), contextLength_(contextLength), thetaBase_(thetaBase), scaling_(scaling), options_(options) {
-  RoPE::resetParameters();
-}
-
-Tensor RoPE::forward(const Tensor &input) { return function::ropeApply(input, rope_); }
-
-Tensor RoPE::forward(const Tensor &input, int64_t offset, QKVLayout layout) {
-  return function::ropeApply(input, rope_, offset, layout);
-}
-
-void RoPE::resetParameters() { rope_ = op::ropeInit(headDim_, contextLength_, thetaBase_, scaling_, options_); }
-
-std::vector<std::pair<std::string, TensorPtr>> RoPE::namedStates_() { return {{"rope", &rope_}}; }
-
 }  // namespace tinytorch::nn

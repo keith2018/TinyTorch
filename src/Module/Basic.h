@@ -138,34 +138,4 @@ class Embedding : public Module {
   Tensor weight_;
 };
 
-class RoPE : public Module {
- public:
-  explicit RoPE(int64_t headDim, int64_t contextLength = 4096, float thetaBase = 10000.0f,
-                std::optional<RopeScalingConfig> scaling = std::nullopt, Options options = {});
-
-  using Module::forward;
-  Tensor forward(const Tensor &input) override;
-  Tensor forward(const Tensor &input, int64_t offset, QKVLayout layout = QKVLayout::BHSD);
-
-  using Module::operator();
-  Tensor operator()(const Tensor &input, int64_t offset, QKVLayout layout = QKVLayout::BHSD) {
-    return forward(input, offset, layout);
-  }
-
-  void resetParameters() override;
-
-  Tensor &cache() { return rope_; }
-
- protected:
-  std::vector<std::pair<std::string, TensorPtr>> namedStates_() override;
-
-  int64_t headDim_;
-  int64_t contextLength_;
-  float thetaBase_;
-  std::optional<RopeScalingConfig> scaling_;
-  Options options_;
-
-  Tensor rope_;
-};
-
 }  // namespace tinytorch::nn
