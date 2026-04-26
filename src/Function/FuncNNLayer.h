@@ -267,15 +267,6 @@ class FuncSDPAttention : public Function<FuncSDPAttention> {
   static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
 };
 
-class FuncRoPE : public Function<FuncRoPE> {
- public:
-  static Tensor forward(AutogradContext* ctx, const Tensor& input, const Tensor& rope, int64_t offset,
-                        QKVLayout layout) {
-    return op::ropeApply(input, rope, offset, layout);
-  }
-  static void backward(AutogradContext* ctx, const Tensor& grad) { NOT_IMPLEMENTED(); }
-};
-
 inline Tensor linear(const Tensor& input, const Tensor& weight, const Tensor& bias = {}) {
   return FuncLinear::apply(input, weight, bias);
 }
@@ -308,10 +299,6 @@ inline Tensor sdpAttention(const Tensor& query, const Tensor& key, const Tensor&
                            const Tensor& attnMask = {}, float dropoutP = 0.f,
                            std::optional<float> scale = std::nullopt) {
   return FuncSDPAttention::apply(query, key, value, isCausal, attnMask, dropoutP, scale);
-}
-inline Tensor ropeApply(const Tensor& input, const Tensor& rope, int64_t offset = 0,
-                        QKVLayout layout = QKVLayout::BHSD) {
-  return FuncRoPE::apply(input, rope, offset, layout);
 }
 
 }  // namespace tinytorch::function
