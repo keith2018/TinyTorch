@@ -152,13 +152,28 @@ std::vector<Tensor> splitOpImplDetail(const Tensor& self, IntArrayView sectionSi
   const auto numSections = sectionSizes.size();
   std::vector<Tensor> retTensors(numSections);
 
-  if (dim == 0) {  // share storage
+  bool outerAllOne = (dim == 0);
+  if (!outerAllOne) {
+    outerAllOne = true;
+    for (int64_t i = 0; i < dim; i++) {
+      if (self.shape(i) != 1) {
+        outerAllOne = false;
+        break;
+      }
+    }
+  }
+
+  if (outerAllOne) {  // share storage
+    int64_t innerSize = 1;
+    for (int64_t i = dim + 1; i < self.dim(); i++) {
+      innerSize *= self.shape(i);
+    }
     int64_t startIdx = 0;
     for (size_t i = 0; i < numSections; i++) {
       SizeVector retShape(self.shape());
-      retShape[0] = sectionSizes[i];
+      retShape[dim] = sectionSizes[i];
 
-      int64_t storageOffset = self.storageOffset() + startIdx * self.stride(0);
+      int64_t storageOffset = self.storageOffset() + startIdx * innerSize;
       retTensors[i] = Tensor(retShape, self.options().noGrad(), self.storage(), storageOffset);
 
       startIdx += sectionSizes[i];
@@ -416,8 +431,20 @@ Tensor narrowOpImpl(const Tensor& self, int64_t dim, int64_t start, int64_t leng
   SizeVector retShape(self.shape());
   retShape[dim] = length;
 
-  if (dim == 0) {  // share storage
-    int64_t newOffset = self.storageOffset() + start * self.stride(0);
+  bool outerAllOne = true;
+  for (int64_t i = 0; i < dim; i++) {
+    if (self.shape(i) != 1) {
+      outerAllOne = false;
+      break;
+    }
+  }
+
+  if (dim == 0 || outerAllOne) {  // share storage
+    int64_t innerSize = 1;
+    for (int64_t i = dim + 1; i < self.dim(); i++) {
+      innerSize *= self.shape(i);
+    }
+    int64_t newOffset = self.storageOffset() + start * innerSize;
     return {retShape, self.options().noGrad(), self.storage(), newOffset};
   }
 
