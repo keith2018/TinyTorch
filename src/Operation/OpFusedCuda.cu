@@ -16,6 +16,9 @@ namespace tinytorch::op {
 void registerFusedCuda() {
   // siluMul
   REG_FUSED_CUDA_FLT(siluMul, siluMulOpCudaImpl);
+
+  // fusedAddRmsNorm
+  REG_FUSED_CUDA_FLT(fusedAddRmsNorm, fusedAddRmsNormOpCudaImpl);
 }
 
 }  // namespace tinytorch::op

@@ -38,4 +38,35 @@ Tensor siluMulOpCpuImpl(const Tensor& self) {
   return ret;
 }
 
+template <typename T>
+void fusedAddRmsNormOpCpuImpl(Tensor& input, Tensor& residual, const Tensor& weight, float eps) {
+  ASSERT(input.shape() == residual.shape());
+  int64_t dim = input.size(-1);
+  int64_t numRows = input.numel() / dim;
+
+  T* inputPtr = input.dataPtr<T>();
+  T* residualPtr = residual.dataPtr<T>();
+  const T* weightPtr = weight.dataPtr<T>();
+
+  for (int64_t row = 0; row < numRows; row++) {
+    int64_t base = row * dim;
+
+    // add residual + accumulate sum‑of‑squares
+    float sumSq = 0.f;
+    for (int64_t i = 0; i < dim; i++) {
+      float r = static_cast<float>(inputPtr[base + i]) + static_cast<float>(residualPtr[base + i]);
+      residualPtr[base + i] = static_cast<T>(r);
+      sumSq += r * r;
+    }
+
+    float invRms = 1.f / std::sqrt(sumSq / static_cast<float>(dim) + eps);
+
+    // normalize + affine
+    for (int64_t i = 0; i < dim; i++) {
+      auto r = static_cast<float>(residualPtr[base + i]);
+      inputPtr[base + i] = static_cast<T>(r * invRms * static_cast<float>(weightPtr[i]));
+    }
+  }
+}
+
 }  // namespace tinytorch::op
