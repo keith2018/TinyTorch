@@ -13,8 +13,13 @@ namespace tinytorch::op {
 
 using SiluMulOpFn = Tensor (*)(const Tensor& self);
 
+using FusedAddRmsNormOpFn = void (*)(Tensor& input, Tensor& residual, const Tensor& weight, float eps);
+
 // siluMul
 DEFINE_OP(siluMul, SiluMulOpFn)
+
+// fusedAddRmsNorm
+DEFINE_OP(fusedAddRmsNorm, FusedAddRmsNormOpFn)
 
 void registerFusedCpu();
 STATIC_CALL(registerFusedCpu);

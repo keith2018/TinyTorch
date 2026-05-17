@@ -38,6 +38,7 @@ class RMSNorm : public Module {
   void resetParameters() override;
 
   Tensor &weight() { return weight_; }
+  float eps() const { return eps_; }
 
  protected:
   std::vector<std::pair<std::string, TensorPtr>> namedParameters_() override;
