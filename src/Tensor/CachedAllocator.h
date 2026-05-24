@@ -6,6 +6,9 @@
 
 #pragma once
 
+#include <atomic>
+#include <mutex>
+
 #include "Allocator.h"
 
 namespace tinytorch {
@@ -13,28 +16,35 @@ namespace tinytorch {
 class CachedAllocator : public Allocator {
  public:
   explicit CachedAllocator(std::unique_ptr<Allocator> base);
+  ~CachedAllocator() override;
 
-  static void setCacheEnabled(bool enabled) { cacheEnabled_ = enabled; }
+  CachedAllocator(CachedAllocator&&) noexcept;
+  CachedAllocator& operator=(CachedAllocator&&) noexcept;
 
-  void* allocate(int64_t nbytes) override {
-    if (!cacheEnabled_) {
-      return base_->allocate(nbytes);
-    }
-    return impl_->allocate(nbytes);
-  }
+  CachedAllocator(const CachedAllocator&) = delete;
+  CachedAllocator& operator=(const CachedAllocator&) = delete;
 
-  void deallocate(void* ptr) override {
-    if (!cacheEnabled_) {
-      base_->deallocate(ptr);
-      return;
-    }
-    impl_->deallocate(ptr);
-  }
+  static void setCacheEnabled(bool enabled) { cacheEnabled_.store(enabled, std::memory_order_release); }
+  static bool isCacheEnabled() { return cacheEnabled_.load(std::memory_order_acquire); }
+
+  void* allocate(int64_t nbytes) override;
+  void deallocate(void* ptr) override;
+
+  void beginAllocateToPool(int poolId);
+  void endAllocateToPool();
+
+  void freePool(int poolId);
+
+  int activePoolId() const;
+
+  static int newPoolId();
 
  private:
-  static bool cacheEnabled_;
+  static std::atomic<bool> cacheEnabled_;
+  static std::atomic<int> nextPoolId_;
   std::unique_ptr<Allocator> base_;
   std::unique_ptr<Allocator> impl_;
+  mutable std::recursive_mutex mutex_;
 };
 
 }  // namespace tinytorch

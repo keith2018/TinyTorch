@@ -19,6 +19,7 @@ add_executable(${PROJECT_NAME}
         test_function.cpp
         test_module.cpp
         test_optimizer.cpp
+        test_allocator.cpp
 )
 target_include_directories(${PROJECT_NAME} PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../src
@@ -27,6 +28,12 @@ target_include_directories(${PROJECT_NAME} PRIVATE
         googletest/googlemock/include
 )
 target_link_libraries(${PROJECT_NAME} TinyTorch_lib gtest_main)
+
+# cuda support
+find_package(CUDAToolkit QUIET)
+if (CUDAToolkit_FOUND)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE USE_CUDA)
+endif ()
 
 include(GoogleTest)
 
