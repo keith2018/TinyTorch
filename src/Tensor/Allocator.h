@@ -8,7 +8,6 @@
 
 #include <memory>
 
-#include "Device.h"
 #include "Utils/Macros.h"
 #include "ankerl/unordered_dense.h"
 
@@ -49,13 +48,14 @@ template <bool aligned>
 void* CPUAllocator<aligned>::allocate(int64_t nbytes) {
   void* ptr = nullptr;
   if (aligned) {
+    size_t alignedSize = (static_cast<size_t>(nbytes) + alignment_ - 1) & ~(alignment_ - 1);
 #if !defined(_MSC_VER)
-    ptr = std::aligned_alloc(alignment_, nbytes);
+    ptr = std::aligned_alloc(alignment_, alignedSize);
 #else
-    ptr = _aligned_malloc(nbytes, alignment_);
+    ptr = _aligned_malloc(alignedSize, alignment_);
 #endif
   } else {
-    ptr = std::malloc(nbytes);
+    ptr = std::malloc(static_cast<size_t>(nbytes));
   }
 
 #ifndef NDEBUG
@@ -105,13 +105,13 @@ class CPUPinnedAllocator : public Allocator {
 
 class CUDAAllocator : public Allocator {
  public:
-  explicit CUDAAllocator(DeviceIndex index = 0) : deviceIndex_(index) {}
+  explicit CUDAAllocator(int index = 0) : deviceIndex_(index) {}
   ~CUDAAllocator() override;
   void* allocate(int64_t nbytes) override;
   void deallocate(void* ptr) override;
 
  private:
-  DeviceIndex deviceIndex_;
+  int deviceIndex_;
 #ifndef NDEBUG
   ankerl::unordered_dense::set<void*> allocatedPtrs_;
 #endif
@@ -119,6 +119,9 @@ class CUDAAllocator : public Allocator {
 #endif
 
 struct Options;
+class CachedAllocator;
+
 Allocator* getAllocator(const Options& options);
+CachedAllocator* getCUDACachedAllocator(int device);
 
 }  // namespace tinytorch

@@ -7,14 +7,15 @@
 #include "CachedAllocator.h"
 
 #include <array>
-#include <memory>
 #include <set>
+#include <unordered_map>
 
 #include "Utils/Logger.h"
 
 namespace tinytorch {
 
-bool CachedAllocator::cacheEnabled_ = true;
+std::atomic<bool> CachedAllocator::cacheEnabled_{true};
+std::atomic<int> CachedAllocator::nextPoolId_{0};
 
 // Ref:
 // https://github.com/pytorch/pytorch/blob/main/c10/cuda/CUDACachingAllocator.cpp
@@ -70,14 +71,25 @@ struct AllocParams {
 
   AllocParams(size_t size, BlockPool* pool, size_t allocSize)
       : searchKey(size), pool(pool), allocSize(allocSize), retBlock(nullptr) {}
+};
 
-  size_t size() const { return searchKey.size; }
+struct PoolState {
+  BlockPool largeBlocks{BlockComparator, false};
+  BlockPool smallBlocks{BlockComparator, true};
+  int refCount{0};
+
+  PoolState() = default;
+
+  PoolState(PoolState&&) noexcept = default;
+  PoolState& operator=(PoolState&&) noexcept = delete;
+
+  PoolState(const PoolState&) = delete;
+  PoolState& operator=(const PoolState&) = delete;
 };
 
 class CachedAllocatorImpl : public Allocator {
  public:
-  explicit CachedAllocatorImpl(Allocator* base)
-      : base_(base), totalAllocatedSize_(0), largeBlocks(BlockComparator, false), smallBlocks(BlockComparator, true) {}
+  explicit CachedAllocatorImpl(Allocator* base) : base_(base), totalAllocatedSize_(0), activePoolId_(-1) {}
 
   static size_t roundSize(size_t size) {
     if (size < kMinBlockSize) {
@@ -99,7 +111,7 @@ class CachedAllocatorImpl : public Allocator {
   static bool getFreeBlock(AllocParams& p) {
     BlockPool& pool = *p.pool;
 
-    // set-container search, return minium satisfied value.
+    // set-container search, return minimum satisfied value.
     const auto it = pool.blocks.lower_bound(&p.searchKey);
     if (it == pool.blocks.end()) {
       return false;
@@ -109,16 +121,16 @@ class CachedAllocatorImpl : public Allocator {
     return true;
   }
 
-  BlockPool& getPool(size_t size) {
+  static BlockPool& getPool(size_t size, PoolState& poolState) {
     if (size <= kSmallSize) {
-      return smallBlocks;
+      return poolState.smallBlocks;
     }
-    return largeBlocks;
+    return poolState.largeBlocks;
   }
 
   bool allocBlock(AllocParams& p) {
     size_t size = p.allocSize;
-    void* ptr = base_->allocate(size);
+    void* ptr = base_->allocate(static_cast<int64_t>(size));
     if (!ptr) {
       return false;
     }
@@ -136,9 +148,9 @@ class CachedAllocatorImpl : public Allocator {
     return remaining > kSmallSize;
   }
 
-  void releaseCachedBlocks() {
-    releaseBlocks(largeBlocks);
-    releaseBlocks(smallBlocks);
+  void releaseCachedBlocks(PoolState& poolState) {
+    releaseBlocks(poolState.largeBlocks);
+    releaseBlocks(poolState.smallBlocks);
   }
 
   void releaseBlock(Block* block) {
@@ -150,7 +162,7 @@ class CachedAllocatorImpl : public Allocator {
   }
 
   void releaseBlocks(BlockPool& pool) {
-    // Frees all non-split blocks
+    // frees all non-split blocks
     auto it = pool.blocks.begin();
     while (it != pool.blocks.end()) {
       Block* block = *it;
@@ -161,9 +173,23 @@ class CachedAllocatorImpl : public Allocator {
     }
   }
 
-  Block* mallocImpl(size_t origSize) {
+  void releaseAllBlocks(BlockPool& pool) {
+    auto it = pool.blocks.begin();
+    while (it != pool.blocks.end()) {
+      Block* block = *it;
+      ++it;
+      if (!block->prev) {
+        base_->deallocate(block->ptr);
+        totalAllocatedSize_ -= block->size;
+      }
+      pool.blocks.erase(block);
+      delete block;
+    }
+  }
+
+  Block* mallocImpl(size_t origSize, PoolState& poolState) {
     size_t size = roundSize(origSize);
-    auto& pool = getPool(size);
+    auto& pool = getPool(size, poolState);
     const size_t allocSize = getAllocationSize(size);
     AllocParams params(size, &pool, allocSize);
 
@@ -172,13 +198,21 @@ class CachedAllocatorImpl : public Allocator {
     if (!blockFound) {
       blockFound = allocBlock(params);
       if (!blockFound) {
-        // retry after release caches
-        releaseCachedBlocks();
+        // retry after release caches from the same pool
+        releaseCachedBlocks(poolState);
         blockFound = allocBlock(params);
       }
 
       if (!blockFound) {
-        LOGE("Out of memory. failed to allocate size: %lld", allocSize);
+        // last resort: try releasing default pool caches
+        if (activePoolId_ >= 0) {
+          releaseCachedBlocks(defaultPool_);
+          blockFound = allocBlock(params);
+        }
+      }
+
+      if (!blockFound) {
+        LOGE("Out of memory. failed to allocate size: %zu", allocSize);
         return nullptr;
       }
     }
@@ -206,18 +240,13 @@ class CachedAllocatorImpl : public Allocator {
     return block;
   }
 
-  static void freeImpl(Block* block) {
-    block->allocated = false;
-    freeBlock(block);
-  }
-
   static void freeBlock(Block* block) {
     ASSERT(!block->allocated);
     auto& pool = *block->pool;
 
     const std::array<Block*, 2> mergeCandidates = {block->prev, block->next};
     for (Block* candidate : mergeCandidates) {
-      tryMergeBlocks(block, candidate, pool);
+      (void)tryMergeBlocks(block, candidate, pool);
     }
     pool.blocks.insert(block);
   }
@@ -251,43 +280,165 @@ class CachedAllocatorImpl : public Allocator {
   }
 
   void* allocate(int64_t nbytes) override {
-    Block* block = mallocImpl(nbytes);
+    auto& poolState = getActivePoolState();
+    Block* block = mallocImpl(static_cast<size_t>(nbytes), poolState);
     if (block) {
-      activeBlocks[block->ptr] = block;
+      activeBlocks_[block->ptr] = block;
       return block->ptr;
     }
 
-    LOGE("allocate error, size: %lld", nbytes);
+    LOGE("allocate error, size: %lld", static_cast<long long>(nbytes));
     return nullptr;
   }
 
   void deallocate(void* ptr) override {
-    auto it = activeBlocks.find(ptr);
-    if (it != activeBlocks.end()) {
-      freeImpl(it->second);
-      activeBlocks.erase(it);
+    auto it = activeBlocks_.find(ptr);
+    if (it != activeBlocks_.end()) {
+      Block* block = it->second;
+      activeBlocks_.erase(it);
+
+      block->allocated = false;
+      freeBlock(block);
+
+      if (!CachedAllocator::isCacheEnabled()) {
+        if (!block->isSplit()) {
+          releaseBlock(block);
+        }
+      }
     } else {
       LOGE("deallocate error, ptr not valid: %p", ptr);
     }
   }
 
+  void beginAllocateToPool(int poolId) {
+    ASSERT(activePoolId_ < 0 && "Nested pool allocation not supported");
+    activePoolId_ = poolId;
+    // lazy-create pool and increment ref count
+    auto it = graphPools_.find(poolId);
+    if (it == graphPools_.end()) {
+      graphPools_.emplace(poolId, PoolState{});
+      it = graphPools_.find(poolId);
+    }
+    it->second.refCount++;
+  }
+
+  void endAllocateToPool() {
+    ASSERT(activePoolId_ >= 0 && "endAllocateToPool called without matching begin");
+    auto it = graphPools_.find(activePoolId_);
+    if (it != graphPools_.end()) {
+      it->second.refCount--;
+    }
+    activePoolId_ = -1;
+  }
+
+  void freePool(int poolId) {
+    auto it = graphPools_.find(poolId);
+    if (it == graphPools_.end()) {
+      return;
+    }
+
+    // do not free a pool that is still actively referenced
+    if (it->second.refCount > 0) {
+      LOGE("freePool warning: pool %d still has %d active references, forcing release", poolId, it->second.refCount);
+    }
+
+    // release all blocks in the pool back to the base allocator.
+    releaseAllBlocks(it->second.largeBlocks);
+    releaseAllBlocks(it->second.smallBlocks);
+    graphPools_.erase(it);
+  }
+
+  int activePoolId() const { return activePoolId_; }
+
   ~CachedAllocatorImpl() override {
-    releaseCachedBlocks();
-    ASSERT(activeBlocks.empty());
-    ASSERT(largeBlocks.blocks.empty());
-    ASSERT(smallBlocks.blocks.empty());
+    // release all graph pools
+    for (auto& [id, pool] : graphPools_) {
+      releaseAllBlocks(pool.largeBlocks);
+      releaseAllBlocks(pool.smallBlocks);
+    }
+    graphPools_.clear();
+
+    // release any remaining active blocks
+    for (auto& [ptr, block] : activeBlocks_) {
+      base_->deallocate(block->ptr);
+      delete block;
+    }
+    activeBlocks_.clear();
+
+    // release default pool cached blocks
+    releaseAllBlocks(defaultPool_.largeBlocks);
+    releaseAllBlocks(defaultPool_.smallBlocks);
   }
 
  private:
+  PoolState& getActivePoolState() {
+    if (activePoolId_ < 0) {
+      return defaultPool_;
+    }
+    return graphPools_[activePoolId_];
+  }
+
   Allocator* base_;
   uint64_t totalAllocatedSize_;
 
-  BlockPool largeBlocks;
-  BlockPool smallBlocks;
-  ankerl::unordered_dense::map<void*, Block*> activeBlocks;
+  PoolState defaultPool_;
+
+  std::unordered_map<int, PoolState> graphPools_;
+  int activePoolId_;  // -1 = default pool
+
+  ankerl::unordered_dense::map<void*, Block*> activeBlocks_;
 };
 
 CachedAllocator::CachedAllocator(std::unique_ptr<Allocator> base)
     : base_(std::move(base)), impl_(std::make_unique<CachedAllocatorImpl>(base_.get())) {}
+
+CachedAllocator::~CachedAllocator() = default;
+
+CachedAllocator::CachedAllocator(CachedAllocator&& other) noexcept
+    : base_(std::move(other.base_)), impl_(std::move(other.impl_)) {}
+
+CachedAllocator& CachedAllocator::operator=(CachedAllocator&& other) noexcept {
+  if (this != &other) {
+    impl_ = std::move(other.impl_);
+    base_ = std::move(other.base_);
+  }
+  return *this;
+}
+
+void* CachedAllocator::allocate(int64_t nbytes) {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  return impl_->allocate(nbytes);
+}
+
+void CachedAllocator::deallocate(void* ptr) {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  impl_->deallocate(ptr);
+}
+
+void CachedAllocator::beginAllocateToPool(int poolId) {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+  static_cast<CachedAllocatorImpl*>(impl_.get())->beginAllocateToPool(poolId);
+}
+
+void CachedAllocator::endAllocateToPool() {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+  static_cast<CachedAllocatorImpl*>(impl_.get())->endAllocateToPool();
+}
+
+void CachedAllocator::freePool(int poolId) {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+  static_cast<CachedAllocatorImpl*>(impl_.get())->freePool(poolId);
+}
+
+int CachedAllocator::activePoolId() const {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+  return static_cast<CachedAllocatorImpl*>(impl_.get())->activePoolId();
+}
+
+int CachedAllocator::newPoolId() { return nextPoolId_.fetch_add(1, std::memory_order_relaxed); }
 
 }  // namespace tinytorch

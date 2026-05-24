@@ -26,7 +26,7 @@ CPUPinnedAllocator::~CPUPinnedAllocator() {
 
 void* CPUPinnedAllocator::allocate(int64_t nbytes) {
   void* ptr = nullptr;
-  CUDA_CHECK(cudaHostAlloc(&ptr, nbytes, cudaHostAllocDefault));
+  CUDA_CHECK(cudaHostAlloc(&ptr, static_cast<size_t>(nbytes), cudaHostAllocDefault));
 #ifndef NDEBUG
   if (ptr) {
     allocatedPtrs_.insert(ptr);
@@ -60,7 +60,7 @@ CUDAAllocator::~CUDAAllocator() {
 void* CUDAAllocator::allocate(int64_t nbytes) {
   void* ptr = nullptr;
   cuda::CudaDeviceGuard guard(deviceIndex_);
-  CUDA_CHECK(cudaMalloc(&ptr, nbytes));
+  CUDA_CHECK(cudaMalloc(&ptr, static_cast<size_t>(nbytes)));
 #ifndef NDEBUG
   if (ptr) {
     allocatedPtrs_.insert(ptr);
@@ -91,33 +91,20 @@ Allocator* getAllocator(const Options& options) {
   if (options.device_.isCpu()) {
     if (options.pinnedMemory_) {
 #ifdef USE_CUDA
-      static CachedAllocator cachedPinnedAllocator(std::make_unique<CPUPinnedAllocator>());
-      return &cachedPinnedAllocator;
+      // leak-on-exit
+      static auto* cachedPinnedAllocator = new CachedAllocator(std::make_unique<CPUPinnedAllocator>());
+      return cachedPinnedAllocator;
 #else
       ASSERT(false && "cuda not support");
       return nullptr;
 #endif
     } else {
-      static CachedAllocator cachedCpuAllocator(std::make_unique<CPUAllocator<>>());
-      return &cachedCpuAllocator;
+      static auto* cachedCpuAllocator = new CachedAllocator(std::make_unique<CPUAllocator<>>());
+      return cachedCpuAllocator;
     }
   } else if (options.device_.isCuda()) {
 #ifdef USE_CUDA
-    auto deviceCount = cuda::getDeviceCount();
-    static std::vector<CachedAllocator> deviceAllocators;
-    static std::once_flag flag;
-    std::call_once(flag, [&]() {
-      deviceAllocators.reserve(deviceCount);
-      for (auto i = 0; i < deviceCount; i++) {
-        deviceAllocators.emplace_back(std::make_unique<CUDAAllocator>(i));
-      }
-    });
-    auto deviceIndex = options.device_.index;
-    if (deviceIndex < 0 || static_cast<size_t>(deviceIndex) >= deviceAllocators.size()) {
-      LOGE("getAllocator error: Invalid CUDA device index %d", deviceIndex);
-      return nullptr;
-    }
-    return &deviceAllocators[deviceIndex];
+    return getCUDACachedAllocator(options.device_.index);
 #else
     ASSERT(false && "cuda not support");
     return nullptr;
@@ -125,6 +112,30 @@ Allocator* getAllocator(const Options& options) {
   }
   LOGE("getAllocator error: Unknown device type");
   return nullptr;
+}
+
+CachedAllocator* getCUDACachedAllocator(int device) {
+#ifdef USE_CUDA
+  auto deviceCount = cuda::getDeviceCount();
+  // leak-on-exit
+  static std::vector<CachedAllocator*>* deviceAllocators = nullptr;
+  static std::once_flag flag;
+  std::call_once(flag, [&]() {
+    deviceAllocators = new std::vector<CachedAllocator*>();
+    deviceAllocators->reserve(deviceCount);
+    for (auto i = 0; i < deviceCount; i++) {
+      deviceAllocators->push_back(new CachedAllocator(std::make_unique<CUDAAllocator>(i)));
+    }
+  });
+  if (device < 0 || static_cast<size_t>(device) >= deviceAllocators->size()) {
+    LOGE("getCUDACachedAllocator error: Invalid CUDA device index %d", device);
+    return nullptr;
+  }
+  return (*deviceAllocators)[device];
+#else
+  (void)device;
+  return nullptr;
+#endif
 }
 
 }  // namespace tinytorch
