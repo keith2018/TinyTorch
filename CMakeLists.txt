@@ -20,14 +20,6 @@ message(STATUS "TINYTORCH_BUILD_TEST ${TINYTORCH_BUILD_TEST}")
 message(STATUS "TINYTORCH_USE_CUDA ${TINYTORCH_USE_CUDA}")
 message(STATUS "TINYTORCH_USE_NCCL ${TINYTORCH_USE_NCCL}")
 
-if (TINYTORCH_USE_CUDA)
-    add_definitions(-DUSE_CUDA)
-endif ()
-
-if (TINYTORCH_USE_NCCL)
-    add_definitions(-DUSE_NCCL)
-endif ()
-
 add_subdirectory(src)
 
 if (TINYTORCH_BUILD_EXAMPLES)
