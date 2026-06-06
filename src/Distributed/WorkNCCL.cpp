@@ -15,13 +15,28 @@ bool WorkNCCL::isCompleted() {
     return true;
   }
 
+  if (useComputeStream_) {
+    finish("");
+    return true;
+  }
+
   if (!cudaEvent_.query()) {
     return false;
   }
+  finish("");
   return true;
 }
 
 bool WorkNCCL::wait(std::chrono::milliseconds timeout) {
+  if (useComputeStream_) {
+    if (postCompletionFn_) {
+      postCompletionFn_();
+      postCompletionFn_ = nullptr;
+    }
+    finish("");
+    return true;
+  }
+
   synchronize();
 
   if (timeout != kNoTimeout) {
@@ -36,6 +51,11 @@ bool WorkNCCL::wait(std::chrono::milliseconds timeout) {
   } else if (isBarrierOp_ && !isCompleted()) {
     auto &stream = cuda::getCurrentCUDAStream(device_.index);
     stream.synchronize();
+  }
+
+  if (postCompletionFn_) {
+    postCompletionFn_();
+    postCompletionFn_ = nullptr;
   }
 
   finish("");

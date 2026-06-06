@@ -30,7 +30,7 @@ DistributedSampler::DistributedSampler(size_t datasetSize, std::optional<size_t>
   if (dropLast_) {
     numSamples_ = datasetSize_ / numReplicas_;
   } else {
-    numSamples_ = std::ceil(static_cast<float>(datasetSize_) * 1.0f / static_cast<float>(numReplicas_));
+    numSamples_ = (datasetSize_ + numReplicas_ - 1) / numReplicas_;
   }
   totalSize_ = numSamples_ * numReplicas_;
   generateIndices();

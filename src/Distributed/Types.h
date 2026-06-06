@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <cinttypes>
+
 namespace tinytorch::distributed {
 
 enum ReduceOpType : uint8_t {

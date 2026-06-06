@@ -6,11 +6,11 @@
 
 #include "TCPStore.h"
 
-#include <arpa/inet.h>
 #include <fcntl.h>
 #include <netdb.h>
 #include <netinet/in.h>
-#include <sys/select.h>
+#include <netinet/tcp.h>
+#include <poll.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -20,14 +20,21 @@
 #include <condition_variable>
 #include <csignal>
 #include <cstring>
+#include <functional>
 #include <mutex>
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 #include "Utils/Logger.h"
 #include "Utils/Macros.h"
+
+#ifdef __APPLE__
+#include <sys/types.h>
+#define MSG_NOSIGNAL 0
+#endif
 
 typedef int socket_t;
 #define INVALID_SOCKET (-1)
@@ -50,10 +57,7 @@ enum class TCPStoreCommandType : uint8_t {
   CMD_WORKER_UNREGISTER
 };
 
-static void setupSignalHandlers() {
-  // ignore SIGPIPE
-  signal(SIGPIPE, SIG_IGN);
-}
+static void setupSignalHandlers() { signal(SIGPIPE, SIG_IGN); }
 
 static bool sendBytes(socket_t socket, const void* data, size_t size) {
   const char* ptr = static_cast<const char*>(data);
@@ -61,23 +65,16 @@ static bool sendBytes(socket_t socket, const void* data, size_t size) {
 
   while (remaining > 0) {
     ssize_t sent = send(socket, ptr, remaining, MSG_NOSIGNAL);
-
     if (sent < 0) {
       int error = errno;
-      if (error == EPIPE || error == ECONNRESET || error == ECONNABORTED) {
-        LOGE("TCPStore: Client disconnected (EPIPE/ECONNRESET/ECONNABORTED)");
-        return false;
-      } else if (error == EAGAIN) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      if (error == EINTR) {
         continue;
-      } else {
-        LOGE("TCPStore: Send error: %d", error);
-        return false;
       }
+      LOGE("TCPStore: Send error: %d", error);
+      return false;
     } else if (sent == 0) {
       return false;
     }
-
     ptr += sent;
     remaining -= sent;
   }
@@ -90,38 +87,56 @@ static bool recvBytes(socket_t socket, void* data, size_t size) {
 
   while (remaining > 0) {
     ssize_t received = recv(socket, ptr, remaining, 0);
-
     if (received < 0) {
       int error = errno;
-      if (error == ECONNRESET || error == EPIPE || error == ECONNABORTED) {
-        LOGE("TCPStore: Client disconnected during recv");
-        return false;
-      } else if (error == EAGAIN) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      if (error == EINTR) {
         continue;
-      } else if (error == ETIMEDOUT) {
-        LOGE("TCPStore: Recv timeout");
-        return false;
-      } else {
-        LOGE("TCPStore: Recv error: %d", error);
-        return false;
       }
+      if (error != EAGAIN && error != EWOULDBLOCK && error != ETIMEDOUT) {
+        LOGE("TCPStore: Recv error: %d", error);
+      }
+      return false;
     } else if (received == 0) {
       return false;
     }
-
     ptr += received;
     remaining -= received;
   }
   return true;
 }
 
-bool configureSocket(socket_t socket) {
+static bool sendString(socket_t sock, const std::string& s) {
+  uint64_t size = s.size();
+  return sendBytes(sock, &size, sizeof(size)) && (size == 0 || sendBytes(sock, s.data(), size));
+}
+
+static bool recvString(socket_t sock, std::string& s) {
+  uint64_t size;
+  if (!recvBytes(sock, &size, sizeof(size))) return false;
+  s.resize(size);
+  return size == 0 || recvBytes(sock, &s[0], size);
+}
+
+static bool sendBlob(socket_t sock, const std::vector<uint8_t>& v) {
+  uint64_t size = v.size();
+  return sendBytes(sock, &size, sizeof(size)) && (size == 0 || sendBytes(sock, v.data(), size));
+}
+
+static bool recvBlob(socket_t sock, std::vector<uint8_t>& v) {
+  uint64_t size;
+  if (!recvBytes(sock, &size, sizeof(size))) return false;
+  v.resize(size);
+  return size == 0 || recvBytes(sock, v.data(), size);
+}
+
+static bool configureSocket(socket_t socket, bool isServer) {
   int optval = 1;
 
-  if (setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0) {
-    LOGE("TCPStore: Failed to set SO_REUSEADDR");
-    return false;
+  if (isServer) {
+    if (setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0) {
+      LOGE("TCPStore: Failed to set SO_REUSEADDR");
+      return false;
+    }
   }
 
   if (setsockopt(socket, SOL_SOCKET, SO_KEEPALIVE, &optval, sizeof(optval)) < 0) {
@@ -129,44 +144,26 @@ bool configureSocket(socket_t socket) {
     return false;
   }
 
-  timeval timeout{};
-  timeout.tv_sec = 30;  // 30s
-  timeout.tv_usec = 0;
-  if (setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
-    LOGE("TCPStore: Failed to set SO_RCVTIMEO");
+#ifdef __APPLE__
+  if (setsockopt(socket, SOL_SOCKET, SO_NOSIGPIPE, &optval, sizeof(optval)) < 0) {
+    LOGE("TCPStore: Failed to set SO_NOSIGPIPE");
     return false;
   }
-
-  if (setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) < 0) {
-    LOGE("TCPStore: Failed to set SO_SNDTIMEO");
-    return false;
-  }
+#endif
 
   return true;
 }
 
-static bool isSocketConnected(socket_t socket) {
-  int error = 0;
-  socklen_t len = sizeof(error);
-  int retval = getsockopt(socket, SOL_SOCKET, SO_ERROR, &error, &len);
-
-  if (retval != 0) {
+static bool setSocketTimeout(socket_t socket, int timeoutSec) {
+  timeval timeout{};
+  timeout.tv_sec = timeoutSec;
+  timeout.tv_usec = 0;
+  if (setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
     return false;
   }
-
-  if (error != 0) {
+  if (setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) < 0) {
     return false;
   }
-
-  char dummy;
-  ssize_t result = send(socket, &dummy, 0, MSG_NOSIGNAL);
-  if (result < 0) {
-    int sendError = errno;
-    if (sendError == EPIPE || sendError == ECONNRESET || sendError == ENOTCONN) {
-      return false;
-    }
-  }
-
   return true;
 }
 
@@ -176,6 +173,9 @@ class TCPStore::ClientImpl {
  public:
   ClientImpl(std::string host, uint16_t port, const std::chrono::milliseconds& timeout);
   ~ClientImpl();
+
+  ClientImpl(const ClientImpl&) = delete;
+  ClientImpl& operator=(const ClientImpl&) = delete;
 
   bool connect();
   bool set(const std::string& key, const std::vector<uint8_t>& value) const;
@@ -192,14 +192,14 @@ class TCPStore::ClientImpl {
   std::uint16_t getPort() const noexcept { return port_; }
 
  private:
+  bool sendCommand(detail::TCPStoreCommandType cmd) const;
+  bool sendKeys(const std::vector<std::string>& keys) const;
+
   std::string host_;
   uint16_t port_;
-  std::chrono::milliseconds timeout_;
   socket_t clientSock_;
-
-  int maxRetries = 10;
-  int retryDelayMs = 1000;
-
+  int maxRetries_ = 10;
+  int retryDelayMs_ = 1000;
   mutable std::atomic<bool> isRegistered_{false};
 };
 
@@ -210,7 +210,6 @@ class TCPStore::ServerImpl {
 
   bool start();
   bool waitForWorkers();
-
   int getRegisteredWorkers() const;
 
  private:
@@ -227,11 +226,9 @@ class TCPStore::ServerImpl {
   bool handleWorkerRegister(socket_t socket);
   bool handleWorkerUnregister(socket_t socket);
 
-  void cleanupFinishedThreads();
-  void shutdownAllThreads();
-  void cleanupDisconnectedClients();
-  void startClientMonitoring();
-  void stopClientMonitoring();
+  void notifyKeyWaiters(const std::string& key);
+  bool waitForCondition(std::unique_lock<std::mutex>& lock, std::shared_ptr<std::condition_variable>& cv,
+                        const std::function<bool()>& pred);
 
   uint16_t port_;
   int numWorkers_;
@@ -249,19 +246,19 @@ class TCPStore::ServerImpl {
   socket_t serverSock_;
   std::thread serverThread_;
 
-  std::vector<std::unique_ptr<std::thread>> clientThreads_;
   std::mutex clientThreadsMutex_;
-  std::atomic<size_t> activeThreadCount_{0};
-
-  std::unordered_set<socket_t> activeClients_;
-  std::mutex activeClientsMutex_;
-  std::thread clientMonitorThread_;
-  std::atomic<bool> monitoringRunning_{false};
+  std::vector<std::thread> clientThreads_;
 };
+
+// ============================================================
+// TCPStore
+// ============================================================
 
 TCPStore::TCPStore(const std::string& host, uint16_t port, bool isServer, bool waitWorkers, int numWorkers,
                    const std::chrono::milliseconds& timeout)
     : Store(timeout), host_(host), port_(port), isServer_(isServer) {
+  detail::setupSignalHandlers();
+
   if (isServer_) {
     server_ = std::make_unique<ServerImpl>(port, numWorkers, timeout);
     if (!server_->start()) {
@@ -282,7 +279,7 @@ TCPStore::TCPStore(const std::string& host, uint16_t port, bool isServer, bool w
 
   if (isServer_ && waitWorkers && numWorkers > 0) {
     if (!server_->waitForWorkers()) {
-      LOGE("TCPStore: Timeout while waiting for workers (expected: %d, registered: %d)", numWorkers,
+      LOGE("TCPStore: Timeout waiting for workers (expected: %d, registered: %d)", numWorkers,
            server_->getRegisteredWorkers());
       return;
     }
@@ -291,10 +288,7 @@ TCPStore::TCPStore(const std::string& host, uint16_t port, bool isServer, bool w
 
 TCPStore::~TCPStore() {
   if (client_) {
-    bool ret = client_->unregisterWorker();
-    if (!ret) {
-      LOGE("TCPStore: unregisterWorker failed");
-    }
+    client_->unregisterWorker();
   }
   client_.reset();
   server_.reset();
@@ -302,14 +296,14 @@ TCPStore::~TCPStore() {
 
 void TCPStore::set(const std::string& key, const std::vector<uint8_t>& value) {
   if (!client_->set(key, value)) {
-    LOGE("TCPStore: set operation failed for key: %s", key.c_str());
+    LOGE("TCPStore: set failed for key: %s", key.c_str());
   }
 }
 
 std::vector<uint8_t> TCPStore::get(const std::string& key) {
   std::vector<uint8_t> value;
   if (!client_->get(key, value)) {
-    LOGE("TCPStore: get operation failed for key: %s", key.c_str());
+    LOGE("TCPStore: get failed for key: %s", key.c_str());
   }
   return value;
 }
@@ -317,7 +311,7 @@ std::vector<uint8_t> TCPStore::get(const std::string& key) {
 int64_t TCPStore::add(const std::string& key, int64_t value) {
   int64_t newValue = -1;
   if (!client_->add(key, value, newValue)) {
-    LOGE("TCPStore: add operation failed for key: %s", key.c_str());
+    LOGE("TCPStore: add failed for key: %s", key.c_str());
   }
   return newValue;
 }
@@ -329,19 +323,23 @@ bool TCPStore::check(const std::vector<std::string>& keys) { return client_->che
 int64_t TCPStore::getNumKeys() {
   int64_t numKeys = -1;
   if (!client_->getNumKeys(numKeys)) {
-    LOGE("TCPStore: getNumKeys operation failed");
+    LOGE("TCPStore: getNumKeys failed");
   }
   return numKeys;
 }
 
 void TCPStore::wait(const std::vector<std::string>& keys) {
   if (!client_->wait(keys)) {
-    LOGE("TCPStore: wait operation failed or timed out");
+    LOGE("TCPStore: wait failed or timed out");
   }
 }
 
+// ============================================================
+// ClientImpl
+// ============================================================
+
 TCPStore::ClientImpl::ClientImpl(std::string host, uint16_t port, const std::chrono::milliseconds& timeout)
-    : host_(std::move(host)), port_(port), timeout_(timeout), clientSock_(INVALID_SOCKET) {}
+    : host_(std::move(host)), port_(port), clientSock_(INVALID_SOCKET) {}
 
 TCPStore::ClientImpl::~ClientImpl() {
   if (clientSock_ != INVALID_SOCKET) {
@@ -357,19 +355,19 @@ bool TCPStore::ClientImpl::connect() {
     return false;
   }
 
-  if (!detail::configureSocket(clientSock_)) {
+  if (!detail::configureSocket(clientSock_, false)) {
     closesocket(clientSock_);
     clientSock_ = INVALID_SOCKET;
     return false;
   }
 
+  detail::setSocketTimeout(clientSock_, 30);
+
   sockaddr_in addr{};
-  std::memset(&addr, 0, sizeof(addr));
   addr.sin_family = AF_INET;
   addr.sin_port = htons(port_);
 
   addrinfo hints{}, *result;
-  std::memset(&hints, 0, sizeof(hints));
   hints.ai_family = AF_INET;
   hints.ai_socktype = SOCK_STREAM;
 
@@ -383,22 +381,20 @@ bool TCPStore::ClientImpl::connect() {
   std::memcpy(&addr.sin_addr, &reinterpret_cast<sockaddr_in*>(result->ai_addr)->sin_addr, sizeof(in_addr));
   freeaddrinfo(result);
 
-  // connect & retry
   bool connected = false;
-  for (int i = 0; i < maxRetries && !connected; i++) {
+  for (int i = 0; i < maxRetries_; i++) {
     if (::connect(clientSock_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == 0) {
       connected = true;
       break;
     }
-
-    if (i < maxRetries - 1) {
-      LOGE("TCPStore: Connection attempt failed, retrying in %d ms", retryDelayMs);
-      std::this_thread::sleep_for(std::chrono::milliseconds(retryDelayMs));
+    if (i < maxRetries_ - 1) {
+      LOGE("TCPStore: Connection attempt %d failed, retrying...", i + 1);
+      std::this_thread::sleep_for(std::chrono::milliseconds(retryDelayMs_));
     }
   }
 
   if (!connected) {
-    LOGE("TCPStore: Failed to connect to server after %d attempts", maxRetries);
+    LOGE("TCPStore: Failed to connect after %d attempts", maxRetries_);
     closesocket(clientSock_);
     clientSock_ = INVALID_SOCKET;
     return false;
@@ -407,230 +403,91 @@ bool TCPStore::ClientImpl::connect() {
   return true;
 }
 
+bool TCPStore::ClientImpl::sendCommand(detail::TCPStoreCommandType cmd) const {
+  return detail::sendBytes(clientSock_, &cmd, sizeof(cmd));
+}
+
+bool TCPStore::ClientImpl::sendKeys(const std::vector<std::string>& keys) const {
+  uint64_t numKeys = keys.size();
+  if (!detail::sendBytes(clientSock_, &numKeys, sizeof(numKeys))) return false;
+  for (const auto& key : keys) {
+    if (!detail::sendString(clientSock_, key)) return false;
+  }
+  return true;
+}
+
 bool TCPStore::ClientImpl::set(const std::string& key, const std::vector<uint8_t>& value) const {
-  detail::TCPStoreCommandType cmd = detail::TCPStoreCommandType::CMD_SET;
-
-  if (!detail::sendBytes(clientSock_, &cmd, sizeof(cmd))) {
-    LOGE("TCPStore: Failed to send SET command");
-    return false;
-  }
-
-  uint64_t keySize = key.size();
-  if (!detail::sendBytes(clientSock_, &keySize, sizeof(keySize)) ||
-      !detail::sendBytes(clientSock_, key.data(), keySize)) {
-    LOGE("TCPStore: Failed to send key for SET command");
-    return false;
-  }
-
-  uint64_t valueSize = value.size();
-  if (!detail::sendBytes(clientSock_, &valueSize, sizeof(valueSize)) ||
-      !detail::sendBytes(clientSock_, value.data(), valueSize)) {
-    LOGE("TCPStore: Failed to send value for SET command");
-    return false;
-  }
+  if (!sendCommand(detail::TCPStoreCommandType::CMD_SET)) return false;
+  if (!detail::sendString(clientSock_, key)) return false;
+  if (!detail::sendBlob(clientSock_, value)) return false;
 
   uint8_t confirmation;
-  if (!detail::recvBytes(clientSock_, &confirmation, sizeof(confirmation)) || confirmation != 1) {
-    LOGE("TCPStore: Failed to receive confirmation for SET command");
-    return false;
-  }
-
-  return true;
+  return detail::recvBytes(clientSock_, &confirmation, sizeof(confirmation)) && confirmation == 1;
 }
 
 bool TCPStore::ClientImpl::get(const std::string& key, std::vector<uint8_t>& value) const {
-  detail::TCPStoreCommandType cmd = detail::TCPStoreCommandType::CMD_GET;
-
-  if (!detail::sendBytes(clientSock_, &cmd, sizeof(cmd))) {
-    LOGE("TCPStore: Failed to send GET command");
-    return false;
-  }
-
-  uint64_t keySize = key.size();
-  if (!detail::sendBytes(clientSock_, &keySize, sizeof(keySize)) ||
-      !detail::sendBytes(clientSock_, key.data(), keySize)) {
-    LOGE("TCPStore: Failed to send key for GET command");
-    return false;
-  }
-
-  uint64_t valueSize;
-  if (!detail::recvBytes(clientSock_, &valueSize, sizeof(valueSize))) {
-    LOGE("TCPStore: Failed to receive value size for GET command");
-    return false;
-  }
-
-  value.resize(valueSize);
-  if (valueSize > 0 && !detail::recvBytes(clientSock_, value.data(), valueSize)) {
-    LOGE("TCPStore: Failed to receive value for GET command");
-    return false;
-  }
-
-  return true;
+  if (!sendCommand(detail::TCPStoreCommandType::CMD_GET)) return false;
+  if (!detail::sendString(clientSock_, key)) return false;
+  return detail::recvBlob(clientSock_, value);
 }
 
 bool TCPStore::ClientImpl::add(const std::string& key, int64_t addValue, int64_t& newValue) const {
-  detail::TCPStoreCommandType cmd = detail::TCPStoreCommandType::CMD_ADD;
-
-  if (!detail::sendBytes(clientSock_, &cmd, sizeof(cmd))) {
-    LOGE("TCPStore: Failed to send ADD command");
-    return false;
-  }
-
-  uint64_t keySize = key.size();
-  if (!detail::sendBytes(clientSock_, &keySize, sizeof(keySize)) ||
-      !detail::sendBytes(clientSock_, key.data(), keySize)) {
-    LOGE("TCPStore: Failed to send key for ADD command");
-    return false;
-  }
-
-  if (!detail::sendBytes(clientSock_, &addValue, sizeof(addValue))) {
-    LOGE("TCPStore: Failed to send value for ADD command");
-    return false;
-  }
-
-  if (!detail::recvBytes(clientSock_, &newValue, sizeof(newValue))) {
-    LOGE("TCPStore: Failed to receive new value for ADD command");
-    return false;
-  }
-
-  return true;
+  if (!sendCommand(detail::TCPStoreCommandType::CMD_ADD)) return false;
+  if (!detail::sendString(clientSock_, key)) return false;
+  if (!detail::sendBytes(clientSock_, &addValue, sizeof(addValue))) return false;
+  return detail::recvBytes(clientSock_, &newValue, sizeof(newValue));
 }
 
 bool TCPStore::ClientImpl::deleteKey(const std::string& key) const {
-  detail::TCPStoreCommandType cmd = detail::TCPStoreCommandType::CMD_DELETE_KEY;
-
-  if (!detail::sendBytes(clientSock_, &cmd, sizeof(cmd))) {
-    LOGE("TCPStore: Failed to send DELETE command");
-    return false;
-  }
-
-  uint64_t keySize = key.size();
-  if (!detail::sendBytes(clientSock_, &keySize, sizeof(keySize)) ||
-      !detail::sendBytes(clientSock_, key.data(), keySize)) {
-    LOGE("TCPStore: Failed to send key for DELETE command");
-    return false;
-  }
+  if (!sendCommand(detail::TCPStoreCommandType::CMD_DELETE_KEY)) return false;
+  if (!detail::sendString(clientSock_, key)) return false;
 
   uint8_t result;
-  if (!detail::recvBytes(clientSock_, &result, sizeof(result))) {
-    LOGE("TCPStore: Failed to receive result for DELETE command");
-    return false;
-  }
-
-  return result == 1;
+  return detail::recvBytes(clientSock_, &result, sizeof(result)) && result == 1;
 }
 
 bool TCPStore::ClientImpl::check(const std::vector<std::string>& keys) const {
-  detail::TCPStoreCommandType cmd = detail::TCPStoreCommandType::CMD_CHECK;
-
-  if (!detail::sendBytes(clientSock_, &cmd, sizeof(cmd))) {
-    LOGE("TCPStore: Failed to send CHECK command");
-    return false;
-  }
-
-  uint64_t numKeys = keys.size();
-  if (!detail::sendBytes(clientSock_, &numKeys, sizeof(numKeys))) {
-    LOGE("TCPStore: Failed to send number of keys for CHECK command");
-    return false;
-  }
-
-  for (const auto& key : keys) {
-    uint64_t keySize = key.size();
-    if (!detail::sendBytes(clientSock_, &keySize, sizeof(keySize)) ||
-        !detail::sendBytes(clientSock_, key.data(), keySize)) {
-      LOGE("TCPStore: Failed to send key for CHECK command");
-      return false;
-    }
-  }
+  if (!sendCommand(detail::TCPStoreCommandType::CMD_CHECK)) return false;
+  if (!sendKeys(keys)) return false;
 
   uint8_t result;
-  if (!detail::recvBytes(clientSock_, &result, sizeof(result))) {
-    LOGE("TCPStore: Failed to receive result for CHECK command");
-    return false;
-  }
-
-  return result == 1;
+  return detail::recvBytes(clientSock_, &result, sizeof(result)) && result == 1;
 }
 
 bool TCPStore::ClientImpl::getNumKeys(int64_t& numKeys) const {
-  detail::TCPStoreCommandType cmd = detail::TCPStoreCommandType::CMD_NUM_KEYS;
-
-  if (!detail::sendBytes(clientSock_, &cmd, sizeof(cmd))) {
-    LOGE("TCPStore: Failed to send NUM_KEYS command");
-    return false;
-  }
-
-  if (!detail::recvBytes(clientSock_, &numKeys, sizeof(numKeys))) {
-    LOGE("TCPStore: Failed to receive number of keys");
-    return false;
-  }
-
-  return true;
+  if (!sendCommand(detail::TCPStoreCommandType::CMD_NUM_KEYS)) return false;
+  return detail::recvBytes(clientSock_, &numKeys, sizeof(numKeys));
 }
 
 bool TCPStore::ClientImpl::wait(const std::vector<std::string>& keys) const {
-  detail::TCPStoreCommandType cmd = detail::TCPStoreCommandType::CMD_WAIT;
-
-  if (!detail::sendBytes(clientSock_, &cmd, sizeof(cmd))) {
-    LOGE("TCPStore: Failed to send WAIT command");
-    return false;
-  }
-
-  uint64_t numKeys = keys.size();
-  if (!detail::sendBytes(clientSock_, &numKeys, sizeof(numKeys))) {
-    LOGE("TCPStore: Failed to send number of keys for WAIT command");
-    return false;
-  }
-
-  for (const auto& key : keys) {
-    uint64_t keySize = key.size();
-    if (!detail::sendBytes(clientSock_, &keySize, sizeof(keySize)) ||
-        !detail::sendBytes(clientSock_, key.data(), keySize)) {
-      LOGE("TCPStore: Failed to send key for WAIT command");
-      return false;
-    }
-  }
+  if (!sendCommand(detail::TCPStoreCommandType::CMD_WAIT)) return false;
+  if (!sendKeys(keys)) return false;
 
   uint8_t result;
-  if (!detail::recvBytes(clientSock_, &result, sizeof(result))) {
-    LOGE("TCPStore: Failed to receive result for WAIT command");
-    return false;
-  }
-
-  return result == 1;
+  return detail::recvBytes(clientSock_, &result, sizeof(result)) && result == 1;
 }
 
 bool TCPStore::ClientImpl::registerWorker() const {
-  detail::TCPStoreCommandType cmd = detail::TCPStoreCommandType::CMD_WORKER_REGISTER;
-  if (!detail::sendBytes(clientSock_, &cmd, sizeof(cmd))) {
-    LOGE("TCPStore: Failed to send worker registration command");
-    return false;
-  }
+  if (!sendCommand(detail::TCPStoreCommandType::CMD_WORKER_REGISTER)) return false;
 
   uint8_t confirmation;
   if (!detail::recvBytes(clientSock_, &confirmation, sizeof(confirmation)) || confirmation != 1) {
-    LOGE("TCPStore: Failed to receive worker registration confirmation");
     return false;
   }
-
   isRegistered_.store(true);
   return true;
 }
 
 bool TCPStore::ClientImpl::unregisterWorker() const {
-  if (!isRegistered_.load()) {
-    return true;
-  }
-
-  detail::TCPStoreCommandType cmd = detail::TCPStoreCommandType::CMD_WORKER_UNREGISTER;
-  if (!detail::sendBytes(clientSock_, &cmd, sizeof(cmd))) {
-    LOGE("TCPStore: Failed to send worker unregistration command");
-    return false;
-  }
-
+  if (!isRegistered_.load()) return true;
+  if (!sendCommand(detail::TCPStoreCommandType::CMD_WORKER_UNREGISTER)) return false;
   isRegistered_.store(false);
   return true;
 }
+
+// ============================================================
+// ServerImpl
+// ============================================================
 
 TCPStore::ServerImpl::ServerImpl(uint16_t port, int numWorkers, const std::chrono::milliseconds& timeout)
     : port_(port),
@@ -638,13 +495,10 @@ TCPStore::ServerImpl::ServerImpl(uint16_t port, int numWorkers, const std::chron
       timeout_(timeout),
       shutdownServer_(false),
       registeredWorkers_(0),
-      serverSock_(INVALID_SOCKET) {
-  detail::setupSignalHandlers();
-}
+      serverSock_(INVALID_SOCKET) {}
 
 TCPStore::ServerImpl::~ServerImpl() {
   shutdownServer_.store(true);
-  stopClientMonitoring();
 
   if (serverSock_ != INVALID_SOCKET) {
     closesocket(serverSock_);
@@ -662,8 +516,19 @@ TCPStore::ServerImpl::~ServerImpl() {
     workerCV_.notify_all();
   }
 
-  serverThread_.detach();
-  shutdownAllThreads();
+  if (serverThread_.joinable()) {
+    serverThread_.join();
+  }
+
+  {
+    std::lock_guard<std::mutex> lock(clientThreadsMutex_);
+    for (auto& t : clientThreads_) {
+      if (t.joinable()) {
+        t.join();
+      }
+    }
+    clientThreads_.clear();
+  }
 }
 
 bool TCPStore::ServerImpl::start() {
@@ -673,20 +538,19 @@ bool TCPStore::ServerImpl::start() {
     return false;
   }
 
-  if (!detail::configureSocket(serverSock_)) {
+  if (!detail::configureSocket(serverSock_, true)) {
     closesocket(serverSock_);
     serverSock_ = INVALID_SOCKET;
     return false;
   }
 
   sockaddr_in addr{};
-  std::memset(&addr, 0, sizeof(addr));
   addr.sin_family = AF_INET;
   addr.sin_port = htons(port_);
   addr.sin_addr.s_addr = INADDR_ANY;
 
   if (bind(serverSock_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
-    LOGE("TCPStore: Failed to bind server socket");
+    LOGE("TCPStore: Failed to bind server socket on port %d", port_);
     closesocket(serverSock_);
     serverSock_ = INVALID_SOCKET;
     return false;
@@ -700,14 +564,11 @@ bool TCPStore::ServerImpl::start() {
   }
 
   serverThread_ = std::thread(&ServerImpl::serverLoop, this);
-  startClientMonitoring();
   return true;
 }
 
 bool TCPStore::ServerImpl::waitForWorkers() {
-  if (numWorkers_ <= 0) {
-    return true;
-  }
+  if (numWorkers_ <= 0) return true;
 
   std::unique_lock<std::mutex> lock(mutex_);
   bool success = workerCV_.wait_for(
@@ -715,154 +576,74 @@ bool TCPStore::ServerImpl::waitForWorkers() {
 
   if (!success) {
     LOGE("TCPStore: Timeout waiting for workers. Expected: %d, Registered: %d", numWorkers_, registeredWorkers_.load());
-  } else if (!shutdownServer_.load()) {
-    LOGI("TCPStore: All %d workers registered successfully", numWorkers_);
   }
   return success && !shutdownServer_.load();
 }
 
 int TCPStore::ServerImpl::getRegisteredWorkers() const { return registeredWorkers_.load(); }
 
-void TCPStore::ServerImpl::startClientMonitoring() {
-  monitoringRunning_.store(true);
-  clientMonitorThread_ = std::thread([this]() {
-    while (monitoringRunning_.load()) {
-      cleanupDisconnectedClients();
-      std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    }
-  });
-}
-
-void TCPStore::ServerImpl::stopClientMonitoring() {
-  monitoringRunning_.store(false);
-  clientMonitorThread_.detach();
-}
-
-void TCPStore::ServerImpl::cleanupDisconnectedClients() {
-  std::lock_guard<std::mutex> lock(activeClientsMutex_);
-
-  auto it = activeClients_.begin();
-  while (it != activeClients_.end()) {
-    if (!detail::isSocketConnected(*it)) {
-      LOGI("TCPStore: Detected disconnected client, cleaning up");
-      closesocket(*it);
-      it = activeClients_.erase(it);
-    } else {
-      ++it;
-    }
-  }
-}
-
-void TCPStore::ServerImpl::cleanupFinishedThreads() {
-  std::lock_guard<std::mutex> lock(clientThreadsMutex_);
-
-  auto it = clientThreads_.begin();
-  while (it != clientThreads_.end()) {
-    if ((*it)->joinable()) {
-      ++it;
-    } else {
-      it = clientThreads_.erase(it);
-      activeThreadCount_.fetch_sub(1);
-    }
-  }
-}
-
-void TCPStore::ServerImpl::shutdownAllThreads() {
-  std::vector<std::unique_ptr<std::thread>> threads;
-  {
-    std::lock_guard<std::mutex> lock(clientThreadsMutex_);
-    threads = std::move(clientThreads_);
-    clientThreads_.clear();
-  }
-
-  for (auto& thread : threads) {
-    if (thread) {
-      thread->detach();
-    }
-  }
-
-  activeThreadCount_.store(0);
-}
-
 void TCPStore::ServerImpl::serverLoop() {
+  detail::setSocketTimeout(serverSock_, 1);
+
   while (!shutdownServer_.load()) {
     sockaddr_in clientAddr{};
     socklen_t addrLen = sizeof(clientAddr);
     socket_t clientSocket = accept(serverSock_, reinterpret_cast<sockaddr*>(&clientAddr), &addrLen);
 
     if (clientSocket == INVALID_SOCKET) {
-      if (!shutdownServer_.load()) {
-        LOGE("TCPStore: Failed to accept client connection");
-      }
       continue;
     }
 
-    {
-      std::lock_guard<std::mutex> lock(activeClientsMutex_);
-      activeClients_.insert(clientSocket);
-    }
-
-    {
-      std::lock_guard<std::mutex> lock(clientThreadsMutex_);
-
-      if (clientThreads_.size() > 128) {
-        cleanupFinishedThreads();
-      }
-
-      auto thread = std::make_unique<std::thread>(&ServerImpl::handleClientInThread, this, clientSocket);
-      clientThreads_.push_back(std::move(thread));
-      activeThreadCount_.fetch_add(1);
-    }
+    std::lock_guard<std::mutex> lock(clientThreadsMutex_);
+    clientThreads_.emplace_back(&ServerImpl::handleClientInThread, this, clientSocket);
   }
 }
 
 void TCPStore::ServerImpl::handleClientInThread(socket_t socket) {
-  struct ThreadGuard {
-    std::atomic<size_t>& counter;
-    socket_t socket_;
-    std::unordered_set<socket_t>& activeClients_;
-    std::mutex& activeClientsMutex_;
-
-    explicit ThreadGuard(std::atomic<size_t>& c, socket_t s, std::unordered_set<socket_t>& clients, std::mutex& mutex)
-        : counter(c), socket_(s), activeClients_(clients), activeClientsMutex_(mutex) {}
-
-    ~ThreadGuard() {
-      counter.fetch_sub(1);
-      {
-        std::lock_guard<std::mutex> lock(activeClientsMutex_);
-        activeClients_.erase(socket_);
-      }
-      closesocket(socket_);
-    }
-  };
-
-  ThreadGuard guard(activeThreadCount_, socket, activeClients_, activeClientsMutex_);
-
-  timeval timeout{};
-  timeout.tv_sec = 1;  // 1s
-  timeout.tv_usec = 0;
-  setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
+  detail::configureSocket(socket, false);
+  // SO_RCVTIMEO acts as a mid-message safety net only. Inter-message idleness
+  // is governed by poll() below — a long quiet period (e.g. while a client is
+  // loading a large model between registerWorker() and the first NCCL
+  // collective) must NOT tear down the connection.
+  detail::setSocketTimeout(socket, 30);
 
   while (!shutdownServer_.load()) {
+    // wait for either readable data or shutdown, in 1s ticks.
+    struct pollfd pfd {};
+    pfd.fd = socket;
+    pfd.events = POLLIN;
+    int rc = poll(&pfd, 1, 1000);
+    if (rc < 0) {
+      if (errno == EINTR) continue;
+      break;
+    }
+    if (rc == 0) {
+      // idle; loop and re-check shutdownServer_.
+      continue;
+    }
+    if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+      break;
+    }
+    if (!(pfd.revents & POLLIN)) {
+      continue;
+    }
     if (!handleClient(socket)) {
       break;
     }
   }
+
+  closesocket(socket);
 }
 
 bool TCPStore::ServerImpl::handleClient(socket_t socket) {
-  if (shutdownServer_.load()) {
-    return false;
-  }
+  if (shutdownServer_.load()) return false;
 
   detail::TCPStoreCommandType cmd;
   if (!detail::recvBytes(socket, &cmd, sizeof(cmd))) {
     return false;
   }
 
-  if (shutdownServer_.load()) {
-    return false;
-  }
+  if (shutdownServer_.load()) return false;
 
   switch (cmd) {
     case detail::TCPStoreCommandType::CMD_SET:
@@ -884,43 +665,42 @@ bool TCPStore::ServerImpl::handleClient(socket_t socket) {
     case detail::TCPStoreCommandType::CMD_WORKER_UNREGISTER:
       return handleWorkerUnregister(socket);
     default:
-      LOGE("TCPStore: Unknown command type: %d", static_cast<int>(cmd));
+      LOGE("TCPStore: Unknown command: %d", static_cast<int>(cmd));
       return false;
   }
 }
 
+void TCPStore::ServerImpl::notifyKeyWaiters(const std::string& key) {
+  auto it = keyCVs_.find(key);
+  if (it != keyCVs_.end()) {
+    for (auto& cv : it->second) {
+      cv->notify_all();
+    }
+    keyCVs_.erase(it);
+  }
+}
+
+bool TCPStore::ServerImpl::waitForCondition(std::unique_lock<std::mutex>& lock,
+                                            std::shared_ptr<std::condition_variable>& cv,
+                                            const std::function<bool()>& pred) {
+  if (timeout_ != kNoTimeout) {
+    return cv->wait_for(lock, timeout_, [&] { return shutdownServer_.load() || pred(); }) && !shutdownServer_.load();
+  }
+  cv->wait(lock, [&] { return shutdownServer_.load() || pred(); });
+  return !shutdownServer_.load();
+}
+
 bool TCPStore::ServerImpl::handleSetCommand(socket_t socket) {
-  uint64_t keySize;
-  if (!detail::recvBytes(socket, &keySize, sizeof(keySize))) {
-    return false;
-  }
-
-  std::string key(keySize, '\0');
-  if (!detail::recvBytes(socket, &key[0], keySize)) {
-    return false;
-  }
-
-  uint64_t valueSize;
-  if (!detail::recvBytes(socket, &valueSize, sizeof(valueSize))) {
-    return false;
-  }
-
-  std::vector<uint8_t> value(valueSize);
-  if (!detail::recvBytes(socket, value.data(), valueSize)) {
+  std::string key;
+  std::vector<uint8_t> value;
+  if (!detail::recvString(socket, key) || !detail::recvBlob(socket, value)) {
     return false;
   }
 
   {
     std::lock_guard<std::mutex> lock(mutex_);
     keyValueStore_[key] = std::move(value);
-
-    auto it = keyCVs_.find(key);
-    if (it != keyCVs_.end()) {
-      for (auto& cv : it->second) {
-        cv->notify_all();
-      }
-      keyCVs_.erase(it);
-    }
+    notifyKeyWaiters(key);
   }
 
   uint8_t confirmation = 1;
@@ -928,19 +708,11 @@ bool TCPStore::ServerImpl::handleSetCommand(socket_t socket) {
 }
 
 bool TCPStore::ServerImpl::handleGetCommand(socket_t socket) {
-  uint64_t keySize;
-  if (!detail::recvBytes(socket, &keySize, sizeof(keySize))) {
-    return false;
-  }
-
-  std::string key(keySize, '\0');
-  if (!detail::recvBytes(socket, &key[0], keySize)) {
-    return false;
-  }
+  std::string key;
+  if (!detail::recvString(socket, key)) return false;
 
   std::vector<uint8_t> value;
   std::shared_ptr<std::condition_variable> cv;
-  bool success = false;
 
   {
     std::unique_lock<std::mutex> lock(mutex_);
@@ -948,44 +720,19 @@ bool TCPStore::ServerImpl::handleGetCommand(socket_t socket) {
     auto it = keyValueStore_.find(key);
     if (it != keyValueStore_.end()) {
       value = it->second;
-      success = true;
-    } else {
-      cv = std::make_shared<std::condition_variable>();
-      keyCVs_[key].push_back(cv);
-    }
-  }
-
-  if (success) {
-    uint64_t valueSize = value.size();
-    return detail::sendBytes(socket, &valueSize, sizeof(valueSize)) &&
-           (valueSize == 0 || detail::sendBytes(socket, value.data(), valueSize));
-  }
-
-  {
-    std::unique_lock<std::mutex> lock(mutex_);
-
-    if (timeout_ != kNoTimeout) {
-      auto waitUntil = std::chrono::steady_clock::now() + timeout_;
-      success = cv->wait_until(lock, waitUntil, [this, &key] {
-        return shutdownServer_.load() || keyValueStore_.find(key) != keyValueStore_.end();
-      });
-    } else {
-      cv->wait(lock,
-               [this, &key] { return shutdownServer_.load() || keyValueStore_.find(key) != keyValueStore_.end(); });
-      success = true;
+      return detail::sendBlob(socket, value);
     }
 
-    if (shutdownServer_.load()) {
-      success = false;
-    }
+    cv = std::make_shared<std::condition_variable>();
+    keyCVs_[key].push_back(cv);
+
+    bool success = waitForCondition(lock, cv, [&] { return keyValueStore_.find(key) != keyValueStore_.end(); });
 
     auto cvIt = keyCVs_.find(key);
     if (cvIt != keyCVs_.end()) {
       auto& cvs = cvIt->second;
       cvs.erase(std::remove(cvs.begin(), cvs.end(), cv), cvs.end());
-      if (cvs.empty()) {
-        keyCVs_.erase(cvIt);
-      }
+      if (cvs.empty()) keyCVs_.erase(cvIt);
     }
 
     if (success) {
@@ -996,53 +743,33 @@ bool TCPStore::ServerImpl::handleGetCommand(socket_t socket) {
         success = false;
       }
     }
+
+    if (!success) {
+      LOGE("TCPStore: Get timeout for key: %s", key.c_str());
+      return false;
+    }
   }
 
-  if (success) {
-    uint64_t valueSize = value.size();
-    return detail::sendBytes(socket, &valueSize, sizeof(valueSize)) &&
-           (valueSize == 0 || detail::sendBytes(socket, value.data(), valueSize));
-  }
-
-  LOGE("TCPStore: Get timeout after %lld ms for key: %s", timeout_.count(), key.c_str());
-  return false;
+  return detail::sendBlob(socket, value);
 }
 
 bool TCPStore::ServerImpl::handleAddCommand(socket_t socket) {
-  uint64_t keySize;
-  if (!detail::recvBytes(socket, &keySize, sizeof(keySize))) {
-    return false;
-  }
-
-  std::string key(keySize, '\0');
-  if (!detail::recvBytes(socket, &key[0], keySize)) {
-    return false;
-  }
+  std::string key;
+  if (!detail::recvString(socket, key)) return false;
 
   int64_t addValue;
-  if (!detail::recvBytes(socket, &addValue, sizeof(addValue))) {
-    return false;
-  }
+  if (!detail::recvBytes(socket, &addValue, sizeof(addValue))) return false;
 
   int64_t newValue = addValue;
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    const auto& value = keyValueStore_[key];
-    if (!value.empty()) {
-      auto buf = reinterpret_cast<const char*>(value.data());
-      auto len = value.size();
-      newValue += std::stoll(std::string(buf, len));
+    const auto& existing = keyValueStore_[key];
+    if (!existing.empty()) {
+      newValue += std::stoll(std::string(reinterpret_cast<const char*>(existing.data()), existing.size()));
     }
-    auto newValStr = std::to_string(newValue);
-    keyValueStore_[key] = std::vector<uint8_t>(newValStr.begin(), newValStr.end());
-
-    auto it = keyCVs_.find(key);
-    if (it != keyCVs_.end()) {
-      for (auto& cv : it->second) {
-        cv->notify_all();
-      }
-      keyCVs_.erase(it);
-    }
+    auto str = std::to_string(newValue);
+    keyValueStore_[key] = std::vector<uint8_t>(str.begin(), str.end());
+    notifyKeyWaiters(key);
   }
 
   return detail::sendBytes(socket, &newValue, sizeof(newValue));
@@ -1050,112 +777,68 @@ bool TCPStore::ServerImpl::handleAddCommand(socket_t socket) {
 
 bool TCPStore::ServerImpl::handleCheckCommand(socket_t socket) {
   uint64_t numKeys;
-  if (!detail::recvBytes(socket, &numKeys, sizeof(numKeys))) {
-    return false;
-  }
+  if (!detail::recvBytes(socket, &numKeys, sizeof(numKeys))) return false;
 
   std::vector<std::string> keys(numKeys);
-
   for (size_t i = 0; i < numKeys; i++) {
-    uint64_t keySize;
-    if (!detail::recvBytes(socket, &keySize, sizeof(keySize))) {
-      return false;
-    }
-
-    keys[i].resize(keySize);
-    if (!detail::recvBytes(socket, &keys[i][0], keySize)) {
-      return false;
-    }
+    if (!detail::recvString(socket, keys[i])) return false;
   }
 
-  bool allKeysExist = true;
+  bool allExist = true;
   {
     std::lock_guard<std::mutex> lock(mutex_);
     for (const auto& key : keys) {
       if (keyValueStore_.find(key) == keyValueStore_.end()) {
-        allKeysExist = false;
+        allExist = false;
         break;
       }
     }
   }
 
-  uint8_t result = allKeysExist ? 1 : 0;
+  uint8_t result = allExist ? 1 : 0;
   return detail::sendBytes(socket, &result, sizeof(result));
 }
 
 bool TCPStore::ServerImpl::handleWaitCommand(socket_t socket) {
   uint64_t numKeys;
-  if (!detail::recvBytes(socket, &numKeys, sizeof(numKeys))) {
-    return false;
-  }
+  if (!detail::recvBytes(socket, &numKeys, sizeof(numKeys))) return false;
 
   std::vector<std::string> keys(numKeys);
   for (size_t i = 0; i < numKeys; i++) {
-    uint64_t keySize;
-    if (!detail::recvBytes(socket, &keySize, sizeof(keySize))) {
-      return false;
-    }
-    keys[i].resize(keySize);
-    if (!detail::recvBytes(socket, &keys[i][0], keySize)) {
-      return false;
-    }
+    if (!detail::recvString(socket, keys[i])) return false;
   }
 
-  bool success = true;
-  std::shared_ptr<std::condition_variable> cv;
-  std::vector<std::string> missingKeys;
+  auto allKeysExist = [&] {
+    return std::all_of(keys.begin(), keys.end(),
+                       [&](const auto& k) { return keyValueStore_.find(k) != keyValueStore_.end(); });
+  };
 
+  bool success;
   {
     std::unique_lock<std::mutex> lock(mutex_);
 
-    for (const auto& key : keys) {
-      if (keyValueStore_.find(key) == keyValueStore_.end()) {
-        missingKeys.push_back(key);
-      }
-    }
-
-    if (missingKeys.empty()) {
+    if (allKeysExist()) {
       uint8_t result = 1;
       return detail::sendBytes(socket, &result, sizeof(result));
     }
 
-    cv = std::make_shared<std::condition_variable>();
-    for (const auto& key : missingKeys) {
-      keyCVs_[key].push_back(cv);
-    }
-  }
-
-  {
-    std::unique_lock<std::mutex> lock(mutex_);
-
-    if (timeout_ != kNoTimeout) {
-      auto waitUntil = std::chrono::steady_clock::now() + timeout_;
-      success = cv->wait_until(lock, waitUntil, [this, &keys] {
-        return shutdownServer_.load() || std::all_of(keys.begin(), keys.end(), [this](const auto& key) {
-                 return keyValueStore_.find(key) != keyValueStore_.end();
-               });
-      });
-    } else {
-      cv->wait(lock, [this, &keys] {
-        return shutdownServer_.load() || std::all_of(keys.begin(), keys.end(), [this](const auto& key) {
-                 return keyValueStore_.find(key) != keyValueStore_.end();
-               });
-      });
-      success = true;
+    auto cv = std::make_shared<std::condition_variable>();
+    std::vector<std::string> missingKeys;
+    for (const auto& key : keys) {
+      if (keyValueStore_.find(key) == keyValueStore_.end()) {
+        keyCVs_[key].push_back(cv);
+        missingKeys.push_back(key);
+      }
     }
 
-    if (shutdownServer_.load()) {
-      success = false;
-    }
+    success = waitForCondition(lock, cv, allKeysExist);
 
     for (const auto& key : missingKeys) {
       auto it = keyCVs_.find(key);
       if (it != keyCVs_.end()) {
         auto& cvs = it->second;
         cvs.erase(std::remove(cvs.begin(), cvs.end(), cv), cvs.end());
-        if (cvs.empty()) {
-          keyCVs_.erase(it);
-        }
+        if (cvs.empty()) keyCVs_.erase(it);
       }
     }
   }
@@ -1165,27 +848,20 @@ bool TCPStore::ServerImpl::handleWaitCommand(socket_t socket) {
 }
 
 bool TCPStore::ServerImpl::handleDeleteCommand(socket_t socket) {
-  uint64_t keySize;
-  if (!detail::recvBytes(socket, &keySize, sizeof(keySize))) {
-    return false;
-  }
+  std::string key;
+  if (!detail::recvString(socket, key)) return false;
 
-  std::string key(keySize, '\0');
-  if (!detail::recvBytes(socket, &key[0], keySize)) {
-    return false;
-  }
-
-  bool success = false;
+  bool found = false;
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    auto kvIt = keyValueStore_.find(key);
-    if (kvIt != keyValueStore_.end()) {
-      keyValueStore_.erase(kvIt);
-      success = true;
+    auto it = keyValueStore_.find(key);
+    if (it != keyValueStore_.end()) {
+      keyValueStore_.erase(it);
+      found = true;
     }
   }
 
-  uint8_t result = success ? 1 : 0;
+  uint8_t result = found ? 1 : 0;
   return detail::sendBytes(socket, &result, sizeof(result));
 }
 
@@ -1195,7 +871,6 @@ bool TCPStore::ServerImpl::handleNumKeysCommand(socket_t socket) {
     std::lock_guard<std::mutex> lock(mutex_);
     numKeys = static_cast<int64_t>(keyValueStore_.size());
   }
-
   return detail::sendBytes(socket, &numKeys, sizeof(numKeys));
 }
 
@@ -1204,7 +879,6 @@ bool TCPStore::ServerImpl::handleWorkerRegister(socket_t socket) {
 
   uint8_t confirmation = 1;
   if (!detail::sendBytes(socket, &confirmation, sizeof(confirmation))) {
-    LOGE("TCPStore: Failed to send worker registration confirmation");
     registeredWorkers_.fetch_sub(1);
     return false;
   }
@@ -1214,7 +888,7 @@ bool TCPStore::ServerImpl::handleWorkerRegister(socket_t socket) {
     workerCV_.notify_all();
   }
 
-  LOGI("TCPStore: Worker registered. Current workers: %d/%d", currentWorkers, numWorkers_);
+  LOGI("TCPStore: Worker registered (%d/%d)", currentWorkers, numWorkers_);
   return true;
 }
 

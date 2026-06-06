@@ -138,13 +138,12 @@ std::shared_ptr<Store> DistributedProcessGroup::createStore(const InitConfig& co
   if (config.method == InitMethod::ENV) {
     bool isServer = (config.rank == 0);
     int numWorkers = config.worldSize;
-    bool waitWorkers = true;
-    return std::make_shared<TCPStore>(config.masterAddr,  // host
-                                      config.masterPort,  // port
-                                      isServer,           // isServer
-                                      waitWorkers,        // waitWorkers
-                                      numWorkers,         // numWorkers
-                                      timeout             // timeout
+    return std::make_shared<TCPStore>(config.masterAddr,   // host
+                                      config.masterPort,   // port
+                                      isServer,            // isServer
+                                      config.waitWorkers,  // waitWorkers
+                                      numWorkers,          // numWorkers
+                                      timeout              // timeout
     );
   }
 
@@ -152,11 +151,10 @@ std::shared_ptr<Store> DistributedProcessGroup::createStore(const InitConfig& co
   if (config.method == InitMethod::TCP) {
     bool isServer = (config.rank == 0);
     int numWorkers = config.worldSize;
-    bool waitWorkers = true;
     return std::make_shared<TCPStore>(config.masterAddr,                         // host
                                       static_cast<uint16_t>(config.masterPort),  // port
                                       isServer,                                  // isServer
-                                      waitWorkers,                               // waitWorkers
+                                      config.waitWorkers,                        // waitWorkers
                                       numWorkers,                                // numWorkers
                                       timeout                                    // timeout
     );
