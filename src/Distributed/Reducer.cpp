@@ -124,7 +124,7 @@ void Reducer::reduceBucket(int64_t bucketIdx) {
   ASSERT(!bucket.params.empty());
 
   std::vector<Tensor> tensors = {bucket.flatBuffer};
-  bucket.work = processGroup_->allReduce(tensors);
+  bucket.work = processGroup_->allReduce(tensors, AVG);
   ASSERT(bucket.work);
 
   bucketReadyCnt_++;
@@ -169,8 +169,6 @@ void Reducer::checkAllBucketsReady() {
       ASSERT(success);
 
       cuda::CudaDeviceGuard guard(bucket.flatBuffer.device().index);
-      auto worldSize = processGroup_->getWorldSize();
-      bucket.flatBuffer /= static_cast<float>(worldSize);
       copyFlattenedBufferToGrads(bIdx);
 
       bucket.work = nullptr;

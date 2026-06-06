@@ -38,6 +38,9 @@ class BackendNCCL : public Backend {
 
   void setTimeout(std::chrono::milliseconds timeout) override { options_->timeout = timeout; }
 
+  void setUseComputeStream(bool flag) { useComputeStream_ = flag; }
+  bool useComputeStream() const { return useComputeStream_; }
+
   std::string getBackendName() const override { return NCCL_BACKEND_NAME; }
 
   std::shared_ptr<BackendOptions> getBackendOptions() override { return options_; }
@@ -90,6 +93,10 @@ class BackendNCCL : public Backend {
  protected:
   void setError(BackendErrorType error) {
     std::lock_guard<std::mutex> lock(mutex_);
+    setErrorLocked(error);
+  }
+
+  void setErrorLocked(BackendErrorType error) {
     if (error_ == BackendErrorType::SUCCESS) {
       error_ = error;
     }
@@ -144,6 +151,8 @@ class BackendNCCL : public Backend {
 
   std::list<std::weak_ptr<WorkNCCL>> activeWorks_;
 
+  bool useComputeStream_ = false;
+
   mutable std::mutex mutex_;
   BackendErrorType error_ = BackendErrorType::SUCCESS;
 };
@@ -164,28 +173,35 @@ std::shared_ptr<Work> BackendNCCL::collective(Tensor& input, Tensor& output, Fun
     return nullptr;
   }
 
-  auto& ncclStream = getNCCLStream(deviceKey, device.index);
   auto& computeSteam = cuda::getCurrentCUDAStream(device.index);
-  ncclStream.waitStream(computeSteam);
+  cuda::CUDAStream& opStream = useComputeStream_ ? computeSteam : getNCCLStream(deviceKey, device.index);
+  if (!useComputeStream_) {
+    opStream.waitStream(computeSteam);
+  }
 
   auto work = std::make_shared<WorkNCCL>(std::to_string(getID()), getGroupDesc(), device, getRank(), opType);
   work->setOpTimeout(options_->timeout);
   work->setNCCLComm(comm);
   work->setStore(store_);
   work->setIsBarrierOp(opType == OpType::BARRIER);
-  work->setCudaEvent(cuda::createCUDAEvent(device.index));
+  work->setUseComputeStream(useComputeStream_);
+  if (!useComputeStream_) {
+    work->setCudaEvent(cuda::createCUDAEvent(device.index));
+  }
   work->setOutputs({output});
 
   cuda::CudaDeviceGuard guard(device.index);
   NCCL_CALL(ncclGroupStart());
-  NCCL_CALL(ncclFunc(comm, ncclStream.stream()));
+  NCCL_CALL(ncclFunc(comm, opStream.stream()));
   ncclResult_t state = ncclGroupEnd();
 
   if (!waitNcclCommandResult(comm, state)) {
     return nullptr;
   }
 
-  work->getCudaEvent().record(ncclStream);
+  if (!useComputeStream_) {
+    work->getCudaEvent().record(opStream);
+  }
   workEnqueue(work);
   return work;
 }

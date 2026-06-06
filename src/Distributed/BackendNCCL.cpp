@@ -51,14 +51,29 @@ std::shared_ptr<Work> BackendNCCL::allGather(std::vector<std::vector<Tensor>>& o
   ASSERT(outputTensors.size() == 1);
   ASSERT(inputTensors.size() == 1);
   auto& input = inputTensors.back();
-  auto output = op::stack(ArrayView<Tensor>(outputTensors.back()), 0);
-  return collective(
-      input, output,
+  auto& outputs = outputTensors.back();
+
+  int64_t numel = input.numel();
+  auto flatOutput =
+      Tensor::zeros({numel * static_cast<int64_t>(outputs.size())}, Options(input.device(), input.dtype()));
+
+  auto work = collective(
+      input, flatOutput,
       [&](const std::shared_ptr<NCCLComm>& comm, cudaStream_t stream) {
-        return ncclAllGather(input.dataPtr<>(), output.dataPtr<>(), input.numel(), getNcclDataType(input.dtype()),
+        return ncclAllGather(input.dataPtr<>(), flatOutput.dataPtr<>(), numel, getNcclDataType(input.dtype()),
                              comm->getNcclComm(), stream);
       },
       OpType::ALL_GATHER);
+
+  if (work) {
+    auto workNCCL = std::static_pointer_cast<WorkNCCL>(work);
+    workNCCL->setPostCompletionFn([flatOutput, outputs, numel]() mutable {
+      for (size_t i = 0; i < outputs.size(); i++) {
+        outputs[i].copy_(flatOutput.narrow(0, static_cast<int64_t>(i) * numel, numel).view(outputs[i].sizes()));
+      }
+    });
+  }
+  return work;
 }
 
 std::shared_ptr<Work> BackendNCCL::reduceScatter(std::vector<Tensor>& outputTensors,
@@ -128,12 +143,17 @@ std::shared_ptr<NCCLComm> BackendNCCL::getNCCLComm(const std::string& deviceKey,
   ncclUniqueId commId;
   std::string key = NCCL_COMM_ID_PREFIX + std::to_string(ncclCommCounter_++);
   if (getRank() == 0) {
-    NCCL_CALL(ncclGetUniqueId(&commId));
+    ncclResult_t ret = ncclGetUniqueId(&commId);
+    if (ret != ncclSuccess && ret != ncclInProgress) {
+      NCCL_ERROR(ret);
+      setErrorLocked(BackendErrorType::COMM_ERROR);
+      return nullptr;
+    }
     store_->set(key, std::string(reinterpret_cast<char*>(&commId), sizeof(commId)));
   } else {
     auto idData = store_->get(key);
     if (idData.size() != sizeof(commId)) {
-      setError(BackendErrorType::COMM_ERROR);
+      setErrorLocked(BackendErrorType::COMM_ERROR);
       return nullptr;
     }
     std::memcpy(&commId, idData.data(), sizeof(commId));
@@ -141,7 +161,7 @@ std::shared_ptr<NCCLComm> BackendNCCL::getNCCLComm(const std::string& deviceKey,
 
   auto comm = NCCLComm::create(getSize(), getRank(), commId, device.index);
   if (!comm) {
-    setError(BackendErrorType::COMM_ERROR);
+    setErrorLocked(BackendErrorType::COMM_ERROR);
     return nullptr;
   }
 

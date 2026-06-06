@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <functional>
+
 #include "NCCLUtils.h"
 #include "Store.h"
 #include "Work.h"
@@ -33,6 +35,8 @@ class WorkNCCL : public Work {
   void setIsBarrierOp(bool isBarrierOp) { isBarrierOp_ = isBarrierOp; }
   void setCudaEvent(cuda::CUDAEvent&& event) { cudaEvent_ = std::move(event); }
   void setOutputs(std::vector<Tensor>&& output) { outputs_ = std::move(output); }
+  void setPostCompletionFn(std::function<void()> fn) { postCompletionFn_ = std::move(fn); }
+  void setUseComputeStream(bool flag) { useComputeStream_ = flag; }
 
   const Device& getDevice() const { return device_; }
   const std::string& getPgUID() const { return pgUID_; }
@@ -56,6 +60,8 @@ class WorkNCCL : public Work {
   bool isBarrierOp_{false};
   cuda::CUDAEvent cudaEvent_;
   std::vector<Tensor> outputs_;
+  std::function<void()> postCompletionFn_;
+  bool useComputeStream_{false};
 };
 
 }  // namespace tinytorch::distributed
