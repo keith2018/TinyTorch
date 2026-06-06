@@ -87,10 +87,12 @@ if (TINYTORCH_USE_CUDA)
     set_property(TARGET ${PROJECT_NAME} PROPERTY CUDA_ARCHITECTURES native)
     target_include_directories(${PROJECT_NAME} PUBLIC ${CUDA_INCLUDE_DIRS})
     target_link_libraries(${PROJECT_NAME} PUBLIC CUDA::cudart CUDA::curand CUDA::cublas)
+    target_compile_definitions(${PROJECT_NAME} PUBLIC USE_CUDA)
 endif ()
 
 # NCCL
 if (TINYTORCH_USE_NCCL)
     target_include_directories(${PROJECT_NAME} PUBLIC ${NCCL_INCLUDE_DIRS})
     target_link_libraries(${PROJECT_NAME} PUBLIC ${NCCL_LIBRARY})
+    target_compile_definitions(${PROJECT_NAME} PUBLIC USE_NCCL)
 endif ()

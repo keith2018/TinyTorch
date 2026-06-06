@@ -11,6 +11,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 add_subdirectory(googletest)
 
+include(GoogleTest)
+
 add_executable(${PROJECT_NAME}
         test.cpp
         test_tensor.cpp
@@ -28,14 +30,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE
         googletest/googlemock/include
 )
 target_link_libraries(${PROJECT_NAME} TinyTorch_lib gtest_main)
-
-# cuda support
-find_package(CUDAToolkit QUIET)
-if (CUDAToolkit_FOUND)
-    target_compile_definitions(${PROJECT_NAME} PRIVATE USE_CUDA)
-endif ()
-
-include(GoogleTest)
 
 # add tests
 gtest_discover_tests(${PROJECT_NAME} WORKING_DIRECTORY $<TARGET_FILE_DIR:${PROJECT_NAME}>)
