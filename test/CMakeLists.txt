@@ -33,3 +33,16 @@ target_link_libraries(${PROJECT_NAME} TinyTorch_lib gtest_main)
 
 # add tests
 gtest_discover_tests(${PROJECT_NAME} WORKING_DIRECTORY $<TARGET_FILE_DIR:${PROJECT_NAME}>)
+
+# nccl distributed test
+if (TINYTORCH_USE_NCCL)
+    add_executable(TinyTorch_distributed_test test_distributed.cpp)
+    target_include_directories(TinyTorch_distributed_test PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/../src
+            ${CMAKE_CURRENT_SOURCE_DIR}/../third_party
+            googletest/googletest/include
+            googletest/googlemock/include
+    )
+    target_link_libraries(TinyTorch_distributed_test TinyTorch_lib gtest_main)
+    gtest_discover_tests(TinyTorch_distributed_test WORKING_DIRECTORY $<TARGET_FILE_DIR:TinyTorch_distributed_test>)
+endif ()
