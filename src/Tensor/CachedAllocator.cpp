@@ -342,9 +342,29 @@ class CachedAllocatorImpl : public Allocator {
       LOGE("freePool warning: pool %d still has %d active references, forcing release", poolId, it->second.refCount);
     }
 
-    // release all blocks in the pool back to the base allocator.
-    releaseAllBlocks(it->second.largeBlocks);
-    releaseAllBlocks(it->second.smallBlocks);
+    BlockPool* large = &it->second.largeBlocks;
+    BlockPool* small = &it->second.smallBlocks;
+
+    for (auto& kv : activeBlocks_) {
+      Block* b = kv.second;
+      if (b->pool == large) {
+        b->pool = &defaultPool_.largeBlocks;
+      } else if (b->pool == small) {
+        b->pool = &defaultPool_.smallBlocks;
+      }
+    }
+
+    for (Block* b : large->blocks) {
+      b->pool = &defaultPool_.largeBlocks;
+      defaultPool_.largeBlocks.blocks.insert(b);
+    }
+    for (Block* b : small->blocks) {
+      b->pool = &defaultPool_.smallBlocks;
+      defaultPool_.smallBlocks.blocks.insert(b);
+    }
+    large->blocks.clear();
+    small->blocks.clear();
+
     graphPools_.erase(it);
   }
 
